@@ -521,7 +521,7 @@ namespace ProSystemMonitor
             var openBrowserItem = new ToolStripMenuItem("Tarayıcıda Aç (127.0.0.1:17500)");
             openBrowserItem.Click += (s, e) => Process.Start(new ProcessStartInfo("http://127.0.0.1:" + Port) { UseShellExecute = true });
 
-            var dumpItem = new ToolStripMenuItem("Sensör Listesini Masaüstüne Kaydet");
+            var dumpItem = new ToolStripMenuItem("Sensör Listesini Kaydet (sensorler.txt)");
             dumpItem.Click += (s, e) => { if (_collector != null) _collector.RequestSensorDump(); };
 
             try { AlertsEnabled = !File.Exists(AlertFlagPath); } catch { }
@@ -675,7 +675,8 @@ namespace ProSystemMonitor
 
         private Computer _lhmComputer;
         private bool _lhmInitialized = false;
-        private DateTime _lhmLastTry = DateTime.MinValue;
+        private DateTime _lhmLastTry = DateTime.MinValue, _lhmFirstOk = DateTime.MinValue;
+        private bool _autoDumped;
         public static volatile string LhmError = "";
         private DateTime _lastStoragePoll = DateTime.MinValue;
         private DateTime _lastSlowPoll = DateTime.MinValue;
@@ -1480,7 +1481,7 @@ namespace ProSystemMonitor
                 var sb = new StringBuilder();
                 sb.AppendLine("ProSystemMonitor sensör listesi - " + DateTime.Now);
                 foreach (IHardware hw in _lhmComputer.Hardware) DumpHw(hw, sb, 0);
-                string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "ProSystemMonitor_sensorler.txt");
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sensorler.txt");
                 File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
                 Program.ShowBalloon("Kaydedildi: " + path);
             }
@@ -1517,6 +1518,7 @@ namespace ProSystemMonitor
                         };
                         _lhmComputer.Open();
                         _lhmInitialized = true;
+                        _lhmFirstOk = DateTime.UtcNow;
                         LhmError = "";
                     }
                     catch (Exception ex)
@@ -1538,6 +1540,7 @@ namespace ProSystemMonitor
                     LhmVisit(hw, r, pollStorageNow, pollMemNow);
 
                 ResolveBoardSensors(r);
+                if (!_autoDumped && _lhmFirstOk != DateTime.MinValue && (DateTime.UtcNow - _lhmFirstOk).TotalSeconds > 12) { _autoDumped = true; _dumpRequested = true; }
                 if (_dumpRequested) { _dumpRequested = false; DumpSensors(); }
             }
             catch { }

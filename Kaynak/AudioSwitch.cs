@@ -20,6 +20,7 @@ namespace ProSystemMonitor
         public static volatile bool MicAvailable, MicMuted;
         public static volatile float MicLevel;
         private static readonly object _lock = new object();
+        private static string _micId = "";
 
         [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
         private class MMDeviceEnumeratorCom { }
@@ -170,8 +171,7 @@ namespace ProSystemMonitor
                     Devices = ListFlow(en, 0, out dn);
                     DefaultName = dn;
                     MicDevices = ListFlow(en, 1, out mn);
-                    MicName = mn;
-                    MicAvailable = mn.Length > 0;
+                    if (mn.Length > 0) MicName = mn;
                     Marshal.ReleaseComObject(en);
                 }
                 catch { }
@@ -192,6 +192,8 @@ namespace ProSystemMonitor
                 var en = (IEnum)(new MMDeviceEnumeratorCom());
                 IDev d = DefaultMic(en);
                 if (d == null) { MicAvailable = false; Marshal.ReleaseComObject(en); return; }
+                string mid; d.GetId(out mid);
+                if (mid != _micId || MicName.Length == 0) { _micId = mid; MicName = FriendlyName(d); }
                 object o;
                 Guid gm = typeof(IMeter).GUID, gv = typeof(IEpVol).GUID;
                 float peak = 0; bool muted = false;

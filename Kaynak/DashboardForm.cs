@@ -391,7 +391,7 @@ namespace ProSystemMonitor
             }
             m.Items.Add(city);
             m.Items.Add(Mi("Isı uyarıları", null, Program.AlertsEnabled, delegate { Program.SetAlertsEnabled(!Program.AlertsEnabled); }));
-            m.Items.Add(Mi("Sensör listesini masaüstüne kaydet", null, false, delegate { Program.RequestSensorDump(); }));
+            m.Items.Add(Mi("Sensör listesini kaydet (sensorler.txt)", null, false, delegate { Program.RequestSensorDump(); }));
             m.Items.Add(new ToolStripSeparator());
 
             // Pencere
@@ -706,27 +706,34 @@ namespace ProSystemMonitor
             }
         }
 
-        private void Stat(float x, float y, float w, string label, string val, double pct, bool hot, float item)
+        private float StatFont(float w, string label, string val, float item)
+        {
+            float fz = Math.Min(29f, item * 0.52f);
+            while (fz > 14 && TW(label, F(fz, false, true)) + TW(val, F(fz, true, false)) + 14 > w) fz -= 2;
+            return fz;
+        }
+
+        private void Stat(float x, float y, float w, string label, string val, double pct, bool hot, float item, float fz)
         {
             Theme t = _th;
             float bh = Math.Min(15f, item * 0.27f);
             BarAt(x, y, w, pct, hot, bh);
-            float fz = Math.Min(29f, item * 0.52f);
             Font fl = F(fz, false, true), fv = F(fz, true, false);
-            while (fz > 14 && TW(label, fl) + TW(val, fv) + 14 > w) { fz -= 2; fl = F(fz, false, true); fv = F(fz, true, false); }
             float ty = y + bh + 4;
             Txt(label, fl, t.Tx, x, ty, w, item - bh - 4, 0);
             Txt(val, fv, t.Tx, x, ty, w, item - bh - 4, 2);
         }
 
-        /// <summary>Dikeyde eşit dağıtımla n adet stat çizer.</summary>
+        /// <summary>Dikeyde eşit dağıtımla n adet stat çizer (tüm satırlarda aynı yazı boyutu).</summary>
         private void StatColumn(float x, float y, float w, float h, string[] labels, string[] vals, double[] pcts, bool[] hots)
         {
             int n = labels.Length;
             float item = Math.Min(58f, h / n);
             float gap = (h - n * item) / n;
+            float fz = 29f;
+            for (int i = 0; i < n; i++) fz = Math.Min(fz, StatFont(w, labels[i], vals[i], item));
             for (int i = 0; i < n; i++)
-                Stat(x, y + gap / 2f + i * (item + gap), w, labels[i], vals[i], pcts[i], hots != null && hots[i], item);
+                Stat(x, y + gap / 2f + i * (item + gap), w, labels[i], vals[i], pcts[i], hots != null && hots[i], item, fz);
         }
 
         private void Dial(float cx, float cy, float size, double pct, string big, string unit, string label, float bigSize)
@@ -971,7 +978,7 @@ namespace ProSystemMonitor
             string g = string.IsNullOrEmpty(s.Game) ? "Oyun algılanmadı" : s.Game;
             RectangleF c = Card(r, "FPS", g, s.FrameMs > 0 ? D1(s.FrameMs) + " ms" : null);
             float dsz = Math.Min(c.Height * (big ? 1f : 0.62f), c.Width * 0.5f);
-            Dial(c.X + dsz / 2, c.Y + dsz / 2 + (big ? 0 : 0), dsz, Ratio(s.Fps, 240), s.Fps > 0 ? I0(s.Fps) : "--", "", "FPS", dsz * 0.34f);
+            Dial(c.X + dsz / 2, c.Y + dsz / 2 + (big ? 0 : 0), dsz, Ratio(s.Fps, 240), s.Fps > 0 ? I0(s.Fps) : "0", "", "FPS", dsz * 0.34f);
             float sx = c.X + dsz + 20, sw = c.Right - sx;
             if (big)
             {
@@ -1008,9 +1015,10 @@ namespace ProSystemMonitor
             {
                 DriveTelemetry d = s.Drives[i];
                 string nm = !string.IsNullOrEmpty(d.Mount) ? d.Mount : (!string.IsNullOrEmpty(d.Letter) ? d.Letter : d.Name);
-                L[i] = nm + (double.IsNaN(d.TempC) ? "" : "  " + I0(d.TempC) + "°");
-                V[i] = d.TotalGb > 0 ? D1(d.FreeGb) + " GB boş" : "--";
-                P[i] = d.UsedPct; Hh[i] = d.UsedPct > 92;
+                L[i] = nm;
+                bool hasSpace = d.TotalGb > 0;
+                V[i] = hasSpace ? D1(d.FreeGb) + " GB boş" : (double.IsNaN(d.TempC) ? "--" : Tc(d.TempC));
+                P[i] = hasSpace ? d.UsedPct : (double.IsNaN(d.TempC) ? 0 : Ratio(d.TempC, 100)); Hh[i] = hasSpace ? d.UsedPct > 92 : Hot(d.TempC, 70);
             }
             StatColumn(c.X, c.Y, c.Width, c.Height, L, V, P, Hh);
         }
