@@ -1,4 +1,4 @@
-version=14
+version=15
 file=ProSystemMonitor.exe
-sha256=c8da0bb39d041e047617e7cb5766503f3913f97b9c1d1efd623ae4fc355fd4d3
-notes=Yeni Oyun HUD.\nOyunda otomatik HUD geçişi ve oturum kaydı.\nSes profilleri (P).\nHız testi ve Bluetooth pil bilgisi.
+sha256=113d85cfc2e84923c445453beba548c8eb18aa552b023de2d4038edac737426a
+notes=SES paneli: çıkış/giriş cihazı ve profil seçimi.\nÜst çubuk: saat, tarih, ezana kalan süre.\nFare tekerleğiyle ses kaldırıldı.

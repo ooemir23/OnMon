@@ -179,6 +179,7 @@ namespace ProSystemMonitor
             var tl = new Label { Left = 270, Top = 282, Width = 80, ForeColor = Tx, Text = _d._margin + " px" };
             tb.Scroll += delegate { tl.Text = tb.Value + " px"; if (!_loading) { _d._margin = tb.Value; _d.SaveSettings(); _d.Invalidate(); } };
             p.Controls.Add(tb); p.Controls.Add(tl);
+            p.Controls.Add(Ck("Üst çubuk: saat, tarih, sıradaki ezana kalan süre", 0, 330, 560, _d._topBar, v => { _d._topBar = v; _d.SaveSettings(); _d.Invalidate(); }));
 
             p.Controls.Add(Sub("TEMA (21 seçenek, listeyi kaydır)", 300, 44, 400));
             _themeList = new ListBox { Left = 300, Top = 68, Width = 440, Height = 480, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 40 };

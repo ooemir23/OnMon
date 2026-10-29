@@ -36,7 +36,8 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
         private const float MicW = 440f;
-        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true;
+        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true;
+        private const float TopH = 44f;
         private string _prevLayout;
         private bool StripOn { get { return !_hideStrip && (_audioBar || _micBar || _volBar); } }
         private const float VolW = 300f;
@@ -68,6 +69,7 @@ namespace ProSystemMonitor
                     else if (k == "volbar") _volBar = v != "0";
                     else if (k == "hidestrip") _hideStrip = v == "1";
                     else if (k == "autogame") _autoGame = v != "0";
+                    else if (k == "topbar") _topBar = v != "0";
                     else if (k == "fanmap")
                     {
                         string[] fp = v.Split(new[] { ',' });
@@ -90,7 +92,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -440,12 +442,6 @@ namespace ProSystemMonitor
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.ToggleVolMute(); AudioSwitch.PollVolume(); _dirty = true; });
         }
 
-        protected override void OnMouseWheel(MouseEventArgs e)
-        {
-            base.OnMouseWheel(e);
-            ChangeVolume(e.Delta > 0 ? 0.02f : -0.02f);
-        }
-
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
@@ -478,7 +474,7 @@ namespace ProSystemMonitor
         {
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
-            float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
+            float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc - (_topBar ? TopH : 0);
             foreach (var h in _hits)
                 if (h.Key.Contains(cx, cy))
                 {
@@ -854,7 +850,7 @@ namespace ProSystemMonitor
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
             bool strip = StripOn;
-            float chh = strip ? 1112f : 1080f;
+            float chh = (strip ? 1112f : 1080f) + (_topBar ? TopH : 0);
             float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
 
@@ -863,6 +859,7 @@ namespace ProSystemMonitor
             G.ScaleTransform(sc, sc);
 
             Snap s = _snap;
+            if (_topBar) { DrawTopBar(s); G.TranslateTransform(0, TopH); }
             if (s == null)
             {
                 Txt("Veriler okunuyor…", F(48, false, true), t.Dim, 0, 0, 1920, 1080, 1);
@@ -1119,6 +1116,56 @@ namespace ProSystemMonitor
                     Txt(Extras.PrayerNames[i], F(24, i == next, false), col, px, c.Y + i * ph, pw / 2, ph, 0);
                     Txt(Extras.Prayer[i], F(24, true, false), col, px + pw / 2, c.Y + i * ph, pw / 2, ph, 2);
                 }
+            }
+        }
+
+        // Sonraki ezan (Güneş hariç) ve kalan dakika
+        private static string PrayerLeft(DateTime now)
+        {
+            int[] idx = { 0, 2, 3, 4, 5 };
+            string[] nm = { "İmsak", "Öğle", "İkindi", "Akşam", "Yatsı" };
+            for (int day = 0; day < 2; day++)
+                for (int k = 0; k < idx.Length; k++)
+                {
+                    string[] hm = Extras.Prayer[idx[k]].Split(new[] { ':' });
+                    int h, mi;
+                    if (hm.Length != 2 || !int.TryParse(hm[0], out h) || !int.TryParse(hm[1], out mi)) continue;
+                    DateTime at = now.Date.AddDays(day).AddHours(h).AddMinutes(mi);
+                    if (at > now)
+                    {
+                        int mins = (int)Math.Ceiling((at - now).TotalMinutes);
+                        string left = mins >= 60 ? (mins / 60) + " sa " + (mins % 60) + " dk" : mins + " dk";
+                        return nm[k] + " ezanına " + left + "  (" + Extras.Prayer[idx[k]] + ")";
+                    }
+                }
+            return "";
+        }
+
+        private void DrawTopBar(Snap s)
+        {
+            Theme t = _th;
+            var tr = new CultureInfo("tr-TR");
+            DateTime now = DateTime.Now;
+            float y = 4, h = 34;
+            Font fb = F(22, true, false), fd = F(22, false, true);
+            string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(tr);
+            G.FillRectangle(Br(t.A1), 14, y + 4, 5, h - 8);
+            Txt(brand, fb, t.Tx, 28, y, 300, h, 0);
+            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 28 + TW(brand, fb) + 22, y, 500, h, 0);
+            string clock = now.ToString("HH:mm:ss", tr);
+            string date = now.ToString("d MMMM dddd", tr);
+            string pr = PrayerLeft(now);
+            float x = 1920 - 14;
+            float cw = TW(clock, F(30, true, false)) + 6;
+            Txt(clock, F(30, true, false), t.Tx, x - cw, y - 2, cw + 4, h + 4, 2); x -= cw + 22;
+            float dw = TW(date, fd) + 6;
+            Txt(date, fd, t.Dim, x - dw, y, dw + 4, h, 2); x -= dw + 22;
+            if (pr.Length > 0)
+            {
+                float pw = TW(pr, fb) + 30;
+                var pr2 = new RectangleF(x - pw, y + 2, pw, h - 4);
+                using (GraphicsPath pp = RR(pr2, (h - 4) / 2f)) { G.FillPath(Br(Al(t.A1, 40)), pp); G.DrawPath(Pn(t.A1, 1.5f), pp); }
+                Txt(pr, fb, t.Tx, pr2.X, pr2.Y, pr2.Width, pr2.Height, 1);
             }
         }
 
@@ -1471,15 +1518,47 @@ namespace ProSystemMonitor
         }
 
         // ---------------- Komuta Merkezi düzeni ----------------
+        private sealed class Chip { public string Text, Id; public bool Active, Prof; }
+
+        // Etiket + sarmalanan çipler; sonraki satırın y değerini döndürür.
+        private float FlowRow(string label, List<Chip> items, float x, float y, float w, float bottom, int maxLines)
+        {
+            Theme t = _th;
+            Font fp = F(16, true, false);
+            const float ch = 30f;
+            float lw = 62f;
+            Txt(label, F(13, true, false), t.Dim, x, y, lw, ch, 0);
+            float cx = x + lw, line = 0;
+            foreach (Chip c in items)
+            {
+                string nm = Fit(c.Text, fp, 210);
+                float cw = TW(nm, fp) + 22;
+                if (cx + cw > x + w)
+                {
+                    if (line + 1 >= maxLines || y + ch + 6 + ch > bottom + 2) return y + ch + 6;
+                    line++; cx = x + lw; y += ch + 6;
+                }
+                var cr = new RectangleF(cx, y, cw, ch);
+                using (GraphicsPath cp = RR(cr, ch / 2f))
+                {
+                    if (c.Prof) { G.FillPath(Br(Al(t.A2, 60)), cp); G.DrawPath(Pn(t.A2, 1.5f), cp); }
+                    else if (c.Active) G.FillPath(Br(t.A1), cp);
+                    else { G.FillPath(Br(t.Tile), cp); G.DrawPath(Pn(t.Line, 1), cp); }
+                }
+                Txt(nm, fp, (c.Active && !c.Prof) ? t.Bg : t.Tx, cr.X, cr.Y, cr.Width, cr.Height, 1);
+                _hits.Add(new KeyValuePair<RectangleF, string>(cr, c.Id));
+                cx += cw + 6;
+            }
+            return y + ch + 6;
+        }
+
         private void PSound(RectangleF r, Snap s)
         {
             Theme t = _th;
             bool vm = AudioSwitch.VolMuted, mm = AudioSwitch.MicMuted;
             RectangleF c = Card(r, "SES", Shorten(AudioSwitch.DefaultName, 28), AudioSwitch.VolAvailable ? (vm ? "KAPALI" : I0(AudioSwitch.VolLevel * 100) + "%") : null);
-            float rowH = Math.Min(60, c.Height / 3f);
-            Font f = F(22, true, false);
-            // çıkış
-            float y = c.Y + 2;
+            float y = c.Y + 2, rowH = 36;
+            // çıkış ses seviyesi
             SpeakerIcon(c.X + 2, y + rowH / 2f - 11, vm ? t.Crit : t.A1, vm, AudioSwitch.VolLevel);
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(c.X, y, 40, rowH), "vol:mute"));
             var track = new RectangleF(c.X + 46, y + rowH / 2f - 6, c.Width - 46, 12);
@@ -1493,67 +1572,43 @@ namespace ProSystemMonitor
             }
             G.FillEllipse(Br(t.Tx), track.X + track.Width * (vm ? 0 : lv) - 9, track.Y + 6 - 9, 18, 18);
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(track.X - 8, y, track.Width + 16, rowH), "vol:bar"));
-            // mikrofon
             y += rowH + 4;
-            var mr = new RectangleF(c.X, y, c.Width, rowH - 6);
+            // mikrofon (tıkla: aç/kapat)
+            var mr = new RectangleF(c.X, y, c.Width, 36);
             using (GraphicsPath mp = RR(mr, 10))
             {
                 if (mm) G.FillPath(Br(t.Crit), mp); else { G.FillPath(Br(t.Tile), mp); G.DrawPath(Pn(t.Line, 1), mp); }
             }
+            Font f = F(20, true, false);
             Color tc = mm ? Color.White : t.Tx;
-            Txt(AudioSwitch.MicAvailable ? Fit(AudioSwitch.MicName, f, mr.Width * 0.5f) : "Mikrofon yok", f, tc, mr.X + 14, mr.Y, mr.Width * 0.5f, mr.Height, 0);
+            Color ic = mm ? Color.White : t.A1;
+            using (GraphicsPath cap = RR(new RectangleF(mr.X + 12, mr.Y + 7, 7, 14), 3.5f)) G.FillPath(Br(ic), cap);
+            G.DrawArc(Pn(ic, 1.6f), mr.X + 9, mr.Y + 11, 13, 11, 0, 180);
+            G.DrawLine(Pn(ic, 1.6f), mr.X + 15.5f, mr.Y + 22.5f, mr.X + 15.5f, mr.Y + 26);
+            if (mm) G.DrawLine(Pn(Color.White, 2.4f), mr.X + 8, mr.Y + 27, mr.X + 24, mr.Y + 6);
+            float nw = mr.Width * 0.42f;
+            Txt(AudioSwitch.MicAvailable ? Fit(AudioSwitch.MicName, f, nw) : "Mikrofon yok", f, tc, mr.X + 34, mr.Y, nw + 6, mr.Height, 0);
             if (AudioSwitch.MicAvailable)
             {
                 if (!mm)
                 {
                     float lvm = (float)Math.Sqrt(Math.Max(0, Math.Min(1, AudioSwitch.MicLevel)));
-                    BarAt(mr.X + mr.Width * 0.5f + 20, mr.Y + mr.Height / 2f - 4, mr.Width * 0.5f - 110, lvm * 100, lvm > 0.92f, 8);
+                    BarAt(mr.X + 34 + nw + 14, mr.Y + mr.Height / 2f - 4, mr.Width - 34 - nw - 14 - 84, lvm * 100, lvm > 0.92f, 8);
                 }
-                Txt(mm ? "KAPALI" : "AÇIK", f, tc, mr.Right - 90, mr.Y, 80, mr.Height, 2);
+                Txt(mm ? "KAPALI" : "AÇIK", f, tc, mr.Right - 84, mr.Y, 74, mr.Height, 2);
                 _hits.Add(new KeyValuePair<RectangleF, string>(mr, "mic:toggle"));
             }
-            // çıkış cihazı çipleri
-            y += rowH;
-            float cx = c.X, ch = Math.Max(20, Math.Min(34, c.Bottom - y - 4));
-            if (c.Bottom - y >= 24)
-            {
-                Font fc = F(16, true, false);
-                AudioDevice[] all = AudioSwitch.Devices;
-                if (all != null)
-                    foreach (AudioDevice d in all)
-                    {
-                        if (_favs.Count > 0 && !_favs.Contains(d.Id) && !d.IsDefault) continue;
-                        string nm = Fit(d.Name, fc, 200);
-                        float w = TW(nm, fc) + 22;
-                        if (cx + w > c.Right) break;
-                        var cr = new RectangleF(cx, y, w, ch);
-                        using (GraphicsPath cp = RR(cr, ch / 2f))
-                        {
-                            if (d.IsDefault) G.FillPath(Br(t.A1), cp); else { G.FillPath(Br(t.Tile), cp); G.DrawPath(Pn(t.Line, 1), cp); }
-                        }
-                        Txt(nm, fc, d.IsDefault ? t.Bg : t.Tx, cr.X, cr.Y, cr.Width, cr.Height, 1);
-                        _hits.Add(new KeyValuePair<RectangleF, string>(cr, d.Id));
-                        cx += w + 6;
-                    }
-                y += ch + 8;
-            }
-            if (AudioProfiles.All.Count > 0 && c.Bottom - y >= 28)
-            {
-                Font fp = F(16, true, false);
-                float px = c.X; float phh = Math.Min(32, c.Bottom - y);
-                Txt("PROFİL", F(14, true, false), t.Dim, px, y, 64, phh, 0); px += 70;
-                for (int i = 0; i < AudioProfiles.All.Count; i++)
-                {
-                    string nm = Fit(AudioProfiles.All[i].Name, fp, 150);
-                    float w = TW(nm, fp) + 22;
-                    if (px + w > c.Right) break;
-                    var pr = new RectangleF(px, y, w, phh);
-                    using (GraphicsPath pp = RR(pr, phh / 2f)) { G.FillPath(Br(Al(t.A2, 60)), pp); G.DrawPath(Pn(t.A2, 1.5f), pp); }
-                    Txt(nm, fp, t.Tx, pr.X, pr.Y, pr.Width, pr.Height, 1);
-                    _hits.Add(new KeyValuePair<RectangleF, string>(pr, "prof:" + i));
-                    px += w + 6;
-                }
-            }
+            y += mr.Height + 8;
+            // seçim çipleri: çıkış cihazları, giriş cihazları, profiller
+            var outs = new List<Chip>();
+            foreach (AudioDevice d in AudioSwitch.Devices) outs.Add(new Chip { Text = d.Name, Id = d.Id, Active = d.IsDefault });
+            if (outs.Count > 0 && y + 30 <= c.Bottom + 2) y = FlowRow("ÇIKIŞ", outs, c.X, y, c.Width, c.Bottom, 2);
+            var ins = new List<Chip>();
+            foreach (AudioDevice d in AudioSwitch.MicDevices) ins.Add(new Chip { Text = d.Name, Id = d.Id, Active = d.IsDefault });
+            if (ins.Count > 1 && y + 30 <= c.Bottom + 2) y = FlowRow("GİRİŞ", ins, c.X, y, c.Width, c.Bottom, 2);
+            var profs = new List<Chip>();
+            for (int i = 0; i < AudioProfiles.All.Count; i++) profs.Add(new Chip { Text = AudioProfiles.All[i].Name, Id = "prof:" + i, Prof = true });
+            if (profs.Count > 0 && y + 30 <= c.Bottom + 2) FlowRow("PROFİL", profs, c.X, y, c.Width, c.Bottom, 1);
         }
 
         private void DrawStudio(Snap s)
