@@ -24,7 +24,8 @@ namespace ProSystemMonitor
     static class Program
     {
         public static int Port = 17500;
-        public static volatile int PollIntervalMs = 1000;
+        public static volatile int PollIntervalMs = 2000;
+        public static double CollectMs;
         public static string LatestJson = "{}";
         private static NotifyIcon _trayIcon;
         private static TelemetryCollector _collector;
@@ -260,6 +261,7 @@ namespace ProSystemMonitor
                 }
                 catch { }
                 sw.Stop();
+                CollectMs = CollectMs * 0.8 + sw.Elapsed.TotalMilliseconds * 0.2;
                 int targetMs = Math.Max(300, Math.Min(5000, PollIntervalMs));
                 int sleepMs = Math.Max(150, targetMs - (int)sw.ElapsedMilliseconds);
                 Thread.Sleep(sleepMs);
@@ -705,6 +707,8 @@ namespace ProSystemMonitor
         private DateTime _lastStoragePoll = DateTime.MinValue;
         private DateTime _lastSlowPoll = DateTime.MinValue;
         private readonly Dictionary<string, double> _cachedDriveTemps = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        private bool _boardNow = true;
+        private DateTime _lastBoardPoll = DateTime.MinValue;
         private List<ProcItem> _cachedTopProcs = new List<ProcItem>();
         private List<ProcItem> _cachedTopCpu = new List<ProcItem>();
         private double _selfMb, _selfCpu;
@@ -1148,7 +1152,7 @@ namespace ProSystemMonitor
                 processCount = (int)perfInfo.ProcessCount;
             }
 
-            if ((DateTime.UtcNow - _lastAudioPoll).TotalSeconds >= 3.0)
+            if ((DateTime.UtcNow - _lastAudioPoll).TotalSeconds >= 15.0)
             {
                 _lastAudioPoll = DateTime.UtcNow;
                 _cachedVolume = AudioVolumeReader.GetMasterVolumePercent();
@@ -1580,6 +1584,8 @@ namespace ProSystemMonitor
                 bool pollMemNow = (DateTime.UtcNow - _lastMemPoll).TotalSeconds >= 5;
                 if (pollMemNow) _lastMemPoll = DateTime.UtcNow;
 
+                _boardNow = (DateTime.UtcNow - _lastBoardPoll).TotalSeconds >= 3;
+                if (_boardNow) _lastBoardPoll = DateTime.UtcNow;
                 foreach (IHardware hw in _lhmComputer.Hardware)
                     LhmVisit(hw, r, pollStorageNow, pollMemNow);
 
@@ -1599,7 +1605,8 @@ namespace ProSystemMonitor
             if (t == HardwareType.Storage && !pollStorageNow) return;
             if (t == HardwareType.Memory && !pollMemNow) return;
 
-            try { hw.Update(); } catch { return; }
+            bool board = t == HardwareType.Motherboard || t == HardwareType.SuperIO || t == HardwareType.EmbeddedController || t == HardwareType.Cooler;
+            if (!(board && !_boardNow)) { try { hw.Update(); } catch { return; } }
 
             switch (t)
             {

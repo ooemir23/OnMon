@@ -585,6 +585,7 @@ namespace ProSystemMonitor
             sb.AppendLine("Ses çıkışı: " + AudioSwitch.DefaultName);
             sb.AppendLine("Mikrofon: " + AudioSwitch.MicName + (AudioSwitch.MicMuted ? " (sessiz)" : ""));
             sb.AppendLine("Sürüm: v" + Updater.AppVersion);
+            sb.AppendLine("Veri toplama süresi (ort.): " + Program.CollectMs.ToString("0") + " ms");
             sb.AppendLine("Çizim süresi (ort.): " + _d._paintMs.ToString("0.0") + " ms");
             sb.AppendLine("Klasör: " + AppDomain.CurrentDomain.BaseDirectory);
             sb.AppendLine();

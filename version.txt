@@ -1,4 +1,4 @@
-version=18
+version=19
 file=ProSystemMonitor.exe
-sha256=5200d86075bd855bb64a9045b936e4fa4beba459c06665432cd0a465e6be92f5
-notes=CPU: çerçeve önbelleğe alınır, ölçüm önbelleği, kayan yazı yalnızca yazı katmanını çizer.
+sha256=457ae6254be2a3372d422819b6d0d888b79cb7ad4cbdc12085fcb6e70d030365
+notes=Kayan yazı kaldırıldı; CPU/GPU adları kısaltıldı ve sığdırıldı.\nCPU: veri 2 sn, anakart sensörleri 3 sn, ses cihaz taraması 15 sn.

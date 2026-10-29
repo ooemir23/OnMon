@@ -36,7 +36,7 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
         private const float MicW = 440f;
-        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true, _lowCpu = false;
+        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true, _lowCpu = true;
         private const float TopH = 44f;
         private string _prevLayout;
         private bool StripOn { get { return !_hideStrip && (_audioBar || _micBar || _volBar); } }
@@ -70,7 +70,7 @@ namespace ProSystemMonitor
                     else if (k == "hidestrip") _hideStrip = v == "1";
                     else if (k == "autogame") _autoGame = v != "0";
                     else if (k == "topbar") _topBar = v != "0";
-                    else if (k == "lowcpu") { _lowCpu = v == "1"; Program.PollIntervalMs = _lowCpu ? 2000 : 1000; }
+                    else if (k == "lowcpu2") { _lowCpu = v == "1"; Program.PollIntervalMs = _lowCpu ? 2000 : 1000; }
                     else if (k == "fanmap")
                     {
                         string[] fp = v.Split(new[] { ',' });
@@ -93,7 +93,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -147,7 +147,7 @@ namespace ProSystemMonitor
                         float lv = AudioSwitch.MicLevel; bool mu = AudioSwitch.MicMuted;
                         if (mu != _lastMuted || Math.Abs(lv - _lastMic) > 0.04f) { _lastMic = lv; _lastMuted = mu; _dirty = true; }
                     }
-                    if (_volBar || _layout == "studio" || _layout == "hud")
+                    if ((_volBar || _layout == "studio" || _layout == "hud") && (_tickN & 15) == 0)
                     {
                         AudioSwitch.PollVolume();
                         float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
@@ -565,13 +565,7 @@ namespace ProSystemMonitor
         private void MTxt(string s, Font f, Color c, float x, float y, float w, float h, int al)
         {
             if (string.IsNullOrEmpty(s) || w < 10) return;
-            float tw = TW(s, f);
-            if (tw <= w) { Txt(s, f, c, x, y, w, h, al); return; }
-            _marqActive = true;
-            float need = f.Size * 1.45f, ch = Math.Max(h, need), cy = y - (ch - h) / 2f;
-            float ty = _topBar ? TopH : 0;
-            _marqRects.Add(Rectangle.FromLTRB((int)(_ox + x * _sc) - 3, (int)(_oy + (cy + ty) * _sc) - 3, (int)(_ox + (x + w) * _sc) + 3, (int)(_oy + (cy + ch + ty) * _sc) + 3));
-            _marqItems.Add(new MItem { S = s, F = f, C = c, X = x, Y = y, W = w, H = h, Tw = tw, M = G.Transform });
+            Txt(Fit(s, f, w), f, c, x, y, w, h, al);
         }
 
         private readonly Dictionary<string, float> _twCache = new Dictionary<string, float>();
@@ -712,7 +706,13 @@ namespace ProSystemMonitor
                 Txt(extra, fe, t.A1, r.Right - 20 - ew, y, ew, 36, 2);
             }
             float avail = r.Right - 20 - ew - 10 - sx;
-            if (!string.IsNullOrEmpty(sub)) MTxt(sub, fs, t.Tx, sx, y, Math.Max(10, avail), 36, 0);
+            if (!string.IsNullOrEmpty(sub))
+            {
+                float sz = 30;
+                while (sz > 20 && TW(sub, F(sz, false, true)) > avail) sz -= 2;
+                Font fz = F(sz, false, true);
+                Txt(Fit(sub, fz, avail), fz, t.Tx, sx, y, Math.Max(10, avail), 36, 0);
+            }
             return new RectangleF(r.X + 20, r.Y + 60, r.Width - 40, r.Height - 74);
         }
 
@@ -1039,7 +1039,7 @@ namespace ProSystemMonitor
         // ---------------- paneller ----------------
         private void PCpu(RectangleF r, Snap s, bool compact)
         {
-            RectangleF c = Card(r, "CPU", Shorten(s.CpuModel, 34), Tc(s.CpuTemp));
+            RectangleF c = Card(r, "CPU", ShortHw(s.CpuModel), Tc(s.CpuTemp));
             float dsz = Math.Min(c.Height, c.Width * 0.42f);
             Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.CpuLoad, I0(s.CpuLoad), "%", "YÜK", dsz * 0.30f);
             float sx = c.X + dsz + 24, sw = c.Right - sx;
@@ -1052,7 +1052,7 @@ namespace ProSystemMonitor
 
         private void PGpu(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "GPU", Shorten(s.GpuModel, 34), Tc(s.GpuTemp));
+            RectangleF c = Card(r, "GPU", ShortHw(s.GpuModel), Tc(s.GpuTemp));
             float dsz = Math.Min(c.Height, c.Width * 0.42f);
             Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.GpuLoad, I0(s.GpuLoad), "%", "YÜK", dsz * 0.30f);
             float sx = c.X + dsz + 24, sw = c.Right - sx;
@@ -1309,6 +1309,20 @@ namespace ProSystemMonitor
                 new[] { Ratio(s.CpuV, 1.6), Ratio(s.GpuV, 1.2) }, null);
         }
 
+        private static string ShortHw(string m)
+        {
+            if (string.IsNullOrEmpty(m)) return "";
+            m = m.Replace("(R)", "").Replace("(TM)", "").Replace("(tm)", "");
+            string[] cut = { "NVIDIA GeForce ", "NVIDIA ", "GeForce ", "AMD Radeon ", "AMD ", "Intel Core ", "Intel ", " 8-Core Processor", " 6-Core Processor", " 12-Core Processor", " 16-Core Processor", " 4-Core Processor", " Processor", " CPU" };
+            foreach (string c in cut)
+            {
+                int i = m.IndexOf(c, StringComparison.OrdinalIgnoreCase);
+                if (i >= 0) m = m.Remove(i, c.Length);
+            }
+            if (m.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) < 0 && m.StartsWith("RX ")) m = "Radeon " + m;
+            return m.Trim().Replace("  ", " ");
+        }
+
         private static string Shorten(string s, int n)
         {
             if (string.IsNullOrEmpty(s)) return "";
@@ -1491,7 +1505,7 @@ namespace ProSystemMonitor
 
         private void PACpu(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "CPU", s.CpuModel, null);
+            RectangleF c = Card(r, "CPU", ShortHw(s.CpuModel), null);
             Theme t = _th;
             Dial(c.X + 160, c.Y + 150, 290, s.CpuLoad, I0(s.CpuLoad), "%", "YÜK", 96);
             Graph(new RectangleF(c.X, c.Y + 316, 320, c.Height - 316), "cpuTemp", 60, 0, true, true);
@@ -1517,7 +1531,7 @@ namespace ProSystemMonitor
 
         private void PAGpu(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "GPU", s.GpuModel, null);
+            RectangleF c = Card(r, "GPU", ShortHw(s.GpuModel), null);
             Theme t = _th;
             Dial(c.X + 160, c.Y + 150, 290, s.GpuLoad, I0(s.GpuLoad), "%", "YÜK", 96);
             var gr = new RectangleF(c.X, c.Y + 316, 320, c.Height - 316);
