@@ -2042,9 +2042,8 @@ namespace ProSystemMonitor
                 _session = handle;
 
                 Guid g1 = DxgiGuid, g2 = D3D9Guid, g3 = DxgKrnlGuid;
-                // Yalnızca Present_Start olayları teslim edilsin (diğer DXGI/D3D9 olayları süzülür → çok daha az CPU).
-                if (EnableFiltered(g1, 42) != 0) EtwNative.EnableTraceEx2(_session, ref g1, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
-                if (EnableFiltered(g2, 1) != 0) EtwNative.EnableTraceEx2(_session, ref g2, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
+                EtwNative.EnableTraceEx2(_session, ref g1, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
+                EtwNative.EnableTraceEx2(_session, ref g2, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
                 if (UseKernelFallback) EtwNative.EnableTraceEx2(_session, ref g3, 1, 4, 0x1, 0, 0, IntPtr.Zero);
 
                 _callback = OnEvent;

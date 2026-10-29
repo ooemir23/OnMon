@@ -1,4 +1,4 @@
-version=20
+version=21
 file=ProSystemMonitor.exe
-sha256=ed41b89d3f5c282f46f9fd871f584bdbc1f27f27553894cbf84bb694ad905989
-notes=En düşük kaynak: ETW yalnızca Present olaylarını alır, ses COM nesneleri önbellekte, saniye göstergesi kaldırıldı (dakikada bir çizim), pano gizliyken 5 sn okuma ve bellek boşaltma.
+sha256=1e82e70c281dfef86a7e500054acef5c2a7346c1cda5981f6e030acc932266ff
+notes=FPS düzeltmesi: ETW olay süzgeci kaldırıldı.
