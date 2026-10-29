@@ -15,16 +15,16 @@ namespace ProSystemMonitor
     /// Edge/tarayıcı olmadan, doğrudan GDI+ ile çizilen tam ekran pano.
     /// 1920x1080'lik sanal tuvale çizer ve pencereye ölçekler.
     /// </summary>
-    public sealed class DashboardForm : Form
+    public sealed partial class DashboardForm : Form
     {
         private const int HN = 90;
         private Snap _snap;
         private bool _dirty = true;
         private int _lastSecond = -1;
-        private string _layout = "classic";
-        private Theme _th = Themes.All[0];
-        private int _margin;
-        private string _city = "istanbul";
+        internal string _layout = "classic";
+        internal Theme _th = Themes.All[0];
+        internal int _margin;
+        internal string _city = "istanbul";
         private DateTime _lastMouse = DateTime.UtcNow;
         private readonly System.Windows.Forms.Timer _timer = new System.Windows.Forms.Timer();
         private readonly Dictionary<string, float[]> _hist = new Dictionary<string, float[]>();
@@ -36,9 +36,9 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
         private const float MicW = 440f;
-        private bool _audioBar = true, _micBar = true;
+        internal bool _audioBar = true, _micBar = true;
         private float _lastMic = -1; private bool _lastMuted;
-        private readonly HashSet<string> _favs = new HashSet<string>();
+        internal readonly HashSet<string> _favs = new HashSet<string>();
         private readonly List<KeyValuePair<RectangleF, string>> _hits = new List<KeyValuePair<RectangleF, string>>();
         private float _ox, _oy, _sc = 1f;
 
@@ -71,7 +71,7 @@ namespace ProSystemMonitor
             catch { }
         }
 
-        private void SaveSettings()
+        internal void SaveSettings()
         {
             try
             {
@@ -89,7 +89,10 @@ namespace ProSystemMonitor
             Text = "ROG Pro System Monitor";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
-            ShowInTaskbar = false;
+            ShowInTaskbar = true;
+            MinimizeBox = true;
+            MaximizeBox = false;
+            try { Icon = Program.TrayIcon(); } catch { }
             KeyPreview = true;
             AutoScaleMode = AutoScaleMode.None;
             BackColor = Color.Black;
@@ -125,13 +128,19 @@ namespace ProSystemMonitor
                 }
                 int sec = DateTime.Now.Second;
                 if (_dirty || sec != _lastSecond) { _dirty = false; _lastSecond = sec; Invalidate(); }
-                if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible) { _curHidden = true; Cursor.Hide(); }
+                if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
             };
             _timer.Start();
             Extras.Start(_city);
         }
 
         private Rectangle _target;
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            if (WindowState == FormWindowState.Normal && _target.Width > 0 && Bounds != _target) Bounds = _target;
+        }
+
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
@@ -157,6 +166,7 @@ namespace ProSystemMonitor
             else if (e.KeyCode == Keys.T) NextTheme();
             else if (e.KeyCode == Keys.S) NextAudio();
             else if (e.KeyCode == Keys.M) ToggleMic();
+            else if (e.KeyCode == Keys.F1 || e.KeyCode == Keys.F2) OpenSettings();
             else if (e.KeyCode == Keys.Escape) Close();
         }
 
@@ -164,6 +174,7 @@ namespace ProSystemMonitor
         {
             base.OnFormClosed(e);
             _timer.Stop();
+            try { if (_settings != null && !_settings.IsDisposed) _settings.Close(); } catch { }
             if (_curHidden) { _curHidden = false; Cursor.Show(); }
             Extras.Stop();
             foreach (Font f in _fonts.Values) f.Dispose();
@@ -291,7 +302,7 @@ namespace ProSystemMonitor
             return it;
         }
 
-        private string _source = "";
+        internal string _source = "";
 
         private void BuildMenu()
         {
@@ -305,114 +316,39 @@ namespace ProSystemMonitor
             ContextMenuStrip = m;
         }
 
+        private SettingsForm _settings;
+
+        internal void OpenSettings()
+        {
+            if (_settings != null && !_settings.IsDisposed) { _settings.Show(); _settings.WindowState = FormWindowState.Normal; _settings.Activate(); return; }
+            _settings = new SettingsForm(this);
+            _settings.Show();
+        }
+
         private void PopulateMenu(ContextMenuStrip m)
         {
             foreach (ToolStripItem old in new List<ToolStripItem>(m.Items.Cast<ToolStripItem>())) old.Dispose();
             m.Items.Clear();
-            AudioSwitch.Refresh();
+            AudioSwitch.PollMic();
 
-            var hdr = new ToolStripMenuItem("ROG PRO SYSTEM MONITOR") { Tag = "hdr", Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
-            m.Items.Add(hdr);
-            if (!string.IsNullOrEmpty(_source))
-            {
-                string src = _source.Length > 70 ? _source.Substring(0, 70) + "…" : _source;
-                m.Items.Add(new ToolStripMenuItem(src) { Tag = "dim", Enabled = false, Font = new Font("Segoe UI", 8f) });
-            }
+            m.Items.Add(new ToolStripMenuItem("ROG PRO SYSTEM MONITOR") { Tag = "hdr", Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) });
             m.Items.Add(new ToolStripSeparator());
-
-            // Görünüm
-            var view = new ToolStripMenuItem("Düzen") { Padding = new Padding(2, 5, 2, 5) };
-            view.DropDownItems.Add(Mi("Klasik", "1", _layout == "classic", delegate { SetLayout("classic"); }));
-            view.DropDownItems.Add(Mi("Oyun HUD", "2", _layout == "hud", delegate { SetLayout("hud"); }));
-            view.DropDownItems.Add(Mi("Pro Kokpit", "3", _layout == "cockpit", delegate { SetLayout("cockpit"); }));
-            view.DropDownItems.Add(Mi("Sensör Paneli", "4", _layout == "aida", delegate { SetLayout("aida"); }));
-            m.Items.Add(view);
-
-            var th = new ToolStripMenuItem("Tema") { Padding = new Padding(2, 5, 2, 5), ShortcutKeyDisplayString = "T" };
-            foreach (Theme t in Themes.All)
-            {
-                Theme tt = t;
-                th.DropDownItems.Add(Mi(t.Name, null, t == _th, delegate { SetTheme(tt); }));
-            }
-            m.Items.Add(th);
-
-            var mar = new ToolStripMenuItem("Kenar boşluğu") { Padding = new Padding(2, 5, 2, 5) };
-            foreach (int v in new[] { 0, 8, 16, 24, 32, 48 })
-            {
-                int vv = v;
-                mar.DropDownItems.Add(Mi(v == 0 ? "Yok" : v + " px", null, _margin == v, delegate { _margin = vv; SaveSettings(); Invalidate(); }));
-            }
-            m.Items.Add(mar);
+            var set = Mi("Ayarlar…", "F2", false, delegate { OpenSettings(); });
+            set.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            m.Items.Add(set);
+            m.Items.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", false, delegate { ToggleMic(); }));
             m.Items.Add(new ToolStripSeparator());
-
-            // Ses
-            var snd = new ToolStripMenuItem("Ses çıkışı") { Padding = new Padding(2, 5, 2, 5), ShortcutKeyDisplayString = "S" };
-            snd.DropDownItems.Add(Sec("Çıkış cihazı"));
-            foreach (AudioDevice d in AudioSwitch.Devices)
-            {
-                AudioDevice dd = d;
-                snd.DropDownItems.Add(Mi(d.Name, null, d.IsDefault, delegate { SwitchAudio(dd.Id); }));
-            }
-            if (AudioSwitch.Devices.Length == 0) snd.DropDownItems.Add(new ToolStripMenuItem("Cihaz bulunamadı") { Enabled = false });
-            snd.DropDownItems.Add(new ToolStripSeparator());
-            snd.DropDownItems.Add(Sec("Hızlı geçiş listesi (ekran çubuğu)"));
-            foreach (AudioDevice d in AudioSwitch.Devices)
-            {
-                AudioDevice dd = d;
-                snd.DropDownItems.Add(Mi(d.Name, null, _favs.Contains(d.Id), delegate { if (!_favs.Remove(dd.Id)) _favs.Add(dd.Id); SaveSettings(); _dirty = true; }));
-            }
-            snd.DropDownItems.Add(new ToolStripSeparator());
-            snd.DropDownItems.Add(Mi("Sonraki cihaza geç", "S", false, delegate { NextAudio(); }));
-            snd.DropDownItems.Add(Mi("Ses çubuğunu göster", null, _audioBar, delegate { _audioBar = !_audioBar; SaveSettings(); Invalidate(); }));
-            m.Items.Add(snd);
-
-            // Mikrofon
-            var mic = new ToolStripMenuItem("Mikrofon") { Padding = new Padding(2, 5, 2, 5), ShortcutKeyDisplayString = "M" };
-            mic.DropDownItems.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", AudioSwitch.MicMuted, delegate { ToggleMic(); }));
-            mic.DropDownItems.Add(new ToolStripSeparator());
-            mic.DropDownItems.Add(Sec("Giriş cihazı"));
-            foreach (AudioDevice d in AudioSwitch.MicDevices)
-            {
-                AudioDevice dd = d;
-                mic.DropDownItems.Add(Mi(d.Name, null, d.IsDefault, delegate { SwitchAudio(dd.Id); }));
-            }
-            if (AudioSwitch.MicDevices.Length == 0) mic.DropDownItems.Add(new ToolStripMenuItem("Mikrofon bulunamadı") { Enabled = false });
-            mic.DropDownItems.Add(new ToolStripSeparator());
-            mic.DropDownItems.Add(Mi("Mikrofon göstergesini göster", null, _micBar, delegate { _micBar = !_micBar; SaveSettings(); Invalidate(); }));
-            m.Items.Add(mic);
-            m.Items.Add(new ToolStripSeparator());
-
-            // Veri
-            var city = new ToolStripMenuItem("Şehir (hava durumu ve namaz)") { Padding = new Padding(2, 5, 2, 5) };
-            foreach (string c in new[] { "istanbul", "ankara", "izmir", "bursa", "antalya", "adana", "konya", "trabzon", "kocaeli", "gaziantep" })
-            {
-                string cc = c;
-                city.DropDownItems.Add(Mi(char.ToUpper(c[0]) + c.Substring(1), null, _city == c, delegate { _city = cc; SaveSettings(); Extras.Start(_city); }));
-            }
-            m.Items.Add(city);
-            m.Items.Add(Mi("Isı uyarıları", null, Program.AlertsEnabled, delegate { Program.SetAlertsEnabled(!Program.AlertsEnabled); }));
-            m.Items.Add(Mi("Sensör listesini kaydet (sensorler.txt)", null, false, delegate { Program.RequestSensorDump(); }));
-            m.Items.Add(new ToolStripSeparator());
-
-            // Pencere
-            var win = new ToolStripMenuItem("Pencere") { Padding = new Padding(2, 5, 2, 5) };
-            win.DropDownItems.Add(Mi("Diğer monitöre taşı", null, false, delegate { MoveToNextScreen(); }));
-            win.DropDownItems.Add(Mi("Her zaman üstte", null, TopMost, delegate { TopMost = !TopMost; SaveSettings(); }));
-            win.DropDownItems.Add(new ToolStripSeparator());
-            win.DropDownItems.Add(Mi("Tarayıcıda aç (daha çok RAM)", null, false, delegate { Program.LaunchBrowserDashboard(); }));
-            win.DropDownItems.Add(Mi("Edge uygulaması olarak aç (daha çok RAM)", null, false, delegate { Program.LaunchEdgeDashboard(); }));
-            m.Items.Add(win);
-
-            bool auto = false;
-            try { auto = Program.IsAutostartEnabled(); } catch { }
-            m.Items.Add(Mi("Windows ile başlat", null, auto, delegate
-            {
-                bool want = !auto;
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(want); });
-            }));
-            m.Items.Add(new ToolStripSeparator());
+            m.Items.Add(Mi("Küçült", null, false, delegate { WindowState = FormWindowState.Minimized; }));
             m.Items.Add(Mi("Panoyu kapat", "Esc", false, delegate { Close(); }));
             m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitApp(); }));
+        }
+
+        internal void MoveToScreen(Screen sc)
+        {
+            _target = sc.Bounds;
+            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+            Bounds = _target;
+            Invalidate();
         }
 
         private void MoveToNextScreen()
@@ -435,12 +371,12 @@ namespace ProSystemMonitor
             SwitchAudio(list[(i + 1) % list.Count].Id);
         }
 
-        private void ToggleMic()
+        internal void ToggleMic()
         {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.ToggleMicMute(); AudioSwitch.PollMic(); _dirty = true; });
         }
 
-        private void SwitchAudio(string id)
+        internal void SwitchAudio(string id)
         {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
@@ -466,8 +402,8 @@ namespace ProSystemMonitor
                 if (h.Key.Contains(cx, cy)) { if (h.Value == "mic:toggle") ToggleMic(); else SwitchAudio(h.Value); return; }
         }
 
-        private void SetLayout(string id) { _layout = id; SaveSettings(); _dirty = true; Invalidate(); }
-        private void SetTheme(Theme t) { _th = t; SaveSettings(); _dirty = true; Invalidate(); }
+        internal void SetLayout(string id) { _layout = id; SaveSettings(); _dirty = true; Invalidate(); }
+        internal void SetTheme(Theme t) { _th = t; SaveSettings(); _dirty = true; Invalidate(); }
         private void NextTheme()
         {
             int i = Array.IndexOf(Themes.All, _th);
@@ -811,6 +747,7 @@ namespace ProSystemMonitor
         private bool _loggedPaint;
         protected override void OnPaint(PaintEventArgs e)
         {
+            if (WindowState == FormWindowState.Minimized) return;
             try { PaintAll(e); }
             catch (Exception ex) { if (!_loggedPaint) { _loggedPaint = true; Program.Log("paint", ex); } }
         }

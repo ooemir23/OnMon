@@ -434,7 +434,7 @@ namespace ProSystemMonitor
                 {
                     try
                     {
-                        if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); return; }
+                        if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); if (Dash.WindowState == FormWindowState.Minimized) Dash.WindowState = FormWindowState.Normal; return; }
                         var f = new DashboardForm();
                         Dash = f;
                         f.PlaceOnSecondMonitor();
@@ -586,6 +586,8 @@ namespace ProSystemMonitor
             _trayIcon.ContextMenuStrip = menu;
             _trayIcon.DoubleClick += (s, e) => LaunchDashboardOnSecondMonitor();
         }
+
+        public static Icon TrayIcon() { return CreateRogTrayIcon(); }
 
         private static Icon CreateRogTrayIcon()
         {
