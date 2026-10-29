@@ -1506,7 +1506,6 @@ namespace ProSystemMonitor
                 foreach (IHardware hw in _lhmComputer.Hardware) DumpHw(hw, sb, 0);
                 string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sensorler.txt");
                 File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
-                Program.ShowBalloon("Kaydedildi: " + path);
             }
             catch { }
         }

@@ -231,6 +231,7 @@ namespace ProSystemMonitor
             _micMute = Ck("Mikrofonu sustur", 170, 432, 200, false, v => { if (v != AudioSwitch.MicMuted) _d.ToggleMic(); });
             p.Controls.Add(_micMute);
             p.Controls.Add(Ck("Alt çubukta mikrofon göstergesi", 380, 432, 300, _d._micBar, v => { _d._micBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            p.Controls.Add(Ck("Alt çubuğu tamamen gizle (B tuşu)", 380, 496, 320, _d._hideStrip, v => { _d._hideStrip = v; _d.SaveSettings(); _d.Invalidate(); }));
             p.Controls.Add(Ck("Alt çubukta ses seviyesi kaydırıcısı", 380, 462, 320, _d._volBar, v => { _d._volBar = v; _d.SaveSettings(); _d.Invalidate(); }));
             p.Controls.Add(Sub("Anlık seviye", 0, 478, 100));
             _micBarCtl = new ProgressBar { Left = 100, Top = 480, Width = 400, Height = 14, Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
@@ -322,7 +323,7 @@ namespace ProSystemMonitor
 
             p.Controls.Add(Sub("SİSTEM", 0, 276, 300));
             bool auto = false; try { auto = Program.IsAutostartEnabled(); } catch { }
-            p.Controls.Add(Ck("Windows ile birlikte başlat", 0, 302, 400, auto, v => System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(v); })));
+            p.Controls.Add(Ck("Windows ile birlikte başlat (yönetici olarak)", 0, 302, 400, auto, v => System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(v); })));
 
             p.Controls.Add(Sub("ESKİ ARAYÜZLER (daha çok RAM kullanır)", 0, 352, 500));
             p.Controls.Add(Bt("Tarayıcıda aç", 0, 378, 160, delegate { Program.LaunchBrowserDashboard(); }));

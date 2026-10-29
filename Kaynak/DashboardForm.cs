@@ -36,7 +36,8 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
         private const float MicW = 440f;
-        internal bool _audioBar = true, _micBar = true, _volBar = true;
+        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false;
+        private bool StripOn { get { return !_hideStrip && (_audioBar || _micBar || _volBar); } }
         private const float VolW = 300f;
         private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
         private float _lastMic = -1; private bool _lastMuted;
@@ -64,6 +65,7 @@ namespace ProSystemMonitor
                     else if (k == "audiobar") _audioBar = v != "0";
                     else if (k == "micbar") _micBar = v != "0";
                     else if (k == "volbar") _volBar = v != "0";
+                    else if (k == "hidestrip") _hideStrip = v == "1";
                     else if (k == "fanmap")
                     {
                         string[] fp = v.Split(new[] { ',' });
@@ -86,7 +88,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -188,7 +190,7 @@ namespace ProSystemMonitor
             else if (e.KeyCode == Keys.S) NextAudio();
             else if (e.KeyCode == Keys.M) ToggleMic();
             else if (e.KeyCode == Keys.F1 || e.KeyCode == Keys.F2) OpenSettings();
-            else if (e.KeyCode == Keys.Escape) Close();
+            else if (e.KeyCode == Keys.B) ToggleStrip();
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
@@ -360,7 +362,7 @@ namespace ProSystemMonitor
             m.Items.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", false, delegate { ToggleMic(); }));
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add(Mi("Küçült", null, false, delegate { WindowState = FormWindowState.Minimized; }));
-            m.Items.Add(Mi("Panoyu kapat", "Esc", false, delegate { Close(); }));
+            m.Items.Add(Mi("Panoyu kapat", "", false, delegate { Close(); }));
             m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitApp(); }));
         }
 
@@ -391,6 +393,8 @@ namespace ProSystemMonitor
             int i = list.FindIndex(d => d.IsDefault);
             SwitchAudio(list[(i + 1) % list.Count].Id);
         }
+
+        internal void ToggleStrip() { _hideStrip = !_hideStrip; SaveSettings(); _dirty = true; Invalidate(); }
 
         internal void ChangeVolume(float d)
         {
@@ -823,7 +827,7 @@ namespace ProSystemMonitor
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
-            bool strip = _audioBar || _micBar || _volBar;
+            bool strip = StripOn;
             float chh = strip ? 1112f : 1080f;
             float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
@@ -850,7 +854,7 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 14 - RightW(), (_audioBar || _micBar || _volBar) ? 1084 : 1054, w, 26);
+                    var r = new RectangleF(1920 - w - 14 - RightW(), StripOn ? 1084 : 1054, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
@@ -1165,6 +1169,7 @@ namespace ProSystemMonitor
         {
             _hits.Clear();
             Theme t = _th;
+            if (_hideStrip) return;
             if (_micBar) DrawMic();
             if (_volBar) DrawVol();
             if (!_audioBar) return;
