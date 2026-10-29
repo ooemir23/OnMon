@@ -1,4 +1,4 @@
-version=13
+version=14
 file=ProSystemMonitor.exe
-sha256=64638075fced6c64eef2f9ea2bd7017415520bb6c3f750b5b6492807a86dfed7
-notes=Esc artık kapatmaz.\nAlt çubuk gizlenebilir (B).\nSensör kaydı bildirimi kaldırıldı.
+sha256=c8da0bb39d041e047617e7cb5766503f3913f97b9c1d1efd623ae4fc355fd4d3
+notes=Yeni Oyun HUD.\nOyunda otomatik HUD geçişi ve oturum kaydı.\nSes profilleri (P).\nHız testi ve Bluetooth pil bilgisi.

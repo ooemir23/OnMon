@@ -27,7 +27,10 @@ namespace ProSystemMonitor
         private TextBox _diag;
         private ComboBox _screenBox, _cityBox;
         private ComboBox[] _fanCombo = new ComboBox[4];
-        private ListView _fanList;
+        private ListView _fanList, _sessList, _profList, _perList;
+        private TextBox _profName;
+        private Label _spdLbl, _spdStatus;
+        private Button _spdBtn;
         private readonly System.Windows.Forms.Timer _t = new System.Windows.Forms.Timer();
 
         public SettingsForm(DashboardForm d)
@@ -58,6 +61,9 @@ namespace ProSystemMonitor
             AddPage(side, "Konum ve uyarılar", BuildData());
             AddPage(side, "Pencere ve sistem", BuildSystem());
             AddPage(side, "Fan eşleme", BuildFans());
+            AddPage(side, "Oyun oturumları", BuildSessions());
+            AddPage(side, "Ses profilleri", BuildProfiles());
+            AddPage(side, "Cihazlar ve hız", BuildDevices());
             AddPage(side, "Güncelleme", BuildUpdate());
             AddPage(side, "Tanılama", BuildDiag());
             ShowPage(0);
@@ -103,8 +109,11 @@ namespace ProSystemMonitor
             if (i == 1) RefreshAudio();
             if (i == 3) RefreshScreens();
             if (i == 4) RefreshFans();
-            if (i == 5) RefreshUpdate();
-            if (i == 6) RefreshDiag();
+            if (i == 5) RefreshSessions();
+            if (i == 6) RefreshProfiles();
+            if (i == 7) RefreshDevices();
+            if (i == 8) RefreshUpdate();
+            if (i == 9) RefreshDiag();
         }
 
         private Label H(string text, int top)
@@ -397,6 +406,120 @@ namespace ProSystemMonitor
             _fanList.EndUpdate();
         }
 
+        // ---------------- Oyun oturumları ----------------
+        private Panel BuildSessions()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Oyun oturumları", 0));
+            p.Controls.Add(Ck("Oyun algılanınca Oyun HUD düzenine geç, oyun bitince önceki düzene dön", 0, 40, 760, _d._autoGame, v => { _d._autoGame = v; _d.SaveSettings(); }));
+            p.Controls.Add(Sub("Her oyun oturumu (en az 1 dk) bitince ortalama FPS, %1 düşük, zirve sıcaklık ve güç kaydedilir.", 0, 72, 760));
+            _sessList = LV(0, 100, 740, 380, false);
+            _sessList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            string[] cols = { "Başlangıç", "Oyun", "Süre dk", "Ort FPS", "%1 Düşük", "Min FPS", "CPU °C", "GPU °C", "Güç W" };
+            int[] ws = { 120, 150, 60, 66, 76, 66, 56, 56, 56 };
+            for (int i = 0; i < cols.Length; i++) _sessList.Columns.Add(cols[i], ws[i]);
+            p.Controls.Add(_sessList);
+            p.Controls.Add(Bt("Yenile", 0, 492, 110, delegate { RefreshSessions(); }));
+            p.Controls.Add(Bt("Kayıt dosyasını aç (CSV)", 120, 492, 210, delegate { try { if (File.Exists(GameSession.CsvPath)) Process.Start(GameSession.CsvPath); } catch { } }));
+            p.Controls.Add(Bt("Klasörü aç", 340, 492, 130, delegate { try { Process.Start(AppData.Dir); } catch { } }));
+            return p;
+        }
+
+        private void RefreshSessions()
+        {
+            GameSession.LoadHistory();
+            _sessList.BeginUpdate(); _sessList.Items.Clear();
+            for (int i = GameSession.History.Count - 1; i >= 0; i--) _sessList.Items.Add(new ListViewItem(GameSession.History[i].Take(9).ToArray()));
+            _sessList.EndUpdate();
+        }
+
+        // ---------------- Ses profilleri ----------------
+        private Panel BuildProfiles()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Ses profilleri", 0));
+            p.Controls.Add(Sub("Şu anki çıkış cihazı, ses seviyesi ve mikrofon durumunu bir profil olarak kaydet; tek tıkla (HUD'daki PROFİL çipleri) veya P tuşuyla uygula.", 0, 40, 760));
+            _profList = LV(0, 72, 740, 260, false);
+            _profList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            _profList.Columns.Add("Profil", 150); _profList.Columns.Add("Çıkış cihazı", 330); _profList.Columns.Add("Ses", 70); _profList.Columns.Add("Mikrofon", 100);
+            p.Controls.Add(_profList);
+            p.Controls.Add(Sub("Profil adı", 0, 348, 90));
+            _profName = new TextBox { Left = 90, Top = 344, Width = 240, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.FixedSingle };
+            p.Controls.Add(_profName);
+            p.Controls.Add(Bt("Şu anki ayarı kaydet", 340, 342, 200, delegate
+            {
+                string n = (_profName.Text ?? "").Trim();
+                if (n.Length == 0) return;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    AudioProfiles.CaptureCurrent(n);
+                    try { BeginInvoke((MethodInvoker)delegate { RefreshProfiles(); _profName.Text = ""; }); } catch { }
+                });
+            }));
+            p.Controls.Add(Bt("Seçileni uygula", 0, 392, 160, delegate
+            {
+                if (_profList.SelectedIndices.Count == 0) return;
+                int i = _profList.SelectedIndices[0];
+                if (i < AudioProfiles.All.Count) _d.ApplyProfile(AudioProfiles.All[i]);
+            }));
+            p.Controls.Add(Bt("Seçileni sil", 170, 392, 160, delegate
+            {
+                if (_profList.SelectedIndices.Count == 0) return;
+                int i = _profList.SelectedIndices[0];
+                if (i < AudioProfiles.All.Count) { AudioProfiles.Remove(AudioProfiles.All[i].Name); RefreshProfiles(); }
+            }));
+            p.Controls.Add(Sub("Örnek: kulaklığı seç, sesi %40 yap, mikrofonu aç → \"Oyun\" olarak kaydet. Hoparlöre geçip \"Müzik\" kaydet.", 0, 440, 760));
+            return p;
+        }
+
+        private void RefreshProfiles()
+        {
+            AudioProfiles.Load();
+            _profList.BeginUpdate(); _profList.Items.Clear();
+            foreach (AudioProfile ap in AudioProfiles.All)
+                _profList.Items.Add(new ListViewItem(new[] { ap.Name, ap.OutName, ap.Volume >= 0 ? ap.Volume + "%" : "-", ap.MicMute < 0 ? "-" : (ap.MicMute == 1 ? "Kapalı" : "Açık") }));
+            _profList.EndUpdate();
+        }
+
+        // ---------------- Cihazlar ve hız ----------------
+        private Panel BuildDevices()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Cihazlar ve hız", 0));
+            p.Controls.Add(Sub("İNTERNET HIZ TESTİ (Cloudflare; oyun sırasında çalıştırma)", 0, 44, 600));
+            _spdBtn = Bt("Hız testini başlat", 0, 70, 200, delegate { SpeedTest.Start(); });
+            p.Controls.Add(_spdBtn);
+            _spdLbl = new Label { Left = 214, Top = 72, Width = 520, Height = 30, ForeColor = Tx, Font = new Font("Segoe UI", 12f, FontStyle.Bold) };
+            p.Controls.Add(_spdLbl);
+            _spdStatus = new Label { Left = 0, Top = 112, Width = 740, Height = 22, ForeColor = Dim };
+            p.Controls.Add(_spdStatus);
+
+            p.Controls.Add(Sub("BLUETOOTH CİHAZ PİLLERİ (klavye, fare, kulaklık)", 0, 160, 600));
+            _perList = LV(0, 186, 740, 200, false);
+            _perList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            _perList.Columns.Add("Cihaz", 480); _perList.Columns.Add("Pil", 100);
+            p.Controls.Add(_perList);
+            p.Controls.Add(Bt("Şimdi oku", 0, 396, 130, delegate { Peripherals.RefreshAsync(); }));
+            p.Controls.Add(Sub("Yalnızca Windows'un pil bilgisi verdiği (çoğunlukla Bluetooth) cihazlar görünür. USB alıcılı (Logitech/Razer) cihazlar çıkmayabilir.", 0, 438, 760));
+            return p;
+        }
+
+        private string _lastPer = "";
+        private void RefreshDevices()
+        {
+            var cu = System.Globalization.CultureInfo.InvariantCulture;
+            _spdLbl.Text = "▼ " + (double.IsNaN(SpeedTest.Down) ? "--" : SpeedTest.Down.ToString("0", cu)) + "   ▲ " + (double.IsNaN(SpeedTest.Up) ? "--" : SpeedTest.Up.ToString("0", cu)) + " Mbps    " + (double.IsNaN(SpeedTest.PingMs) ? "--" : SpeedTest.PingMs.ToString("0", cu)) + " ms";
+            _spdStatus.Text = SpeedTest.Status;
+            _spdBtn.Enabled = !SpeedTest.Running;
+            string key = string.Join(";", Peripherals.Items.Select(x => x.Key + x.Value).ToArray()) + Peripherals.Status;
+            if (key == _lastPer) return;
+            _lastPer = key;
+            _perList.BeginUpdate(); _perList.Items.Clear();
+            foreach (var kv in Peripherals.Items) _perList.Items.Add(new ListViewItem(new[] { kv.Key, kv.Value + "%" }));
+            if (Peripherals.Items.Length == 0) _perList.Items.Add(new ListViewItem(new[] { Peripherals.Status, "" }));
+            _perList.EndUpdate();
+        }
+
         // ---------------- Güncelleme ----------------
         private Label _updVer, _updStatus;
         private TextBox _updNotes;
@@ -483,6 +606,7 @@ namespace ProSystemMonitor
 
         private void Tick()
         {
+            if (_pages.Count > 7 && _pages[7].Visible) RefreshDevices();
             if (_pages.Count > 4 && _pages[4].Visible) RefreshFans();
             if (_pages.Count > 1 && _pages[1].Visible)
             {
