@@ -28,7 +28,8 @@ namespace ProSystemMonitor
         public double NetUp, NetDown, NetUpTot, NetDownTot, DiskR = double.NaN, DiskW = double.NaN;
         public CoreTelemetry[] Cores = new CoreTelemetry[0];
         public DriveTelemetry[] Drives = new DriveTelemetry[0];
-        public ProcItem[] TopProcs = new ProcItem[0];
+        public ProcItem[] TopProcs = new ProcItem[0], TopCpu = new ProcItem[0];
+        public double SelfMb, SelfCpu;
     }
 
     internal sealed class Theme

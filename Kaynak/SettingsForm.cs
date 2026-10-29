@@ -29,8 +29,6 @@ namespace ProSystemMonitor
         private ComboBox[] _fanCombo = new ComboBox[4];
         private ListView _fanList, _sessList, _profList, _perList;
         private TextBox _profName;
-        private Label _spdLbl, _spdStatus;
-        private Button _spdBtn;
         private readonly System.Windows.Forms.Timer _t = new System.Windows.Forms.Timer();
 
         public SettingsForm(DashboardForm d)
@@ -63,7 +61,7 @@ namespace ProSystemMonitor
             AddPage(side, "Fan eşleme", BuildFans());
             AddPage(side, "Oyun oturumları", BuildSessions());
             AddPage(side, "Ses profilleri", BuildProfiles());
-            AddPage(side, "Cihazlar ve hız", BuildDevices());
+            AddPage(side, "Cihaz pilleri", BuildDevices());
             AddPage(side, "Güncelleme", BuildUpdate());
             AddPage(side, "Tanılama", BuildDiag());
             ShowPage(0);
@@ -486,32 +484,20 @@ namespace ProSystemMonitor
         private Panel BuildDevices()
         {
             var p = new Panel();
-            p.Controls.Add(H("Cihazlar ve hız", 0));
-            p.Controls.Add(Sub("İNTERNET HIZ TESTİ (Cloudflare; oyun sırasında çalıştırma)", 0, 44, 600));
-            _spdBtn = Bt("Hız testini başlat", 0, 70, 200, delegate { SpeedTest.Start(); });
-            p.Controls.Add(_spdBtn);
-            _spdLbl = new Label { Left = 214, Top = 72, Width = 520, Height = 30, ForeColor = Tx, Font = new Font("Segoe UI", 12f, FontStyle.Bold) };
-            p.Controls.Add(_spdLbl);
-            _spdStatus = new Label { Left = 0, Top = 112, Width = 740, Height = 22, ForeColor = Dim };
-            p.Controls.Add(_spdStatus);
-
-            p.Controls.Add(Sub("BLUETOOTH CİHAZ PİLLERİ (klavye, fare, kulaklık)", 0, 160, 600));
-            _perList = LV(0, 186, 740, 200, false);
+            p.Controls.Add(H("Cihaz pilleri", 0));
+            p.Controls.Add(Sub("BLUETOOTH CİHAZ PİLLERİ (klavye, fare, kulaklık)", 0, 44, 600));
+            _perList = LV(0, 70, 740, 260, false);
             _perList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
             _perList.Columns.Add("Cihaz", 480); _perList.Columns.Add("Pil", 100);
             p.Controls.Add(_perList);
-            p.Controls.Add(Bt("Şimdi oku", 0, 396, 130, delegate { Peripherals.RefreshAsync(); }));
-            p.Controls.Add(Sub("Yalnızca Windows'un pil bilgisi verdiği (çoğunlukla Bluetooth) cihazlar görünür. USB alıcılı (Logitech/Razer) cihazlar çıkmayabilir.", 0, 438, 760));
+            p.Controls.Add(Bt("Şimdi oku", 0, 342, 130, delegate { Peripherals.RefreshAsync(); }));
+            p.Controls.Add(Sub("Yalnızca Windows'un pil bilgisi verdiği (çoğunlukla Bluetooth) cihazlar görünür. USB alıcılı (Logitech/Razer) cihazlar çıkmayabilir.", 0, 388, 760));
             return p;
         }
 
         private string _lastPer = "";
         private void RefreshDevices()
         {
-            var cu = System.Globalization.CultureInfo.InvariantCulture;
-            _spdLbl.Text = "▼ " + (double.IsNaN(SpeedTest.Down) ? "--" : SpeedTest.Down.ToString("0", cu)) + "   ▲ " + (double.IsNaN(SpeedTest.Up) ? "--" : SpeedTest.Up.ToString("0", cu)) + " Mbps    " + (double.IsNaN(SpeedTest.PingMs) ? "--" : SpeedTest.PingMs.ToString("0", cu)) + " ms";
-            _spdStatus.Text = SpeedTest.Status;
-            _spdBtn.Enabled = !SpeedTest.Running;
             string key = string.Join(";", Peripherals.Items.Select(x => x.Key + x.Value).ToArray()) + Peripherals.Status;
             if (key == _lastPer) return;
             _lastPer = key;

@@ -653,6 +653,7 @@ namespace ProSystemMonitor
     {
         public string Name;
         public double MemMb;
+        public double Cpu;
     }
 
     public class TelemetryCollector : IDisposable
@@ -705,6 +706,10 @@ namespace ProSystemMonitor
         private DateTime _lastSlowPoll = DateTime.MinValue;
         private readonly Dictionary<string, double> _cachedDriveTemps = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         private List<ProcItem> _cachedTopProcs = new List<ProcItem>();
+        private List<ProcItem> _cachedTopCpu = new List<ProcItem>();
+        private double _selfMb, _selfCpu;
+        private readonly Dictionary<int, double> _procPrev = new Dictionary<int, double>();
+        private DateTime _procPrevAt = DateTime.MinValue;
         private List<DriveTelemetry> _cachedPartitions = new List<DriveTelemetry>();
         private volatile int _pingMs = -1;
         private readonly Dictionary<string, List<string>> _driveLetters = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -1081,22 +1086,36 @@ namespace ProSystemMonitor
             try
             {
                 var procs = Process.GetProcesses();
-                var top = procs
-                    .Where(p => p.Id > 4)
-                    .Select(p =>
+                DateTime nowT = DateTime.UtcNow;
+                double dt = _procPrevAt == DateTime.MinValue ? 0 : (nowT - _procPrevAt).TotalSeconds;
+                var cur = new Dictionary<int, double>();
+                int selfId = Process.GetCurrentProcess().Id;
+                var all = new List<ProcItem>();
+                foreach (Process p in procs)
+                {
+                    try
                     {
-                        double mb = 0;
-                        string n = "";
-                        try { mb = p.WorkingSet64 / (1024.0 * 1024.0); n = p.ProcessName; } catch { }
-                        p.Dispose();
-                        return new ProcItem { Name = n, MemMb = mb };
-                    })
-                    .Where(x => !string.IsNullOrEmpty(x.Name) && x.Name != "Memory Compression")
-                    .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(g => new ProcItem { Name = g.Key, MemMb = g.Sum(i => i.MemMb) })
-                    .OrderByDescending(x => x.MemMb)
-                    .Take(5)
-                    .ToList();
+                        if (p.Id <= 4) continue;
+                        string n = p.ProcessName;
+                        double mb = p.WorkingSet64 / (1024.0 * 1024.0), cpuSec = 0, pct = 0;
+                        try { cpuSec = p.TotalProcessorTime.TotalSeconds; } catch { cpuSec = -1; }
+                        double prev;
+                        if (cpuSec >= 0)
+                        {
+                            cur[p.Id] = cpuSec;
+                            if (dt > 0.5 && _procPrev.TryGetValue(p.Id, out prev) && cpuSec >= prev) pct = (cpuSec - prev) / (dt * Environment.ProcessorCount) * 100.0;
+                        }
+                        if (p.Id == selfId) { _selfMb = mb; _selfCpu = pct; }
+                        if (!string.IsNullOrEmpty(n) && n != "Memory Compression") all.Add(new ProcItem { Name = n, MemMb = mb, Cpu = pct });
+                    }
+                    catch { }
+                    finally { p.Dispose(); }
+                }
+                _procPrev.Clear(); foreach (var kv in cur) _procPrev[kv.Key] = kv.Value; _procPrevAt = nowT;
+                var grouped = all.GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new ProcItem { Name = g.Key, MemMb = g.Sum(i => i.MemMb), Cpu = g.Sum(i => i.Cpu) }).ToList();
+                var top = grouped.OrderByDescending(x => x.MemMb).Take(5).ToList();
+                _cachedTopCpu = grouped.Where(x => !x.Name.Equals("Idle", StringComparison.OrdinalIgnoreCase)).OrderByDescending(x => x.Cpu).Take(3).ToList();
                 _cachedTopProcs = top;
             }
             catch { }
@@ -1335,7 +1354,7 @@ namespace ProSystemMonitor
                     GpuLoad = gpuLoadPct, GpuTemp = gpuTemp, GpuClock = gpuClockMhz, VramUsed = gpuVramUsedMb, VramTotal = gpuVramTotalMb, GpuFan = gpuFanRpm,
                     Fps = fps, FrameMs = frameTimeMs, Low1 = fpsLow1,
                     NetUp = netUpKbs, NetDown = netDownKbs, NetUpTot = netUpTotalMb, NetDownTot = netDownTotalMb, DiskR = diskReadMBs, DiskW = diskWriteMBs,
-                    Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray()
+                    Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray(), TopCpu = _cachedTopCpu.ToArray(), SelfMb = _selfMb, SelfCpu = _selfCpu
                 };
             }
 

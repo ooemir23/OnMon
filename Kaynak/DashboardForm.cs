@@ -134,25 +134,29 @@ namespace ProSystemMonitor
 
             GameSession.LoadHistory(); AudioProfiles.Load(); Peripherals.StartBackground();
             BuildMenu();
-            _timer.Interval = 500;
+            _timer.Interval = 125;
             _timer.Tick += delegate
             {
-                if (_micBar)
+                _tickN++;
+                if (_tickN % 4 == 0)
                 {
-                    AudioSwitch.PollMic();
-                    float lv = AudioSwitch.MicLevel; bool mu = AudioSwitch.MicMuted;
-                    if (mu != _lastMuted || Math.Abs(lv - _lastMic) > 0.04f) { _lastMic = lv; _lastMuted = mu; _dirty = true; }
+                    if (_micBar || _layout == "studio" || _layout == "hud")
+                    {
+                        AudioSwitch.PollMic();
+                        float lv = AudioSwitch.MicLevel; bool mu = AudioSwitch.MicMuted;
+                        if (mu != _lastMuted || Math.Abs(lv - _lastMic) > 0.04f) { _lastMic = lv; _lastMuted = mu; _dirty = true; }
+                    }
+                    if (_volBar || _layout == "studio" || _layout == "hud")
+                    {
+                        AudioSwitch.PollVolume();
+                        float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
+                        if (vm != _lastVolMuted || Math.Abs(vl - _lastVol) > 0.004f) { _lastVol = vl; _lastVolMuted = vm; _dirty = true; }
+                    }
+                    int sec = DateTime.Now.Second;
+                    if (sec != _lastSecond) { _lastSecond = sec; _dirty = true; }
+                    if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
                 }
-                if (_volBar || _layout == "studio")
-                {
-                    AudioSwitch.PollVolume();
-                    float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
-                    if (vm != _lastVolMuted || Math.Abs(vl - _lastVol) > 0.004f) { _lastVol = vl; _lastVolMuted = vm; _dirty = true; }
-                }
-                if (SpeedTest.Running) _dirty = true;
-                int sec = DateTime.Now.Second;
-                if (_dirty || sec != _lastSecond) { _dirty = false; _lastSecond = sec; Invalidate(); }
-                if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
+                if (_dirty || _marqActive) { _dirty = false; Invalidate(); }
             };
             _timer.Start();
             Extras.Start(_city);
@@ -480,7 +484,7 @@ namespace ProSystemMonitor
                 {
                     if (h.Value == "mic:toggle") ToggleMic();
                     else if (h.Value == "vol:mute") ToggleVolMute();
-                    else if (h.Value == "speed:run") SpeedTest.Start();
+                    else if (h.Value == "out:next") NextAudio();
                     else if (h.Value.StartsWith("prof:")) { int pi; if (int.TryParse(h.Value.Substring(5), out pi) && pi >= 0 && pi < AudioProfiles.All.Count) { _profIdx = pi; ApplyProfile(AudioProfiles.All[pi]); } }
                     else if (h.Value == "vol:bar") { _volRect = h.Key; _volDrag = true; SetVolumeTo((cx - h.Key.X) / h.Key.Width); }
                     else SwitchAudio(h.Value);
@@ -548,6 +552,24 @@ namespace ProSystemMonitor
             if (TW(s, f) <= maxW) return s;
             while (s.Length > 1 && TW(s + "…", f) > maxW) s = s.Substring(0, s.Length - 1);
             return s.Length > 1 ? s.TrimEnd() + "…" : "";
+        }
+
+        private bool _marqActive;
+        private int _tickN;
+        // Sığmayan metni kayan yazı olarak çizer (sola hizalı); sığıyorsa normal çizer.
+        private void MTxt(string s, Font f, Color c, float x, float y, float w, float h, int al)
+        {
+            if (string.IsNullOrEmpty(s) || w < 10) return;
+            float tw = TW(s, f);
+            if (tw <= w) { Txt(s, f, c, x, y, w, h, al); return; }
+            _marqActive = true;
+            float scroll = tw - w + 8;
+            double sec = DateTime.UtcNow.Ticks / 1e7, period = scroll / 40.0 + 2.5, p = sec % period;
+            float off = p < 1.0 ? 0 : (float)Math.Min(scroll, (p - 1.0) * 40.0);
+            float need = f.Size * 1.45f, ch = Math.Max(h, need), cy = y - (ch - h) / 2f;
+            G.SetClip(new RectangleF(x, cy, w, ch));
+            Txt(s, f, c, x - off, y, tw + 24, h, 0);
+            G.ResetClip();
         }
 
         private float TW(string s, Font f)
@@ -681,7 +703,7 @@ namespace ProSystemMonitor
                 Txt(extra, fe, t.A1, r.Right - 20 - ew, y, ew, 36, 2);
             }
             float avail = r.Right - 20 - ew - 10 - sx;
-            if (!string.IsNullOrEmpty(sub)) Txt(Fit(sub, fs, avail), fs, t.Tx, sx, y, Math.Max(10, avail), 36, 0);
+            if (!string.IsNullOrEmpty(sub)) MTxt(sub, fs, t.Tx, sx, y, Math.Max(10, avail), 36, 0);
             return new RectangleF(r.X + 20, r.Y + 60, r.Width - 40, r.Height - 74);
         }
 
@@ -846,6 +868,7 @@ namespace ProSystemMonitor
             G.PixelOffsetMode = PixelOffsetMode.HighQuality;
             Theme t = _th;
             G.Clear(t.Bg);
+            _marqActive = false;
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
@@ -1256,8 +1279,8 @@ namespace ProSystemMonitor
             x += 24;
             foreach (AudioDevice d in show)
             {
-                string nm = Fit(d.Name, f, 330);
-                float w = TW(nm, f) + 26;
+                string nm = d.Name;
+                float w = Math.Min(TW(nm, f), 330f) + 26;
                 if (x + w > maxX) break;
                 var r = new RectangleF(x, y, w, h);
                 using (GraphicsPath p = RR(r, h / 2f))
@@ -1265,7 +1288,7 @@ namespace ProSystemMonitor
                     if (d.IsDefault) G.FillPath(Br(t.A1), p);
                     else { G.FillPath(Br(t.Tile), p); G.DrawPath(Pn(t.Line, 1), p); }
                 }
-                Txt(nm, f, d.IsDefault ? t.Bg : t.Tx, x, y, w, h, 1);
+                MTxt(nm, f, d.IsDefault ? t.Bg : t.Tx, x + 13, y, w - 26, h, 1);
                 _hits.Add(new KeyValuePair<RectangleF, string>(r, d.Id));
                 x += w + 8;
             }
@@ -1339,7 +1362,7 @@ namespace ProSystemMonitor
                 string lab = muted ? "KAPALI" : "AÇIK";
                 float lw = 66, nw = 200;
                 Color tc = muted ? Color.White : t.Tx;
-                Txt(Fit(AudioSwitch.MicName, f, nw), f, tc, x + 32, y, nw + 6, h, 0);
+                MTxt(AudioSwitch.MicName, f, tc, x + 32, y, nw, h, 0);
                 if (!muted)
                 {
                     float bx = x + 32 + nw + 10, bw = w - 32 - nw - 10 - lw - 14;
@@ -1531,8 +1554,8 @@ namespace ProSystemMonitor
             float cx = x + lw, line = 0;
             foreach (Chip c in items)
             {
-                string nm = Fit(c.Text, fp, 210);
-                float cw = TW(nm, fp) + 22;
+                string nm = c.Text;
+                float cw = Math.Min(TW(nm, fp), 210f) + 22;
                 if (cx + cw > x + w)
                 {
                     if (line + 1 >= maxLines || y + ch + 6 + ch > bottom + 2) return y + ch + 6;
@@ -1545,7 +1568,7 @@ namespace ProSystemMonitor
                     else if (c.Active) G.FillPath(Br(t.A1), cp);
                     else { G.FillPath(Br(t.Tile), cp); G.DrawPath(Pn(t.Line, 1), cp); }
                 }
-                Txt(nm, fp, (c.Active && !c.Prof) ? t.Bg : t.Tx, cr.X, cr.Y, cr.Width, cr.Height, 1);
+                MTxt(nm, fp, (c.Active && !c.Prof) ? t.Bg : t.Tx, cr.X + 11, cr.Y, cr.Width - 22, cr.Height, 1);
                 _hits.Add(new KeyValuePair<RectangleF, string>(cr, c.Id));
                 cx += cw + 6;
             }
@@ -1556,7 +1579,9 @@ namespace ProSystemMonitor
         {
             Theme t = _th;
             bool vm = AudioSwitch.VolMuted, mm = AudioSwitch.MicMuted;
-            RectangleF c = Card(r, "SES", Shorten(AudioSwitch.DefaultName, 28), AudioSwitch.VolAvailable ? (vm ? "KAPALI" : I0(AudioSwitch.VolLevel * 100) + "%") : null);
+            RectangleF c = Card(r, "SES", AudioSwitch.DefaultName, AudioSwitch.VolAvailable ? (vm ? "KAPALI" : I0(AudioSwitch.VolLevel * 100) + "%") : null);
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(r.X, r.Y, r.Width * 0.75f, 56), "out:next"));
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(r.X + r.Width * 0.75f, r.Y, r.Width * 0.25f, 56), "vol:mute"));
             float y = c.Y + 2, rowH = 36;
             // çıkış ses seviyesi
             SpeakerIcon(c.X + 2, y + rowH / 2f - 11, vm ? t.Crit : t.A1, vm, AudioSwitch.VolLevel);
@@ -1587,7 +1612,7 @@ namespace ProSystemMonitor
             G.DrawLine(Pn(ic, 1.6f), mr.X + 15.5f, mr.Y + 22.5f, mr.X + 15.5f, mr.Y + 26);
             if (mm) G.DrawLine(Pn(Color.White, 2.4f), mr.X + 8, mr.Y + 27, mr.X + 24, mr.Y + 6);
             float nw = mr.Width * 0.42f;
-            Txt(AudioSwitch.MicAvailable ? Fit(AudioSwitch.MicName, f, nw) : "Mikrofon yok", f, tc, mr.X + 34, mr.Y, nw + 6, mr.Height, 0);
+            MTxt(AudioSwitch.MicAvailable ? AudioSwitch.MicName : "Mikrofon yok", f, tc, mr.X + 34, mr.Y, nw, mr.Height, 0);
             if (AudioSwitch.MicAvailable)
             {
                 if (!mm)
@@ -1648,7 +1673,7 @@ namespace ProSystemMonitor
             PGpuGraph(new RectangleF(a[2].X, a[2].Y + 210, a[2].Width, 200), s);
             PPower(new RectangleF(a[2].X, a[2].Y + 420, a[2].Width, 200), s);
             RectangleF[] b = Row(736, 338, 340, 360, 360, 440, 360);
-            PMem(b[0], s); PNet(b[1], s); PDisks(b[2], s); PSound(b[3], s); PDevices(b[4], s);
+            PMem(b[0], s); PNet(b[1], s); PDisks(b[2], s); PSound(b[3], s); PApps(b[4], s);
         }
 
         private static string Dur(TimeSpan t)
@@ -1710,42 +1735,38 @@ namespace ProSystemMonitor
             Graph(new RectangleF(c.X + half + 20, gy, half, gh), "frame", 20, 0, true, true);
         }
 
-        private void PDevices(RectangleF r, Snap s)
+        private void PApps(RectangleF r, Snap s)
         {
             Theme t = _th;
-            RectangleF c = Card(r, "CİHAZLAR", null, null);
-            Font f = F(20, true, false), fd = F(17, true, false);
-            // internet hızı
-            Txt("İNTERNET HIZI", fd, t.Dim, c.X, c.Y - 2, 200, 22, 0);
-            string dn = double.IsNaN(SpeedTest.Down) ? "--" : I0(SpeedTest.Down), up = double.IsNaN(SpeedTest.Up) ? "--" : I0(SpeedTest.Up);
-            string pg = double.IsNaN(SpeedTest.PingMs) ? "--" : I0(SpeedTest.PingMs);
-            float hw = c.Width / 3f;
-            Txt("▼ " + dn, F(26, true, false), t.Tx, c.X, c.Y + 22, hw, 34, 0);
-            Txt("▲ " + up, F(26, true, false), t.Tx, c.X + hw, c.Y + 22, hw, 34, 0);
-            Txt(pg + " ms", F(26, true, false), t.Tx, c.X + hw * 2, c.Y + 22, hw, 34, 0);
-            Txt("Mbps", F(14, false, false), t.Dim, c.X, c.Y + 56, hw, 18, 0);
-            var br = new RectangleF(c.X, c.Y + 78, c.Width, 32);
-            using (GraphicsPath bp = RR(br, 16))
+            RectangleF c = Card(r, "UYGULAMALAR", null, null);
+            Font f = F(20, true, false), fd = F(15, true, false), fv = F(20, true, false);
+            float rowH = Math.Min(30f, (c.Height - 56f) / 7f), y = c.Y - 4;
+            // en çok CPU
+            Txt("EN ÇOK CPU", fd, t.Dim, c.X, y, 200, 20, 0); y += 20;
+            for (int i = 0; i < 3; i++, y += rowH)
             {
-                if (SpeedTest.Running) { G.FillPath(Br(Al(t.A1, 60)), bp); G.DrawPath(Pn(t.A1, 1.5f), bp); }
-                else { G.FillPath(Br(t.Tile), bp); G.DrawPath(Pn(t.A1, 1.5f), bp); }
+                ProcItem p = i < s.TopCpu.Length ? s.TopCpu[i] : null;
+                if (p == null) continue;
+                MTxt(p.Name, f, t.Tx, c.X, y, c.Width * 0.5f, rowH, 0);
+                BarAt(c.X + c.Width * 0.5f + 8, y + rowH / 2f - 4, c.Width * 0.5f - 78, Math.Min(100, p.Cpu * 2), p.Cpu > 40, 8);
+                Txt(p.Cpu.ToString("0.0", CultureInfo.InvariantCulture) + "%", fv, t.A1, c.Right - 66, y, 66, rowH, 2);
             }
-            Txt(SpeedTest.Running ? SpeedTest.Status : "Hız testi başlat  ·  " + (SpeedTest.Status.StartsWith("Son") ? SpeedTest.Status : "tıkla"), F(16, true, false), t.Tx, br.X, br.Y, br.Width, br.Height, 1);
-            if (!SpeedTest.Running) _hits.Add(new KeyValuePair<RectangleF, string>(br, "speed:run"));
-            // pil
-            float y = c.Y + 126;
-            Txt("PİL (BLUETOOTH)", fd, t.Dim, c.X, y, 240, 22, 0);
-            y += 26;
-            KeyValuePair<string, int>[] items = Peripherals.Items;
-            if (items.Length == 0) Txt(Fit(Peripherals.Status, fd, c.Width), fd, t.Dim, c.X, y, c.Width, 26, 0);
-            float rowH = 36;
-            for (int i = 0; i < items.Length && y + rowH <= c.Bottom + 6; i++, y += rowH)
+            y += 4;
+            // en çok RAM
+            Txt("EN ÇOK RAM", fd, t.Dim, c.X, y, 200, 20, 0); y += 20;
+            for (int i = 0; i < 3 && i < s.TopProcs.Length; i++, y += rowH)
             {
-                Color pc = items[i].Value <= 15 ? t.Crit : t.Tx;
-                Txt(Fit(items[i].Key, f, c.Width * 0.5f), f, t.Tx, c.X, y, c.Width * 0.5f, rowH, 0);
-                BarAt(c.X + c.Width * 0.5f + 8, y + rowH / 2f - 5, c.Width * 0.5f - 72, items[i].Value, items[i].Value <= 15, 10);
-                Txt(items[i].Value + "%", f, pc, c.Right - 58, y, 58, rowH, 2);
+                ProcItem p = s.TopProcs[i];
+                MTxt(p.Name, f, t.Tx, c.X, y, c.Width * 0.5f, rowH, 0);
+                BarAt(c.X + c.Width * 0.5f + 8, y + rowH / 2f - 4, c.Width * 0.5f - 112, Ratio(p.MemMb, Math.Max(1, s.MemTotal)) * 4, false, 8);
+                Txt(I0(p.MemMb) + " MB", fv, t.A1, c.Right - 90, y, 90, rowH, 2);
             }
+            // bu uygulama
+            y += 6;
+            var sr = new RectangleF(c.X, y, c.Width, Math.Min(34f, c.Bottom - y + 4));
+            using (GraphicsPath sp = RR(sr, 10)) { G.FillPath(Br(Al(t.A1, 35)), sp); G.DrawPath(Pn(t.A1, 1.2f), sp); }
+            Txt("OnMon", f, t.Tx, sr.X + 12, sr.Y, 100, sr.Height, 0);
+            Txt(I0(s.SelfMb) + " MB   ·   CPU " + s.SelfCpu.ToString("0.0", CultureInfo.InvariantCulture) + "%", f, t.A1, sr.X + 100, sr.Y, sr.Width - 112, sr.Height, 2);
         }
 
         private void DrawCockpit(Snap s)

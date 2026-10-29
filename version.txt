@@ -1,4 +1,4 @@
-version=15
+version=16
 file=ProSystemMonitor.exe
-sha256=113d85cfc2e84923c445453beba548c8eb18aa552b023de2d4038edac737426a
-notes=SES paneli: çıkış/giriş cihazı ve profil seçimi.\nÜst çubuk: saat, tarih, ezana kalan süre.\nFare tekerleğiyle ses kaldırıldı.
+sha256=ff6a7330d1a895ac56c8aaf4e425b8d86ddcb1d683b805751a913cf62ca68993
+notes=Sığmayan yazılar kayar.\nSES başlığı tıklanır (cihaz değiştir).\nHUD: en çok CPU/RAM kullanan uygulamalar ve OnMon kullanımı.\nHız testi kaldırıldı.
