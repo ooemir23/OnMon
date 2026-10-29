@@ -520,6 +520,22 @@ namespace ProSystemMonitor
             menu.Items.Add("Edge ile Aç (daha çok RAM)", null, (s, e) => LaunchEdgeDashboard());
             menu.Items.Add("Tarayıcıda Aç", null, (s, e) => LaunchBrowserDashboard());
             menu.Items.Add(openBrowserItem);
+            var sndItem = new ToolStripMenuItem("Ses Cihazı");
+            sndItem.DropDownOpening += (s, e) =>
+            {
+                sndItem.DropDownItems.Clear();
+                AudioSwitch.Refresh();
+                foreach (AudioDevice d in AudioSwitch.Devices)
+                {
+                    AudioDevice dd = d;
+                    var it = new ToolStripMenuItem(d.Name) { Checked = d.IsDefault };
+                    it.Click += (s2, e2) => ThreadPool.QueueUserWorkItem(x => AudioSwitch.SetDefault(dd.Id));
+                    sndItem.DropDownItems.Add(it);
+                }
+                if (sndItem.DropDownItems.Count == 0) sndItem.DropDownItems.Add(new ToolStripMenuItem("Cihaz bulunamadı") { Enabled = false });
+            };
+            sndItem.DropDownItems.Add("...");
+            menu.Items.Add(sndItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(autoItem);
             menu.Items.Add(alertItem);
@@ -1063,6 +1079,7 @@ namespace ProSystemMonitor
             {
                 _lastAudioPoll = DateTime.UtcNow;
                 _cachedVolume = AudioVolumeReader.GetMasterVolumePercent();
+                AudioSwitch.Refresh();
             }
             int soundVol = _cachedVolume;
 

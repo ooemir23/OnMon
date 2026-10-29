@@ -36,6 +36,10 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private ToolStripMenuItem _infoItem;
         private bool _curHidden;
+        private bool _audioBar = true;
+        private readonly HashSet<string> _favs = new HashSet<string>();
+        private readonly List<KeyValuePair<RectangleF, string>> _hits = new List<KeyValuePair<RectangleF, string>>();
+        private float _ox, _oy, _sc = 1f;
 
         // ---------------- ayarlar ----------------
         private static string SettingsPath
@@ -53,7 +57,9 @@ namespace ProSystemMonitor
                     int i = line.IndexOf('=');
                     if (i < 0) continue;
                     string k = line.Substring(0, i).Trim(), v = line.Substring(i + 1).Trim();
-                    if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit")) _layout = v;
+                    if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida")) _layout = v;
+                    else if (k == "audiobar") _audioBar = v != "0";
+                    else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split('|')) if (x.Length > 0) _favs.Add(x); }
                     else if (k == "theme") _th = Themes.Get(v);
                     else if (k == "margin") int.TryParse(v, out _margin);
                     else if (k == "city" && v.Length > 0) _city = v;
@@ -67,7 +73,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -138,6 +144,7 @@ namespace ProSystemMonitor
             if (e.KeyCode == Keys.D1) SetLayout("classic");
             else if (e.KeyCode == Keys.D2) SetLayout("hud");
             else if (e.KeyCode == Keys.D3) SetLayout("cockpit");
+            else if (e.KeyCode == Keys.D4) SetLayout("aida");
             else if (e.KeyCode == Keys.T) NextTheme();
             else if (e.KeyCode == Keys.Escape) Close();
         }
@@ -208,6 +215,7 @@ namespace ProSystemMonitor
             lay.DropDownItems.Add("1 · Klasik", null, delegate { SetLayout("classic"); });
             lay.DropDownItems.Add("2 · Oyun HUD", null, delegate { SetLayout("hud"); });
             lay.DropDownItems.Add("3 · Pro Kokpit", null, delegate { SetLayout("cockpit"); });
+            lay.DropDownItems.Add("4 · Sensör Paneli", null, delegate { SetLayout("aida"); });
             m.Items.Add(lay);
 
             var th = new ToolStripMenuItem("Tema (T)");
@@ -234,10 +242,52 @@ namespace ProSystemMonitor
             }
             m.Items.Add(city);
 
+            var snd = new ToolStripMenuItem("Ses cihazı");
+            var fav = new ToolStripMenuItem("Hızlı geçiş listesi");
+            var bar = new ToolStripMenuItem("Ses çubuğunu göster") { Checked = _audioBar, CheckOnClick = false };
+            bar.Click += delegate { _audioBar = !_audioBar; SaveSettings(); Invalidate(); };
+            m.Opening += delegate
+            {
+                snd.DropDownItems.Clear(); fav.DropDownItems.Clear();
+                bar.Checked = _audioBar;
+                AudioSwitch.Refresh();
+                foreach (AudioDevice d in AudioSwitch.Devices)
+                {
+                    AudioDevice dd = d;
+                    var it = new ToolStripMenuItem(d.Name) { Checked = d.IsDefault };
+                    it.Click += delegate { SwitchAudio(dd.Id); };
+                    snd.DropDownItems.Add(it);
+                    var fi = new ToolStripMenuItem(d.Name) { Checked = _favs.Contains(d.Id) };
+                    fi.Click += delegate { if (!_favs.Remove(dd.Id)) _favs.Add(dd.Id); SaveSettings(); _dirty = true; };
+                    fav.DropDownItems.Add(fi);
+                }
+                if (snd.DropDownItems.Count == 0) snd.DropDownItems.Add(new ToolStripMenuItem("Cihaz bulunamadı") { Enabled = false });
+            };
+            m.Items.Add(snd);
+            m.Items.Add(fav);
+            m.Items.Add(bar);
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Tarayıcıda aç (daha çok RAM kullanır)", null, delegate { Program.LaunchBrowserDashboard(); });
             m.Items.Add("Panoyu kapat (Esc)", null, delegate { Close(); });
             ContextMenuStrip = m;
+        }
+
+        private void SwitchAudio(string id)
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                AudioSwitch.SetDefault(id);
+                _dirty = true;
+            });
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left || _sc <= 0) return;
+            float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
+            foreach (var h in _hits)
+                if (h.Key.Contains(cx, cy)) { SwitchAudio(h.Value); return; }
         }
 
         private void SetLayout(string id) { _layout = id; SaveSettings(); _dirty = true; Invalidate(); }
@@ -586,10 +636,12 @@ namespace ProSystemMonitor
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
-            float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / 1080f));
+            float chh = _audioBar ? 1112f : 1080f;
+            float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
 
-            G.TranslateTransform(_margin + (aw - 1920 * sc) / 2f, _margin + (ah - 1080 * sc) / 2f);
+            _ox = _margin + (aw - 1920 * sc) / 2f; _oy = _margin + (ah - chh * sc) / 2f; _sc = sc;
+            G.TranslateTransform(_ox, _oy);
             G.ScaleTransform(sc, sc);
 
             Snap s = _snap;
@@ -599,7 +651,8 @@ namespace ProSystemMonitor
             }
             else
             {
-                if (_layout == "hud") DrawHud(s);
+                if (_layout == "aida") DrawAida(s);
+                else if (_layout == "hud") DrawHud(s);
                 else if (_layout == "cockpit") DrawCockpit(s);
                 else DrawClassic(s);
 
@@ -608,11 +661,13 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 24, 1080 - 26, w, 26);
+                    var r = new RectangleF(1920 - w - 14, _audioBar ? 1084 : 1054, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
             }
+
+            DrawAudioBar();
 
             if (t.Style == "crt")
             {
@@ -913,6 +968,202 @@ namespace ProSystemMonitor
         {
             if (string.IsNullOrEmpty(s)) return "";
             return s.Length <= n ? s : s.Substring(0, n - 1) + "…";
+        }
+
+        // ---------------- ses cihazı çubuğu ----------------
+        private void DrawAudioBar()
+        {
+            _hits.Clear();
+            if (!_audioBar) return;
+            Theme t = _th;
+            AudioDevice[] all = AudioSwitch.Devices;
+            if (all == null || all.Length == 0) return;
+            var show = new List<AudioDevice>();
+            foreach (AudioDevice d in all) if (_favs.Count == 0 || _favs.Contains(d.Id) || d.IsDefault) show.Add(d);
+            Font f = F(18, true, false);
+            float x = 10, y = 1084, h = 26, maxX = 1920 - 340;
+            Txt("♪", F(20, true, false), t.A1, x, y, 20, h, 1);
+            x += 24;
+            foreach (AudioDevice d in show)
+            {
+                string nm = Fit(d.Name, f, 330);
+                float w = TW(nm, f) + 26;
+                if (x + w > maxX) break;
+                var r = new RectangleF(x, y, w, h);
+                using (GraphicsPath p = RR(r, h / 2f))
+                {
+                    if (d.IsDefault) G.FillPath(Br(t.A1), p);
+                    else { G.FillPath(Br(t.Tile), p); G.DrawPath(Pn(t.Line, 1), p); }
+                }
+                Txt(nm, f, d.IsDefault ? t.Bg : t.Tx, x, y, w, h, 1);
+                _hits.Add(new KeyValuePair<RectangleF, string>(r, d.Id));
+                x += w + 8;
+            }
+        }
+
+        // ---------------- Sensör Paneli düzeni ----------------
+        private void MiniRow(float x, float y, float w, float h, string label, double pct, string val, bool hot)
+        {
+            Theme t = _th;
+            Font fl = F(22, false, true), fv = F(22, true, false);
+            float lw = Math.Min(150, w * 0.3f), vw = Math.Min(150, w * 0.3f);
+            Txt(Fit(label, fl, lw), fl, t.Tx, x, y, lw, h, 0);
+            BarAt(x + lw + 6, y + h / 2f - 7, w - lw - vw - 18, pct, hot, 14);
+            Txt(val, fv, t.Tx, x + w - vw, y, vw, h, 2);
+        }
+
+        private void PAClock(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            DateTime now = DateTime.Now;
+            string brand = string.IsNullOrEmpty(s.Brand) ? "PC" : s.Brand.ToUpper(new CultureInfo("tr-TR"));
+            float fs = 56; Font fb = F(fs, true, false);
+            while (fs > 24 && TW(brand, fb) > r.Width - 40) { fs -= 4; fb = F(fs, true, false); }
+            Txt(brand, fb, t.Tx, r.X, r.Y + 8, r.Width, 70, 1);
+            Txt(now.ToString("HH:mm:ss", CultureInfo.InvariantCulture), F(64, false, true), t.Tx, r.X, r.Y + 76, r.Width, 76, 1);
+            var pill = new RectangleF(r.X + 50, r.Y + 156, r.Width - 100, 36);
+            using (GraphicsPath p = RR(pill, 8)) G.FillPath(Br(t.Tx), p);
+            Txt(now.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture), F(26, true, false), t.Bg, pill.X, pill.Y, pill.Width, pill.Height, 1);
+            Font fs2 = F(21, false, true), fv = F(21, true, false);
+            Txt("Çalışma", fs2, t.Dim, r.X + 20, r.Y + 202, 90, 30, 0);
+            Txt(s.Uptime, fv, t.Tx, r.X + 112, r.Y + 202, 170, 30, 0);
+            Txt("Ses", fs2, t.Dim, r.X + r.Width - 150, r.Y + 202, 60, 30, 0);
+            Txt(double.IsNaN(s.Sound) ? "--" : I0(s.Sound), fv, t.Tx, r.X + r.Width - 100, r.Y + 202, 80, 30, 2);
+        }
+
+        private void PAMem(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "Bellek", null, null);
+            float rh = c.Height / 4f;
+            MiniRow(c.X, c.Y, c.Width, rh, "Yük", s.MemLoad, Pct(s.MemLoad), s.MemLoad > 90);
+            MiniRow(c.X, c.Y + rh, c.Width, rh, "Hız", 100, string.IsNullOrEmpty(s.MemSpeed) ? "--" : s.MemSpeed, false);
+            MiniRow(c.X, c.Y + rh * 2, c.Width, rh, "Kullanım", s.MemLoad, Gb(s.MemUsed / 1024.0), false);
+            MiniRow(c.X, c.Y + rh * 3, c.Width, rh, "Boş", 100 - s.MemLoad, Gb(s.MemFree / 1024.0), false);
+        }
+
+        private void PAMobo(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "ANAKART", s.MoboModel, null);
+            Theme t = _th;
+            string[] k = { "Yonga seti", "BIOS", "Yol tipi", "İşlemler" };
+            string[] v = { s.Chipset, s.Bios, s.GpuBus, double.IsNaN(s.Procs) ? "--" : I0(s.Procs) };
+            float rh = c.Height / 4f, lw = 150, vw = c.Width * 0.62f - lw;
+            Font fk = F(22, false, true), fv = F(22, true, false);
+            for (int i = 0; i < 4; i++)
+            {
+                Txt(k[i], fk, t.Dim, c.X, c.Y + i * rh, lw, rh, 0);
+                Txt(Fit(v[i], fv, vw), fv, t.Tx, c.X + lw, c.Y + i * rh, vw, rh, 0);
+            }
+            float rx = c.X + c.Width * 0.66f, rw = c.Width * 0.34f;
+            BarAt(rx, c.Y + 22, rw, Ratio(s.MoboTemp, 100), false, 15);
+            Txt("Sıcaklık", F(26, false, true), t.Tx, rx, c.Y + 50, rw * 0.5f, 44, 0);
+            Txt(Tc(s.MoboTemp), F(38, true, false), t.Tx, rx + rw * 0.3f, c.Y + 50, rw * 0.7f, 44, 2);
+        }
+
+        private void PACpu(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "CPU", s.CpuModel, null);
+            Theme t = _th;
+            Dial(c.X + 160, c.Y + 150, 290, s.CpuLoad, I0(s.CpuLoad), "%", "YÜK", 96);
+            Graph(new RectangleF(c.X, c.Y + 316, 320, c.Height - 316), "cpuTemp", 60, 0, true, true);
+            float rx = c.X + 350, rw = c.Width - 350;
+            bool pump = !double.IsNaN(s.Pump);
+            StatColumn(rx, c.Y, rw, 300,
+                new[] { "Sıcaklık", "Saat", "Fan", pump ? "AIO Pompa" : "Kasa Fan" },
+                new[] { Tc(s.CpuTemp), Mhz(s.CpuClock), Rpm(s.CpuFan), Rpm(pump ? s.Pump : s.Cha1) },
+                new[] { Ratio(s.CpuTemp, 100), Ratio(s.CpuClock, 6000), Ratio(s.CpuFan, 3000), Ratio(pump ? s.Pump : s.Cha1, 3500) },
+                new[] { Hot(s.CpuTemp, 90), false, false, false });
+            int n = Math.Min(8, s.Cores.Length);
+            float cw = rw / 2f - 8, ch = (c.Height - 316) / 4f;
+            Font fl = F(20, false, true), fv = F(20, true, false);
+            for (int i = 0; i < n; i++)
+            {
+                CoreTelemetry k = s.Cores[i];
+                float x = rx + (i / 4) * (cw + 16), y = c.Y + 316 + (i % 4) * ch;
+                Txt((i + 1) + ". CPU", fl, t.Tx, x, y, 90, ch - 8, 0);
+                Txt(I0(k.ClockMhz) + " MHz", fv, t.Tx, x + cw - 130, y, 130, ch - 8, 2);
+                BarAt(x, y + ch - 14, cw, k.LoadPct, k.LoadPct > 92, 7);
+            }
+        }
+
+        private void PAGpu(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "GPU", s.GpuModel, null);
+            Theme t = _th;
+            Dial(c.X + 160, c.Y + 150, 290, s.GpuLoad, I0(s.GpuLoad), "%", "YÜK", 96);
+            var gr = new RectangleF(c.X, c.Y + 316, 320, c.Height - 316);
+            Graph(gr, "fps", 60, 0, true, true);
+            Txt("FPS " + (s.Fps > 0 ? I0(s.Fps) : "0"), F(46, true, false), Al(t.Tx, 70), gr.X, gr.Y, gr.Width, gr.Height, 1);
+            float rx = c.X + 350, rw = c.Width - 350;
+            StatColumn(rx, c.Y, rw, 300,
+                new[] { "Sıcaklık", "Güç", "Saat", "VRAM", "Fan" },
+                new[] { Tc(s.GpuTemp), Wt(s.GpuW), Mhz(s.GpuClock), s.VramTotal > 0 ? I0(s.VramUsed) + " / " + I0(s.VramTotal) + " MB" : Mb(s.VramUsed), Rpm(s.GpuFan) },
+                new[] { Ratio(s.GpuTemp, 100), Ratio(s.GpuW, 450), Ratio(s.GpuClock, 3000), Ratio(s.VramUsed, s.VramTotal), Ratio(s.GpuFan, 3500) },
+                new[] { Hot(s.GpuTemp, 85), false, false, Ratio(s.VramUsed, s.VramTotal) > 92, false });
+            Graph(new RectangleF(rx, c.Y + 316, rw, c.Height - 316), "gpuLoad", 100, 100, true, true);
+        }
+
+        private void PAStorage(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "Depolama", null, null);
+            Theme t = _th;
+            int n = Math.Min(4, s.Drives.Length);
+            if (n == 0) { Txt("Disk bilgisi yok", F(24, false, true), t.Dim, c.X, c.Y, c.Width, 40, 0); return; }
+            float rh = Math.Min(46f, c.Height / n);
+            Font fn = F(24, false, false), fv = F(24, true, false);
+            for (int i = 0; i < n; i++)
+            {
+                DriveTelemetry d = s.Drives[i];
+                float y = c.Y + i * rh;
+                string nm = !string.IsNullOrEmpty(d.Name) ? d.Name : (d.Mount ?? d.Letter);
+                Txt(Fit(nm, fn, c.Width * 0.5f), fn, t.Tx, c.X, y, c.Width * 0.5f, rh, 0);
+                double pv = double.IsNaN(d.TempC) ? d.UsedPct : d.TempC;
+                BarAt(c.X + c.Width * 0.52f, y + rh / 2f - 7, c.Width * 0.34f, double.IsNaN(d.TempC) ? d.UsedPct : Ratio(d.TempC, 100), pv > 90, 14);
+                Txt(double.IsNaN(d.TempC) ? Pct(d.UsedPct) : Tc(d.TempC), fv, t.Tx, c.X + c.Width * 0.88f - 10, y, c.Width * 0.12f + 10, rh, 2);
+            }
+        }
+
+        private void PAPower(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "Güç", null, null);
+            Theme t = _th;
+            string[] k = { "CPU", "", "GPU", "" };
+            string[] v = { Wt(s.CpuW), Vt(s.CpuV), Wt(s.GpuW), Vt(s.GpuV) };
+            float rh = c.Height / 4f;
+            for (int i = 0; i < 4; i++)
+            {
+                Txt(k[i], F(24, false, true), t.Dim, c.X, c.Y + i * rh, 90, rh, 0);
+                Txt(v[i], F(26, true, false), t.Tx, c.X + 60, c.Y + i * rh, c.Width - 60, rh, 2);
+            }
+        }
+
+        private void PANet(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, "Ağ", null, s.Ip);
+            Theme t = _th;
+            string[] k = { "Gönderim", "Toplam", "İndirme", "Toplam" };
+            string[] v = { Spd(s.NetUp), Tot(s.NetUpTot), Spd(s.NetDown), Tot(s.NetDownTot) };
+            float rh = c.Height / 4f, lw = 270;
+            Font fk = F(20, false, true), fv = F(22, true, false);
+            for (int i = 0; i < 4; i++)
+            {
+                Txt(k[i], fk, t.Dim, c.X, c.Y + i * rh, 110, rh, 0);
+                Txt(v[i], fv, t.Tx, c.X + 100, c.Y + i * rh, lw - 100, rh, 2);
+            }
+            float gx = c.X + lw + 20, gw = c.Width - lw - 20, gh = c.Height / 2f - 4;
+            Graph(new RectangleF(gx, c.Y, gw, gh), "netUp", 100, 0, false, true);
+            Graph(new RectangleF(gx, c.Y + gh + 8, gw, gh), "netDown", 100, 0, false, true);
+        }
+
+        private void DrawAida(Snap s)
+        {
+            RectangleF[] a = Row(10, 245, 450, 470, 960);
+            PAClock(a[0], s); PAMem(a[1], s); PAMobo(a[2], s);
+            RectangleF[] b = Row(265, 550, 940, 940);
+            PACpu(b[0], s); PAGpu(b[1], s);
+            RectangleF[] c = Row(825, 245, 940, 310, 630);
+            PAStorage(c[0], s); PAPower(c[1], s); PANet(c[2], s);
         }
 
         // ---------------- düzenler ----------------
