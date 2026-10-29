@@ -26,6 +26,8 @@ namespace ProSystemMonitor
         private CheckBox _micMute;
         private TextBox _diag;
         private ComboBox _screenBox, _cityBox;
+        private ComboBox[] _fanCombo = new ComboBox[4];
+        private ListView _fanList;
         private readonly System.Windows.Forms.Timer _t = new System.Windows.Forms.Timer();
 
         public SettingsForm(DashboardForm d)
@@ -55,6 +57,7 @@ namespace ProSystemMonitor
             AddPage(side, "Ses ve mikrofon", BuildAudio());
             AddPage(side, "Konum ve uyarılar", BuildData());
             AddPage(side, "Pencere ve sistem", BuildSystem());
+            AddPage(side, "Fan eşleme", BuildFans());
             AddPage(side, "Tanılama", BuildDiag());
             ShowPage(0);
 
@@ -98,7 +101,8 @@ namespace ProSystemMonitor
             }
             if (i == 1) RefreshAudio();
             if (i == 3) RefreshScreens();
-            if (i == 4) RefreshDiag();
+            if (i == 4) RefreshFans();
+            if (i == 5) RefreshDiag();
         }
 
         private Label H(string text, int top)
@@ -338,6 +342,57 @@ namespace ProSystemMonitor
             }
         }
 
+        // ---------------- Fan eşleme ----------------
+        private Panel BuildFans()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Fan eşleme", 0));
+            p.Controls.Add(Sub("Anakartın fan girişleri aşağıda canlı görünür. Hangisinin CPU fanı, kasa fanı veya pompa olduğunu seç.", 0, 40, 740));
+            _fanList = LV(0, 68, 740, 190, false);
+            _fanList.Columns.Add("Fan girişi", 300); _fanList.Columns.Add("Devir (RPM)", 200);
+            p.Controls.Add(_fanList);
+
+            string[] roles = { "CPU fanı", "Kasa fanı 1", "Kasa fanı 2", "AIO pompa" };
+            for (int i = 0; i < 4; i++)
+            {
+                int k = i;
+                p.Controls.Add(new Label { Text = roles[i], Left = 0, Top = 282 + i * 44, Width = 160, Height = 28, ForeColor = Tx });
+                var cb = new ComboBox { Left = 170, Top = 278 + i * 44, Width = 260, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Card, ForeColor = Tx, FlatStyle = FlatStyle.Flat };
+                cb.Items.Add("Otomatik");
+                for (int f = 1; f <= 7; f++) cb.Items.Add("Fan #" + f);
+                cb.SelectedIndex = Math.Max(0, Math.Min(7, TelemetryCollector.FanMap[i]));
+                cb.SelectedIndexChanged += delegate
+                {
+                    if (_loading) return;
+                    var m = (int[])TelemetryCollector.FanMap.Clone();
+                    m[k] = cb.SelectedIndex;
+                    TelemetryCollector.FanMap = m;
+                    _d.SaveSettings();
+                };
+                p.Controls.Add(cb);
+                _fanCombo[i] = cb;
+            }
+            p.Controls.Add(Sub("0 RPM görünen girişler boştur (fan takılı değil). Pano bir sonraki ölçümde yeni eşlemeyi kullanır.", 0, 462, 740));
+            return p;
+        }
+
+        private void RefreshFans()
+        {
+            double[] raw = TelemetryCollector.FanRaw;
+            if (raw == null) return;
+            _fanList.BeginUpdate();
+            _fanList.Items.Clear();
+            for (int i = 1; i < raw.Length; i++)
+            {
+                if (double.IsNaN(raw[i])) continue;
+                var it = new ListViewItem("Fan #" + i);
+                it.SubItems.Add(raw[i] > 0 ? raw[i].ToString("0", CultureInfo.InvariantCulture) : "0 (boş)");
+                if (raw[i] > 0) it.ForeColor = _acc;
+                _fanList.Items.Add(it);
+            }
+            _fanList.EndUpdate();
+        }
+
         // ---------------- Tanılama ----------------
         private Panel BuildDiag()
         {
@@ -373,6 +428,7 @@ namespace ProSystemMonitor
 
         private void Tick()
         {
+            if (_pages.Count > 4 && _pages[4].Visible) RefreshFans();
             if (_pages.Count > 1 && _pages[1].Visible)
             {
                 AudioSwitch.PollMic();

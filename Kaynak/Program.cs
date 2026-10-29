@@ -680,6 +680,10 @@ namespace ProSystemMonitor
         private DateTime _lhmLastTry = DateTime.MinValue, _lhmFirstOk = DateTime.MinValue;
         private bool _autoDumped;
         public static volatile string LhmError = "";
+        /// <summary>Kullanıcının fan eşlemesi: [CPU, Kasa1, Kasa2, Pompa] → SuperIO fan numarası (0 = otomatik).</summary>
+        public static volatile int[] FanMap = new int[4];
+        /// <summary>Anakart SuperIO fanlarının anlık RPM değerleri (dizin = fan numarası, NaN = yok).</summary>
+        public static volatile double[] FanRaw = new double[8];
         private DateTime _lastStoragePoll = DateTime.MinValue;
         private DateTime _lastSlowPoll = DateTime.MinValue;
         private readonly Dictionary<string, double> _cachedDriveTemps = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -1730,6 +1734,25 @@ namespace ProSystemMonitor
                     else if (idx == 3 || idx == 4) { if (v > 0 || double.IsNaN(r.Cha2)) r.Cha2 = v; }
                     else if (idx == 5 || idx == 6) { if (v > 0 && double.IsNaN(r.Pump)) r.Pump = v; }
                 }
+            }
+
+            // Ham fan değerleri (ayarlardaki fan eşlemesi için) ve kullanıcı eşlemesi
+            var raw = new double[8];
+            for (int i = 0; i < raw.Length; i++) raw[i] = double.NaN;
+            foreach (var kv in r.BoardFans)
+            {
+                Match mm = Regex.Match(kv.Key, @"#(\d+)$");
+                int ix;
+                if (mm.Success && int.TryParse(mm.Groups[1].Value, out ix) && ix >= 1 && ix < raw.Length) raw[ix] = kv.Value;
+            }
+            FanRaw = raw;
+            int[] fm = FanMap;
+            if (fm != null && fm.Length >= 4)
+            {
+                if (fm[0] > 0 && fm[0] < raw.Length && !double.IsNaN(raw[fm[0]])) r.CpuFan = raw[fm[0]];
+                if (fm[1] > 0 && fm[1] < raw.Length && !double.IsNaN(raw[fm[1]])) r.Cha1 = raw[fm[1]];
+                if (fm[2] > 0 && fm[2] < raw.Length && !double.IsNaN(raw[fm[2]])) r.Cha2 = raw[fm[2]];
+                if (fm[3] > 0 && fm[3] < raw.Length && !double.IsNaN(raw[fm[3]])) r.Pump = raw[fm[3]];
             }
 
             // --- Voltajlar ---

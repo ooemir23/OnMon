@@ -61,6 +61,13 @@ namespace ProSystemMonitor
                     if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida")) _layout = v;
                     else if (k == "audiobar") _audioBar = v != "0";
                     else if (k == "micbar") _micBar = v != "0";
+                    else if (k == "fanmap")
+                    {
+                        string[] fp = v.Split(new[] { ',' });
+                        var fm = new int[4];
+                        for (int q = 0; q < 4 && q < fp.Length; q++) int.TryParse(fp[q], out fm[q]);
+                        TelemetryCollector.FanMap = fm;
+                    }
                     else if (k == "topmost") TopMost = v == "1";
                     else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _favs.Add(x); }
                     else if (k == "theme") _th = Themes.Get(v);
@@ -76,7 +83,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
