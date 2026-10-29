@@ -82,6 +82,7 @@ namespace ProSystemMonitor
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             KeyPreview = true;
+            AutoScaleMode = AutoScaleMode.None;
             BackColor = Color.Black;
 
             foreach (FontFamily ff in FontFamily.Families)
@@ -97,7 +98,7 @@ namespace ProSystemMonitor
             {
                 var f = new StringFormat(StringFormat.GenericTypographic);
                 f.FormatFlags |= StringFormatFlags.NoWrap | StringFormatFlags.NoClip;
-                f.Trimming = StringTrimming.EllipsisCharacter;
+                f.Trimming = StringTrimming.None;
                 f.LineAlignment = StringAlignment.Center;
                 f.Alignment = i == 0 ? StringAlignment.Near : (i == 1 ? StringAlignment.Center : StringAlignment.Far);
                 _sf[i] = f;
@@ -113,6 +114,13 @@ namespace ProSystemMonitor
             };
             _timer.Start();
             Extras.Start(_city);
+        }
+
+        private Rectangle _target;
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (_target.Width > 0) { Bounds = _target; Invalidate(); }
         }
 
         protected override bool ShowWithoutActivation { get { return true; } }
@@ -154,7 +162,8 @@ namespace ProSystemMonitor
         {
             Screen[] screens = Screen.AllScreens;
             Screen target = screens.FirstOrDefault(s => !s.Primary) ?? screens.First();
-            Bounds = target.Bounds;
+            _target = target.Bounds;
+            Bounds = _target;
         }
 
         // ---------------- veri ----------------
@@ -700,7 +709,7 @@ namespace ProSystemMonitor
             float sx = c.X + dsz + 24, sw = c.Right - sx;
             StatColumn(sx, c.Y, sw, c.Height,
                 new[] { "Saat", "Güç", "VRAM" },
-                new[] { Mhz(s.GpuClock), Wt(s.GpuW), Mb(s.VramUsed) + " / " + I0(s.VramTotal) },
+                new[] { Mhz(s.GpuClock), Wt(s.GpuW), s.VramTotal > 0 ? I0(s.VramUsed) + " / " + I0(s.VramTotal) + " MB" : Mb(s.VramUsed) },
                 new[] { Ratio(s.GpuClock, 3000), Ratio(s.GpuW, 450), Ratio(s.VramUsed, s.VramTotal) },
                 new[] { false, false, Ratio(s.VramUsed, s.VramTotal) > 92 });
         }
@@ -759,9 +768,9 @@ namespace ProSystemMonitor
             for (int i = 0; i < n; i++)
             {
                 DriveTelemetry d = s.Drives[i];
-                string nm = !string.IsNullOrEmpty(d.Letter) ? d.Letter : (d.Mount ?? d.Name);
+                string nm = !string.IsNullOrEmpty(d.Mount) ? d.Mount : (!string.IsNullOrEmpty(d.Letter) ? d.Letter : d.Name);
                 L[i] = nm + (double.IsNaN(d.TempC) ? "" : "  " + I0(d.TempC) + "°");
-                V[i] = D1(d.FreeGb) + " GB boş";
+                V[i] = d.TotalGb > 0 ? D1(d.FreeGb) + " GB boş" : "--";
                 P[i] = d.UsedPct; Hh[i] = d.UsedPct > 92;
             }
             StatColumn(c.X, c.Y, c.Width, c.Height, L, V, P, Hh);
