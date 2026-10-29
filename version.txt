@@ -1,4 +1,4 @@
-version=21
+version=22
 file=ProSystemMonitor.exe
-sha256=1e82e70c281dfef86a7e500054acef5c2a7346c1cda5981f6e030acc932266ff
-notes=FPS düzeltmesi: ETW olay süzgeci kaldırıldı.
+sha256=7a34a3a608c88f8219357a37b295de5804aae701913be2163c6b6e431705c781
+notes=SES paneli kısa cihaz adlarıyla sıkıştırıldı.\nSaat, tarih ve vakit hatırlatıcısı alta taşındı ve kısaltıldı (örn. İkindiye 1sa 23dk).

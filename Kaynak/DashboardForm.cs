@@ -37,7 +37,7 @@ namespace ProSystemMonitor
         private bool _curHidden;
         private const float MicW = 440f;
         internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true, _lowCpu = true;
-        private const float TopH = 44f;
+        private const float InfoH = 36f;
         private string _prevLayout;
         private bool StripOn { get { return !_hideStrip && (_audioBar || _micBar || _volBar); } }
         private const float VolW = 300f;
@@ -492,7 +492,7 @@ namespace ProSystemMonitor
         {
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
-            float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc - (_topBar ? TopH : 0);
+            float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
             foreach (var h in _hits)
                 if (h.Key.Contains(cx, cy))
                 {
@@ -939,7 +939,7 @@ namespace ProSystemMonitor
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
             bool strip = StripOn;
-            float chh = (strip ? 1112f : 1080f) + (_topBar ? TopH : 0);
+            float chh = (strip ? 1112f : 1080f) + (_topBar ? InfoH : 0);
             float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
 
@@ -948,7 +948,6 @@ namespace ProSystemMonitor
             G.ScaleTransform(sc, sc);
 
             Snap s = _snap;
-            if (_topBar) { DrawTopBar(s); G.TranslateTransform(0, TopH); }
             if (s == null)
             {
                 Txt("Veriler okunuyor…", F(48, false, true), t.Dim, 0, 0, 1920, 1080, 1);
@@ -973,6 +972,7 @@ namespace ProSystemMonitor
             }
 
             DrawAudioBar();
+            if (_topBar) DrawInfoBar(_snap, StripOn ? 1112f : 1080f);
 
             if (t.Style == "crt")
             {
@@ -1207,11 +1207,40 @@ namespace ProSystemMonitor
             }
         }
 
-        // Sonraki ezan (Güneş hariç) ve kalan dakika
+        private void DrawInfoBar(Snap s, float top)
+        {
+            Theme t = _th;
+            var tr = new CultureInfo("tr-TR");
+            DateTime now = DateTime.Now;
+            float y = top + 2, h = 30;
+            Font fb = F(20, true, false), fd = F(20, false, true);
+            string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(tr);
+            G.FillRectangle(Br(t.A1), 14, y + 4, 4, h - 8);
+            Txt(brand, fb, t.Tx, 26, y, 300, h, 0);
+            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 26 + TW(brand, fb) + 18, y, 500, h, 0);
+            string clock = now.ToString("HH:mm", tr);
+            string date = now.ToString("d MMMM dddd", tr);
+            string pr = PrayerLeft(now);
+            float x = 1920 - 14;
+            Font fc = F(28, true, false);
+            float cw = TW(clock, fc) + 6;
+            Txt(clock, fc, t.Tx, x - cw, y - 2, cw + 4, h + 4, 2); x -= cw + 20;
+            float dw = TW(date, fd) + 6;
+            Txt(date, fd, t.Dim, x - dw, y, dw + 4, h, 2); x -= dw + 20;
+            if (pr.Length > 0)
+            {
+                float pw = TW(pr, fb) + 28;
+                var pr2 = new RectangleF(x - pw, y + 1, pw, h - 2);
+                using (GraphicsPath pp = RR(pr2, (h - 2) / 2f)) { G.FillPath(Br(Al(t.A1, 40)), pp); G.DrawPath(Pn(t.A1, 1.5f), pp); }
+                Txt(pr, fb, t.Tx, pr2.X, pr2.Y, pr2.Width, pr2.Height, 1);
+            }
+        }
+
+        // Sonraki vakit (Güneş hariç): "İkindiye 1sa 23dk"
         private static string PrayerLeft(DateTime now)
         {
             int[] idx = { 0, 2, 3, 4, 5 };
-            string[] nm = { "İmsak", "Öğle", "İkindi", "Akşam", "Yatsı" };
+            string[] nm = { "Sabaha", "Öğleye", "İkindiye", "Akşama", "Yatsıya" };
             for (int day = 0; day < 2; day++)
                 for (int k = 0; k < idx.Length; k++)
                 {
@@ -1222,39 +1251,10 @@ namespace ProSystemMonitor
                     if (at > now)
                     {
                         int mins = (int)Math.Ceiling((at - now).TotalMinutes);
-                        string left = mins >= 60 ? (mins / 60) + " sa " + (mins % 60) + " dk" : mins + " dk";
-                        return nm[k] + " ezanına " + left + "  (" + Extras.Prayer[idx[k]] + ")";
+                        return nm[k] + " " + (mins >= 60 ? (mins / 60) + "sa " + (mins % 60) + "dk" : mins + "dk");
                     }
                 }
             return "";
-        }
-
-        private void DrawTopBar(Snap s)
-        {
-            Theme t = _th;
-            var tr = new CultureInfo("tr-TR");
-            DateTime now = DateTime.Now;
-            float y = 4, h = 34;
-            Font fb = F(22, true, false), fd = F(22, false, true);
-            string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(tr);
-            G.FillRectangle(Br(t.A1), 14, y + 4, 5, h - 8);
-            Txt(brand, fb, t.Tx, 28, y, 300, h, 0);
-            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 28 + TW(brand, fb) + 22, y, 500, h, 0);
-            string clock = now.ToString("HH:mm", tr);
-            string date = now.ToString("d MMMM dddd", tr);
-            string pr = PrayerLeft(now);
-            float x = 1920 - 14;
-            float cw = TW(clock, F(30, true, false)) + 6;
-            Txt(clock, F(30, true, false), t.Tx, x - cw, y - 2, cw + 4, h + 4, 2); x -= cw + 22;
-            float dw = TW(date, fd) + 6;
-            Txt(date, fd, t.Dim, x - dw, y, dw + 4, h, 2); x -= dw + 22;
-            if (pr.Length > 0)
-            {
-                float pw = TW(pr, fb) + 30;
-                var pr2 = new RectangleF(x - pw, y + 2, pw, h - 4);
-                using (GraphicsPath pp = RR(pr2, (h - 4) / 2f)) { G.FillPath(Br(Al(t.A1, 40)), pp); G.DrawPath(Pn(t.A1, 1.5f), pp); }
-                Txt(pr, fb, t.Tx, pr2.X, pr2.Y, pr2.Width, pr2.Height, 1);
-            }
         }
 
         private static int NextPrayer(DateTime now)
@@ -1620,6 +1620,23 @@ namespace ProSystemMonitor
         }
 
         // ---------------- Komuta Merkezi düzeni ----------------
+        // Aynı baz ada sahip cihazlarda parantez içini, aksi halde yalnızca baz adı gösterir.
+        private static string DevShort(string name, AudioDevice[] all)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            int p = name.IndexOf('(');
+            if (p <= 0) return name;
+            string bas = name.Substring(0, p).Trim();
+            int same = 0;
+            foreach (AudioDevice d in all) { int q = d.Name.IndexOf('('); string b = q > 0 ? d.Name.Substring(0, q).Trim() : d.Name; if (b == bas) same++; }
+            if (same <= 1) return bas;
+            string inner = name.Substring(p + 1);
+            int e = inner.LastIndexOf(')');
+            if (e > 0) inner = inner.Substring(0, e);
+            inner = inner.Replace("(R)", "").Replace("Realtek ", "").Trim();
+            return inner.Length > 0 ? inner : name;
+        }
+
         private sealed class Chip { public string Text, Id; public bool Active, Prof; }
 
         // Etiket + sarmalanan çipler; sonraki satırın y değerini döndürür.
@@ -1634,7 +1651,7 @@ namespace ProSystemMonitor
             foreach (Chip c in items)
             {
                 string nm = c.Text;
-                float cw = Math.Min(TW(nm, fp), 210f) + 22;
+                float cw = Math.Min(TW(nm, fp), 170f) + 22;
                 if (cx + cw > x + w)
                 {
                     if (line + 1 >= maxLines || y + ch + 6 + ch > bottom + 2) return y + ch + 6;
@@ -1705,10 +1722,10 @@ namespace ProSystemMonitor
             y += mr.Height + 8;
             // seçim çipleri: çıkış cihazları, giriş cihazları, profiller
             var outs = new List<Chip>();
-            foreach (AudioDevice d in AudioSwitch.Devices) outs.Add(new Chip { Text = d.Name, Id = d.Id, Active = d.IsDefault });
+            foreach (AudioDevice d in AudioSwitch.Devices) outs.Add(new Chip { Text = DevShort(d.Name, AudioSwitch.Devices), Id = d.Id, Active = d.IsDefault });
             if (outs.Count > 0 && y + 30 <= c.Bottom + 2) y = FlowRow("ÇIKIŞ", outs, c.X, y, c.Width, c.Bottom, 2);
             var ins = new List<Chip>();
-            foreach (AudioDevice d in AudioSwitch.MicDevices) ins.Add(new Chip { Text = d.Name, Id = d.Id, Active = d.IsDefault });
+            foreach (AudioDevice d in AudioSwitch.MicDevices) ins.Add(new Chip { Text = DevShort(d.Name, AudioSwitch.MicDevices), Id = d.Id, Active = d.IsDefault });
             if (ins.Count > 1 && y + 30 <= c.Bottom + 2) y = FlowRow("GİRİŞ", ins, c.X, y, c.Width, c.Bottom, 2);
             var profs = new List<Chip>();
             for (int i = 0; i < AudioProfiles.All.Count; i++) profs.Add(new Chip { Text = AudioProfiles.All[i].Name, Id = "prof:" + i, Prof = true });
