@@ -43,7 +43,7 @@ namespace ProSystemMonitor
     {
         private static Color C(string h)
         {
-            h = h.TrimStart('#');
+            h = h.TrimStart(new[] { '#' });
             if (h.Length == 3) h = "" + h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
             return Color.FromArgb(Convert.ToInt32(h.Substring(0, 2), 16), Convert.ToInt32(h.Substring(2, 2), 16), Convert.ToInt32(h.Substring(4, 2), 16));
         }
@@ -122,7 +122,7 @@ namespace ProSystemMonitor
                 {
                     wc.Encoding = Encoding.UTF8;
                     string w = wc.DownloadString("https://wttr.in/" + Uri.EscapeDataString(city) + "?m&format=%t|%C&lang=tr").Trim();
-                    string[] p = w.Split('|');
+                    string[] p = w.Split(new[] { '|' });
                     if (p.Length >= 2) { WxTemp = p[0].Replace("+", ""); WxDesc = p[1]; }
                 }
             }

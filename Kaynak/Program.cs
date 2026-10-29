@@ -324,7 +324,7 @@ namespace ProSystemMonitor
             try
             {
                 // Yalnızca yerel istekler: DNS-rebinding ve başka sitelerden gelen çapraz istekleri engelle
-                string hostOnly = (ctx.Request.UserHostName ?? "").Split(':')[0].ToLowerInvariant();
+                string hostOnly = (ctx.Request.UserHostName ?? "").Split(new[] { ':' })[0].ToLowerInvariant();
                 string origin = ctx.Request.Headers["Origin"];
                 bool hostOk = hostOnly == "127.0.0.1" || hostOnly == "localhost";
                 bool originOk = string.IsNullOrEmpty(origin) ||
@@ -726,7 +726,7 @@ namespace ProSystemMonitor
                         else if (manuf.IndexOf("MSI", StringComparison.OrdinalIgnoreCase) >= 0 || manuf.IndexOf("Micro-Star", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "MSI";
                         else if (manuf.IndexOf("GIGABYTE", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "GIGABYTE";
                         else if (manuf.IndexOf("ASRock", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "ASROCK";
-                        else if (!string.IsNullOrEmpty(manuf)) _brandName = manuf.Split(' ')[0].ToUpperInvariant();
+                        else if (!string.IsNullOrEmpty(manuf)) _brandName = manuf.Split(new[] { ' ' })[0].ToUpperInvariant();
 
                         _moboModel = FormatMoboName(_brandName, prod);
                     }
@@ -1029,10 +1029,10 @@ namespace ProSystemMonitor
                     double totalGb = di.TotalSize / (1024.0 * 1024.0 * 1024.0);
                     double freeGb = di.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
                     double usedPct = totalGb > 0 ? ((totalGb - freeGb) / totalGb) * 100.0 : 0;
-                    string label = string.IsNullOrEmpty(di.VolumeLabel) ? di.Name.TrimEnd('\\') : (di.Name.TrimEnd('\\') + " " + di.VolumeLabel);
+                    string label = string.IsNullOrEmpty(di.VolumeLabel) ? di.Name.TrimEnd(new[] { '\\' }) : (di.Name.TrimEnd(new[] { '\\' }) + " " + di.VolumeLabel);
                     parts.Add(new DriveTelemetry
                     {
-                        Letter = di.Name.TrimEnd('\\'),
+                        Letter = di.Name.TrimEnd(new[] { '\\' }),
                         Mount = label,
                         TotalGb = totalGb,
                         FreeGb = freeGb,

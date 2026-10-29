@@ -59,7 +59,7 @@ namespace ProSystemMonitor
                     string k = line.Substring(0, i).Trim(), v = line.Substring(i + 1).Trim();
                     if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida")) _layout = v;
                     else if (k == "audiobar") _audioBar = v != "0";
-                    else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split('|')) if (x.Length > 0) _favs.Add(x); }
+                    else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _favs.Add(x); }
                     else if (k == "theme") _th = Themes.Get(v);
                     else if (k == "margin") int.TryParse(v, out _margin);
                     else if (k == "city" && v.Length > 0) _city = v;
@@ -691,7 +691,7 @@ namespace ProSystemMonitor
             string fx = t.Fx ?? "";
             if (fx.StartsWith("grid"))
             {
-                string[] p = fx.Split(':');
+                string[] p = fx.Split(new[] { ':' });
                 Color gc = Al(ColorFromHex(p[1]), t.Id == "blueprint" ? 24 : 18);
                 float sp = (t.Id == "blueprint" ? 40 : 64) * sc;
                 Pen gp = Pn(gc, 1);
@@ -705,7 +705,7 @@ namespace ProSystemMonitor
             }
             else if (fx.StartsWith("glow"))
             {
-                string[] p = fx.Split(':');
+                string[] p = fx.Split(new[] { ':' });
                 GlowAt(W * 0.1f, Hh * 0.05f, W * 0.55f, Al(ColorFromHex(p[1]), 52));
                 GlowAt(W * 0.95f, Hh * 1.0f, W * 0.6f, Al(ColorFromHex(p[2]), 34));
             }
@@ -733,7 +733,7 @@ namespace ProSystemMonitor
 
         private static Color ColorFromHex(string h)
         {
-            h = h.TrimStart('#');
+            h = h.TrimStart(new[] { '#' });
             if (h.Length == 3) h = "" + h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
             return Color.FromArgb(Convert.ToInt32(h.Substring(0, 2), 16), Convert.ToInt32(h.Substring(2, 2), 16), Convert.ToInt32(h.Substring(4, 2), 16));
         }
@@ -914,7 +914,7 @@ namespace ProSystemMonitor
             int m = now.Hour * 60 + now.Minute;
             for (int i = 0; i < 6; i++)
             {
-                string[] hm = Extras.Prayer[i].Split(':');
+                string[] hm = Extras.Prayer[i].Split(new[] { ':' });
                 int h, mi;
                 if (hm.Length == 2 && int.TryParse(hm[0], out h) && int.TryParse(hm[1], out mi) && h * 60 + mi > m) return i;
             }
