@@ -1,0 +1,4 @@
+version=11
+file=ProSystemMonitor.exe
+sha256=03ead9b5850ad00ba49fa860f9e0814942247dd366e93279ea673072cc9ec68d
+notes=Güncelleme özelliği eklendi.\nFan eşleme ayarı.

@@ -73,6 +73,8 @@ namespace ProSystemMonitor
                     TelemetryLoop();
                 }) { IsBackground = true, Priority = ThreadPriority.BelowNormal };
                 pollThread.Start();
+                Updater.Cleanup();
+                Updater.StartBackground();
 
                 if (args == null || !args.Contains("--silent"))
                 {
@@ -452,6 +454,18 @@ namespace ProSystemMonitor
             try { EventWaitHandle.OpenExisting("Global\\ProSystemMonitor_ShowDash").Set(); } catch { }
         }
 
+        private static void TrayUpdateCheck()
+        {
+            if (!Updater.Check()) { ShowBalloon(Updater.Status); return; }
+            if (!Updater.UpdateAvailable) { ShowBalloon("Güncelsin (v" + Updater.Status.Replace("Güncelsin (v", "").Replace(")", "") + ")"); return; }
+            _ui.BeginInvoke((MethodInvoker)delegate
+            {
+                string msg = "Yeni sürüm: v" + Updater.LatestVersion + " (şu an v" + Updater.AppVersion + ")\r\n\r\n" + Updater.LatestNotes + "\r\n\r\nŞimdi güncellenip yeniden başlatılsın mı?";
+                if (MessageBox.Show(msg, "ROG Pro System Monitor", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                    ThreadPool.QueueUserWorkItem(_ => { string err = Updater.ApplyUpdate(); if (err != null) ShowBalloon("Güncelleme başarısız: " + err); });
+            });
+        }
+
         public static void RequestSensorDump() { if (_collector != null) _collector.RequestSensorDump(); }
 
         public static void ExitApp()
@@ -562,6 +576,9 @@ namespace ProSystemMonitor
             sndItem.DropDownItems.Add("...");
             menu.Items.Add(sndItem);
             menu.Items.Add(new ToolStripSeparator());
+            var updItem = new ToolStripMenuItem("Güncellemeleri Denetle…");
+            updItem.Click += (s, e) => ThreadPool.QueueUserWorkItem(_ => TrayUpdateCheck());
+            menu.Items.Add(updItem);
             menu.Items.Add(autoItem);
             menu.Items.Add(alertItem);
             menu.Items.Add(dumpItem);

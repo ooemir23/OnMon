@@ -58,6 +58,7 @@ namespace ProSystemMonitor
             AddPage(side, "Konum ve uyarılar", BuildData());
             AddPage(side, "Pencere ve sistem", BuildSystem());
             AddPage(side, "Fan eşleme", BuildFans());
+            AddPage(side, "Güncelleme", BuildUpdate());
             AddPage(side, "Tanılama", BuildDiag());
             ShowPage(0);
 
@@ -102,7 +103,8 @@ namespace ProSystemMonitor
             if (i == 1) RefreshAudio();
             if (i == 3) RefreshScreens();
             if (i == 4) RefreshFans();
-            if (i == 5) RefreshDiag();
+            if (i == 5) RefreshUpdate();
+            if (i == 6) RefreshDiag();
         }
 
         private Label H(string text, int top)
@@ -393,6 +395,56 @@ namespace ProSystemMonitor
             _fanList.EndUpdate();
         }
 
+        // ---------------- Güncelleme ----------------
+        private Label _updVer, _updStatus;
+        private TextBox _updNotes;
+        private Button _updGo, _updCheck;
+
+        private Panel BuildUpdate()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Güncelleme", 0));
+            p.Controls.Add(Sub("Güncellemeler GitHub'daki ooemir23/OnMon deposundan gelir.", 0, 40, 740));
+            _updVer = new Label { Left = 0, Top = 76, Width = 740, Height = 28, ForeColor = Tx, Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
+            _updStatus = new Label { Left = 0, Top = 108, Width = 740, Height = 26, ForeColor = Dim };
+            p.Controls.Add(_updVer); p.Controls.Add(_updStatus);
+            _updNotes = new TextBox { Left = 0, Top = 146, Width = 740, Height = 150, Multiline = true, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.Vertical };
+            p.Controls.Add(_updNotes);
+            _updCheck = Bt("Güncellemeleri denetle", 0, 312, 220, delegate
+            {
+                _updStatus.Text = "Denetleniyor…";
+                _updCheck.Enabled = false;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    Updater.Check();
+                    try { BeginInvoke((MethodInvoker)delegate { _updCheck.Enabled = true; RefreshUpdate(); }); } catch { }
+                });
+            });
+            p.Controls.Add(_updCheck);
+            _updGo = Bt("Şimdi güncelle ve yeniden başlat", 232, 312, 280, delegate
+            {
+                if (MessageBox.Show(this, "Uygulama güncellenip yeniden başlatılacak. Devam edilsin mi?", "Güncelleme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                _updGo.Enabled = false; _updStatus.Text = "İndiriliyor…";
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    string err = Updater.ApplyUpdate();
+                    if (err != null) try { BeginInvoke((MethodInvoker)delegate { _updGo.Enabled = true; RefreshUpdate(); }); } catch { }
+                });
+            });
+            p.Controls.Add(_updGo);
+            p.Controls.Add(Ck("Açılışta ve 6 saatte bir otomatik denetle (yeni sürümde bildirim göster)", 0, 366, 740, Updater.AutoCheck, v => Updater.AutoCheck = v));
+            return p;
+        }
+
+        private void RefreshUpdate()
+        {
+            _updVer.Text = "Yüklü sürüm: v" + Updater.AppVersion + (Updater.LatestVersion > 0 ? "     Son sürüm: v" + Updater.LatestVersion : "");
+            _updStatus.Text = Updater.Status;
+            _updNotes.Text = Updater.LatestNotes;
+            _updGo.Enabled = Updater.UpdateAvailable && !Updater.Busy;
+            _updGo.ForeColor = Updater.UpdateAvailable ? _acc : Dim;
+        }
+
         // ---------------- Tanılama ----------------
         private Panel BuildDiag()
         {
@@ -419,6 +471,7 @@ namespace ProSystemMonitor
             sb.AppendLine("Yönetici: " + (Program.IsAdministrator() ? "evet" : "hayır (sıcaklık/fan okunamaz)"));
             sb.AppendLine("Ses çıkışı: " + AudioSwitch.DefaultName);
             sb.AppendLine("Mikrofon: " + AudioSwitch.MicName + (AudioSwitch.MicMuted ? " (sessiz)" : ""));
+            sb.AppendLine("Sürüm: v" + Updater.AppVersion);
             sb.AppendLine("Klasör: " + AppDomain.CurrentDomain.BaseDirectory);
             sb.AppendLine();
             sb.AppendLine("sensorler.txt  → tüm sensörlerin listesi (otomatik yazılır)");
