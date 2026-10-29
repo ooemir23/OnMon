@@ -1,4 +1,4 @@
-version=16
+version=17
 file=ProSystemMonitor.exe
-sha256=ff6a7330d1a895ac56c8aaf4e425b8d86ddcb1d683b805751a913cf62ca68993
-notes=Sığmayan yazılar kayar.\nSES başlığı tıklanır (cihaz değiştir).\nHUD: en çok CPU/RAM kullanan uygulamalar ve OnMon kullanımı.\nHız testi kaldırıldı.
+sha256=f375249e2c5318d325fb13cf3d083e5f8376d92d9e078820f11db405b27619d3
+notes=CPU kullanımı düşürüldü: kayan yazı yalnızca kendi alanını yeniler, işlem CPU ölçümü sadece HUD açıkken çalışır.\nDüşük CPU modu eklendi.

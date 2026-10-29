@@ -1089,6 +1089,9 @@ namespace ProSystemMonitor
                 DateTime nowT = DateTime.UtcNow;
                 double dt = _procPrevAt == DateTime.MinValue ? 0 : (nowT - _procPrevAt).TotalSeconds;
                 var cur = new Dictionary<int, double>();
+                DashboardForm dsh = Program.Dash;
+                bool wantCpu = dsh != null && !dsh.IsDisposed && dsh._layout == "hud";
+                if (!wantCpu) { _procPrev.Clear(); _procPrevAt = DateTime.MinValue; }
                 int selfId = Process.GetCurrentProcess().Id;
                 var all = new List<ProcItem>();
                 foreach (Process p in procs)
@@ -1098,7 +1101,7 @@ namespace ProSystemMonitor
                         if (p.Id <= 4) continue;
                         string n = p.ProcessName;
                         double mb = p.WorkingSet64 / (1024.0 * 1024.0), cpuSec = 0, pct = 0;
-                        try { cpuSec = p.TotalProcessorTime.TotalSeconds; } catch { cpuSec = -1; }
+                        if (wantCpu) { try { cpuSec = p.TotalProcessorTime.TotalSeconds; } catch { cpuSec = -1; } } else cpuSec = -1;
                         double prev;
                         if (cpuSec >= 0)
                         {

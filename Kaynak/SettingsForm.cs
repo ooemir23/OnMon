@@ -333,6 +333,7 @@ namespace ProSystemMonitor
             bool auto = false; try { auto = Program.IsAutostartEnabled(); } catch { }
             p.Controls.Add(Ck("Windows ile birlikte başlat (yönetici olarak)", 0, 302, 400, auto, v => System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(v); })));
 
+            p.Controls.Add(Ck("Düşük CPU modu (veriler 2 sn'de bir yenilenir)", 0, 326, 500, _d._lowCpu, v => { _d._lowCpu = v; Program.PollIntervalMs = v ? 2000 : 1000; _d.SaveSettings(); }));
             p.Controls.Add(Sub("ESKİ ARAYÜZLER (daha çok RAM kullanır)", 0, 352, 500));
             p.Controls.Add(Bt("Tarayıcıda aç", 0, 378, 160, delegate { Program.LaunchBrowserDashboard(); }));
             p.Controls.Add(Bt("Edge uygulaması olarak aç", 170, 378, 220, delegate { Program.LaunchEdgeDashboard(); }));
@@ -584,6 +585,7 @@ namespace ProSystemMonitor
             sb.AppendLine("Ses çıkışı: " + AudioSwitch.DefaultName);
             sb.AppendLine("Mikrofon: " + AudioSwitch.MicName + (AudioSwitch.MicMuted ? " (sessiz)" : ""));
             sb.AppendLine("Sürüm: v" + Updater.AppVersion);
+            sb.AppendLine("Çizim süresi (ort.): " + _d._paintMs.ToString("0.0") + " ms");
             sb.AppendLine("Klasör: " + AppDomain.CurrentDomain.BaseDirectory);
             sb.AppendLine();
             sb.AppendLine("sensorler.txt  → tüm sensörlerin listesi (otomatik yazılır)");

@@ -36,7 +36,7 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
         private const float MicW = 440f;
-        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true;
+        internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true, _lowCpu = false;
         private const float TopH = 44f;
         private string _prevLayout;
         private bool StripOn { get { return !_hideStrip && (_audioBar || _micBar || _volBar); } }
@@ -70,6 +70,7 @@ namespace ProSystemMonitor
                     else if (k == "hidestrip") _hideStrip = v == "1";
                     else if (k == "autogame") _autoGame = v != "0";
                     else if (k == "topbar") _topBar = v != "0";
+                    else if (k == "lowcpu") { _lowCpu = v == "1"; Program.PollIntervalMs = _lowCpu ? 2000 : 1000; }
                     else if (k == "fanmap")
                     {
                         string[] fp = v.Split(new[] { ',' });
@@ -92,7 +93,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -156,7 +157,9 @@ namespace ProSystemMonitor
                     if (sec != _lastSecond) { _lastSecond = sec; _dirty = true; }
                     if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
                 }
-                if (_dirty || _marqActive) { _dirty = false; Invalidate(); }
+                if (_dirty) { _dirty = false; Invalidate(); }
+                else if (_marqRects.Count > 0 && (_tickN & 1) == 0)
+                    foreach (Rectangle mr in _marqRects.ToArray()) Invalidate(mr);
             };
             _timer.Start();
             Extras.Start(_city);
@@ -555,6 +558,8 @@ namespace ProSystemMonitor
         }
 
         private bool _marqActive;
+        private readonly List<Rectangle> _marqRects = new List<Rectangle>();
+        internal double _paintMs;
         private int _tickN;
         // Sığmayan metni kayan yazı olarak çizer (sola hizalı); sığıyorsa normal çizer.
         private void MTxt(string s, Font f, Color c, float x, float y, float w, float h, int al)
@@ -564,9 +569,11 @@ namespace ProSystemMonitor
             if (tw <= w) { Txt(s, f, c, x, y, w, h, al); return; }
             _marqActive = true;
             float scroll = tw - w + 8;
-            double sec = DateTime.UtcNow.Ticks / 1e7, period = scroll / 40.0 + 2.5, p = sec % period;
-            float off = p < 1.0 ? 0 : (float)Math.Min(scroll, (p - 1.0) * 40.0);
+            double sec = DateTime.UtcNow.Ticks / 1e7, period = scroll / 28.0 + 2.5, p = sec % period;
+            float off = p < 1.0 ? 0 : (float)Math.Min(scroll, (p - 1.0) * 28.0);
             float need = f.Size * 1.45f, ch = Math.Max(h, need), cy = y - (ch - h) / 2f;
+            float ty = _topBar ? TopH : 0;
+            _marqRects.Add(Rectangle.FromLTRB((int)(_ox + x * _sc) - 3, (int)(_oy + (cy + ty) * _sc) - 3, (int)(_ox + (x + w) * _sc) + 3, (int)(_oy + (cy + ch + ty) * _sc) + 3));
             G.SetClip(new RectangleF(x, cy, w, ch));
             Txt(s, f, c, x - off, y, tw + 24, h, 0);
             G.ResetClip();
@@ -856,7 +863,8 @@ namespace ProSystemMonitor
         protected override void OnPaint(PaintEventArgs e)
         {
             if (WindowState == FormWindowState.Minimized) return;
-            try { PaintAll(e); }
+            var swp = System.Diagnostics.Stopwatch.StartNew();
+            try { PaintAll(e); _paintMs = _paintMs * 0.9 + swp.Elapsed.TotalMilliseconds * 0.1; }
             catch (Exception ex) { if (!_loggedPaint) { _loggedPaint = true; Program.Log("paint", ex); } }
         }
 
@@ -868,7 +876,7 @@ namespace ProSystemMonitor
             G.PixelOffsetMode = PixelOffsetMode.HighQuality;
             Theme t = _th;
             G.Clear(t.Bg);
-            _marqActive = false;
+            _marqActive = false; _marqRects.Clear();
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
