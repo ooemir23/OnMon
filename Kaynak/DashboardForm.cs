@@ -35,6 +35,7 @@ namespace ProSystemMonitor
         private Graphics G;
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
+        private const float MicW = 440f;
         private bool _audioBar = true, _micBar = true;
         private float _lastMic = -1; private bool _lastMuted;
         private readonly HashSet<string> _favs = new HashSet<string>();
@@ -443,7 +444,15 @@ namespace ProSystemMonitor
         {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
+                bool wasMic = false;
+                foreach (AudioDevice md in AudioSwitch.MicDevices) if (md.Id == id) wasMic = true;
                 AudioSwitch.SetDefault(id);
+                if (!wasMic)
+                {
+                    // Yeni ses kartından kısa bir bildirim sesi çal (geçişin çalıştığını duyarsın).
+                    System.Threading.Thread.Sleep(350);
+                    try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+                }
                 _dirty = true;
             });
         }
@@ -836,7 +845,7 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 14 - (_micBar ? 262 : 0), (_audioBar || _micBar) ? 1084 : 1054, w, 26);
+                    var r = new RectangleF(1920 - w - 14 - (_micBar ? MicW + 12 : 0), (_audioBar || _micBar) ? 1084 : 1054, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
@@ -1157,7 +1166,7 @@ namespace ProSystemMonitor
             var show = new List<AudioDevice>();
             foreach (AudioDevice d in all) if (_favs.Count == 0 || _favs.Contains(d.Id) || d.IsDefault) show.Add(d);
             Font f = F(18, true, false);
-            float x = 10, y = 1084, h = 26, maxX = 1920 - 340 - (_micBar ? 262 : 0);
+            float x = 10, y = 1084, h = 26, maxX = 1920 - 340 - (_micBar ? MicW + 12 : 0);
             Txt("♪", F(20, true, false), t.A1, x, y, 20, h, 1);
             x += 24;
             foreach (AudioDevice d in show)
@@ -1180,7 +1189,7 @@ namespace ProSystemMonitor
         private void DrawMic()
         {
             Theme t = _th;
-            float w = 250, h = 26, x = 1920 - 14 - w, y = 1084;
+            float w = MicW, h = 26, x = 1920 - 14 - w, y = 1084;
             var r = new RectangleF(x, y, w, h);
             bool avail = AudioSwitch.MicAvailable, muted = AudioSwitch.MicMuted;
             using (GraphicsPath p = RR(r, h / 2f))
@@ -1196,20 +1205,21 @@ namespace ProSystemMonitor
             G.DrawLine(Pn(ic, 1.6f), x + 14.5f, y + 18.5f, x + 14.5f, y + 21);
             G.DrawLine(Pn(ic, 1.6f), x + 11, y + 21, x + 18, y + 21);
             if (muted) G.DrawLine(Pn(Color.White, 2.4f), x + 7, y + 22, x + 22, y + 4);
-            Font f = F(17, true, false);
-            if (!avail) { Txt("Mikrofon yok", f, t.Dim, x + 30, y, w - 40, h, 0); }
+            Font f = F(16, true, false);
+            if (!avail) { Txt("Mikrofon yok", f, t.Dim, x + 32, y, w - 40, h, 0); }
             else
             {
                 string lab = muted ? "KAPALI" : "AÇIK";
-                float lw = 66;
+                float lw = 66, nw = 200;
+                Color tc = muted ? Color.White : t.Tx;
+                Txt(Fit(AudioSwitch.MicName, f, nw), f, tc, x + 32, y, nw + 6, h, 0);
                 if (!muted)
                 {
-                    float bx = x + 32, bw = w - 32 - lw - 12;
+                    float bx = x + 32 + nw + 10, bw = w - 32 - nw - 10 - lw - 14;
                     float lv = (float)Math.Sqrt(Math.Max(0, Math.Min(1, AudioSwitch.MicLevel)));
                     BarAt(bx, y + h / 2f - 4, bw, lv * 100, lv > 0.92f, 8);
                 }
-                else Txt("MİKROFON", f, Color.White, x + 32, y, w - 32 - lw - 12, h, 0);
-                Txt(lab, f, muted ? Color.White : t.Tx, x + w - lw - 10, y, lw, h, 2);
+                Txt(lab, f, tc, x + w - lw - 10, y, lw, h, 2);
             }
             _hits.Add(new KeyValuePair<RectangleF, string>(r, "mic:toggle"));
         }
