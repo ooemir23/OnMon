@@ -27,3 +27,9 @@ Derleme
 
 Okunamayan sensor "--" gosterilir (uydurma deger yazilmaz). Bazi kartlarda DIMM sicakligi
 LibreHardwareMonitor tarafindan desteklenmez; bu normaldir.
+
+--- YEREL PANO (Edge'siz) ---
+Pano artik uygulamanin icinde GDI+ ile cizilir; Edge/tarayici acilmaz, ek RAM kullanmaz.
+Sag tik: duzen, tema, kenar boslugu, sehir. Kisayol: 1/2/3 duzen, T tema, Esc kapat.
+Tray menusu: "Edge ile Ac" ve "Tarayicida Ac" eski web panoyu acar (daha cok RAM).
+Ayarlar: %APPDATA%\ProSystemMonitor\ui.txt

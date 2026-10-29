@@ -40,7 +40,7 @@ namespace ProSystemMonitor
             {
                 if (!createdNew)
                 {
-                    LaunchDashboardOnSecondMonitor();
+                    SignalFirstInstance();
                     return;
                 }
 
@@ -48,6 +48,9 @@ namespace ProSystemMonitor
                 Application.SetCompatibleTextRenderingDefault(false);
 
                 LowerOwnPriority();
+                _ui = new Control(); _ui.CreateControl(); var hnd = _ui.Handle;
+                _showEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\ProSystemMonitor_ShowDash");
+                new Thread(() => { while (_running) { try { if (_showEvt.WaitOne(1000)) LaunchDashboardOnSecondMonitor(); } catch { } } }) { IsBackground = true }.Start();
                 _collector = new TelemetryCollector();
 
                 Thread serverThread = new Thread(HttpServerLoop) { IsBackground = true };
@@ -247,6 +250,7 @@ namespace ProSystemMonitor
                 {
                     LatestJson = _collector.CollectJson();
                     BroadcastSse(LatestJson);
+                    PushDash();
                     tickCount++;
                     if (tickCount % 300 == 0) TrimProcessMemory();
                 }
@@ -396,7 +400,47 @@ namespace ProSystemMonitor
             catch { }
         }
 
+        // ---------- Yerel pano ----------
+        public static volatile DashboardForm Dash;
+        public static volatile Snap LastSnap;
+        private static Control _ui;
+        private static EventWaitHandle _showEvt;
+
+        private static void PushDash()
+        {
+            DashboardForm d = Dash; Snap s = LastSnap;
+            if (d == null || s == null || _ui == null) return;
+            try { _ui.BeginInvoke((MethodInvoker)delegate { DashboardForm x = Dash; if (x != null && !x.IsDisposed) x.Push(s); }); } catch { }
+        }
+
         public static void LaunchDashboardOnSecondMonitor()
+        {
+            if (_ui == null) return;
+            try
+            {
+                _ui.BeginInvoke((MethodInvoker)delegate
+                {
+                    if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); return; }
+                    var f = new DashboardForm();
+                    Dash = f;
+                    f.PlaceOnSecondMonitor();
+                    f.Show();
+                });
+            }
+            catch { }
+        }
+
+        private static void SignalFirstInstance()
+        {
+            try { EventWaitHandle.OpenExisting("Global\\ProSystemMonitor_ShowDash").Set(); } catch { }
+        }
+
+        public static void LaunchBrowserDashboard()
+        {
+            try { Process.Start(new ProcessStartInfo("http://127.0.0.1:" + Port) { UseShellExecute = true }); } catch { }
+        }
+
+        public static void LaunchEdgeDashboard()
         {
             try
             {
@@ -445,7 +489,7 @@ namespace ProSystemMonitor
             };
 
             var menu = new ContextMenuStrip();
-            var open2ndItem = new ToolStripMenuItem("2. Monitörde Tam Ekran Aç");
+            var open2ndItem = new ToolStripMenuItem("Panoyu Aç (yerel, 2. monitör)");
             open2ndItem.Font = new Font(open2ndItem.Font, FontStyle.Bold);
             open2ndItem.Click += (s, e) => LaunchDashboardOnSecondMonitor();
 
@@ -473,6 +517,8 @@ namespace ProSystemMonitor
             menu.Opening += (s, e) => { try { autoItem.Checked = IsAutostartEnabled(); } catch { } };
 
             menu.Items.Add(open2ndItem);
+            menu.Items.Add("Edge ile Aç (daha çok RAM)", null, (s, e) => LaunchEdgeDashboard());
+            menu.Items.Add("Tarayıcıda Aç", null, (s, e) => LaunchBrowserDashboard());
             menu.Items.Add(openBrowserItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(autoItem);
@@ -1206,6 +1252,24 @@ namespace ProSystemMonitor
 
             double netUpKbs = 0, netDownKbs = 0, netUpTotalMb = 0, netDownTotalMb = 0;
             ReadNetworkStats(out netUpKbs, out netDownKbs, out netUpTotalMb, out netDownTotalMb);
+
+            if (Program.Dash != null)
+            {
+                Program.LastSnap = new Snap
+                {
+                    Brand = _brandName, MoboModel = _moboModel, Chipset = _moboChipset, Bios = _moboBios, CpuModel = _cpuModel,
+                    GpuModel = _gpuModel, GpuBus = gpuBusType, MemSpeed = _memSpeedText, Uptime = uptimeStr, Ip = _ipAddress,
+                    Game = activeGame ?? "", Throttle = throttleText, Source = sensorSource,
+                    Sound = soundVol < 0 ? double.NaN : soundVol, Procs = processCount, Ping = _pingMs < 0 ? double.NaN : _pingMs,
+                    MemTotal = memTotalGb * 1024.0, MemUsed = memUsedGb * 1024.0, MemFree = memFreeGb * 1024.0, MemLoad = memLoadPct, MoboTemp = moboTemp,
+                    CpuLoad = cpuLoadPct, CpuTemp = cpuTemp, CpuClock = maxCoreMhz, CpuFan = cpuFanRpm, Cha1 = chaFan1Rpm, Cha2 = chaFan2Rpm, Pump = aioPumpRpm,
+                    CpuW = cpuPowerW, CpuV = cpuVolt, GpuW = gpuPowerW, GpuV = gpuVolt,
+                    GpuLoad = gpuLoadPct, GpuTemp = gpuTemp, GpuClock = gpuClockMhz, VramUsed = gpuVramUsedMb, VramTotal = gpuVramTotalMb, GpuFan = gpuFanRpm,
+                    Fps = fps, FrameMs = frameTimeMs, Low1 = fpsLow1,
+                    NetUp = netUpKbs, NetDown = netDownKbs, NetUpTot = netUpTotalMb, NetDownTot = netDownTotalMb, DiskR = diskReadMBs, DiskW = diskWriteMBs,
+                    Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray()
+                };
+            }
 
             StringBuilder sb = new StringBuilder(3072);
             sb.Append('{');
