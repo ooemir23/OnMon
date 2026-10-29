@@ -214,7 +214,7 @@ namespace ProSystemMonitor
             var p = new Panel();
             p.Controls.Add(H("Ses ve mikrofon", 0));
 
-            p.Controls.Add(Sub("ÇIKIŞ CİHAZLARI — kutuyu işaretlediklerin alt çubukta tek tıkla geçiş için görünür", 0, 44, 740));
+            p.Controls.Add(Sub("ÇIKIŞ CİHAZLARI — kutuyu işaretlediklerin alt çubukta ve SES panelinde görünür", 0, 44, 740));
             _outList = LV(0, 68, 740, 150, true);
             _outList.Columns.Add("", 40); _outList.Columns.Add("Cihaz", 560); _outList.Columns.Add("Durum", 130);
             _outList.ItemChecked += delegate (object s, ItemCheckedEventArgs e)
@@ -230,9 +230,16 @@ namespace ProSystemMonitor
             p.Controls.Add(Bt("Test sesi çal", 160, 226, 150, delegate { try { System.Media.SystemSounds.Asterisk.Play(); } catch { } }));
             p.Controls.Add(Ck("Alt çubukta ses cihazlarını göster", 330, 230, 330, _d._audioBar, v => { _d._audioBar = v; _d.SaveSettings(); _d.Invalidate(); }));
 
-            p.Controls.Add(Sub("MİKROFON", 0, 286, 300));
-            _micList = LV(0, 310, 740, 110, false);
-            _micList.Columns.Add("Cihaz", 600); _micList.Columns.Add("Durum", 130);
+            p.Controls.Add(Sub("MİKROFON — kutuyu işaretlediklerin SES panelinde görünür", 0, 286, 500));
+            _micList = LV(0, 310, 740, 110, true);
+            _micList.Columns.Add("", 40); _micList.Columns.Add("Cihaz", 560); _micList.Columns.Add("Durum", 130);
+            _micList.ItemChecked += delegate (object s, ItemCheckedEventArgs e)
+            {
+                if (_loading) return;
+                string id = e.Item.Tag as string;
+                if (e.Item.Checked) _d._micFavs.Add(id); else _d._micFavs.Remove(id);
+                _d.SaveSettings(); _d.Invalidate();
+            };
             _micList.DoubleClick += delegate { SetDefaultFrom(_micList, false); };
             p.Controls.Add(_micList);
             p.Controls.Add(Bt("Varsayılan yap", 0, 428, 150, delegate { SetDefaultFrom(_micList, false); }));
@@ -274,8 +281,8 @@ namespace ProSystemMonitor
                 _micList.Items.Clear();
                 foreach (AudioDevice a in AudioSwitch.MicDevices)
                 {
-                    var it = new ListViewItem(a.Name) { Tag = a.Id };
-                    it.SubItems.Add(a.IsDefault ? "● Varsayılan" : "");
+                    var it = new ListViewItem("") { Tag = a.Id, Checked = _d._micFavs.Contains(a.Id) };
+                    it.SubItems.Add(a.Name); it.SubItems.Add(a.IsDefault ? "● Varsayılan" : "");
                     if (a.IsDefault) it.ForeColor = _acc;
                     _micList.Items.Add(it);
                 }

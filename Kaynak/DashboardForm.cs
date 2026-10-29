@@ -44,6 +44,7 @@ namespace ProSystemMonitor
         private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
         private float _lastMic = -1; private bool _lastMuted;
         internal readonly HashSet<string> _favs = new HashSet<string>();
+        internal readonly HashSet<string> _micFavs = new HashSet<string>();
         private readonly List<KeyValuePair<RectangleF, string>> _hits = new List<KeyValuePair<RectangleF, string>>();
         private float _ox, _oy, _sc = 1f;
 
@@ -79,6 +80,7 @@ namespace ProSystemMonitor
                         TelemetryCollector.FanMap = fm;
                     }
                     else if (k == "topmost") TopMost = v == "1";
+                    else if (k == "micfav") { _micFavs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _micFavs.Add(x); }
                     else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _favs.Add(x); }
                     else if (k == "theme") _th = Themes.Get(v);
                     else if (k == "margin") int.TryParse(v, out _margin);
@@ -93,7 +95,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs) });
             }
             catch { }
         }
@@ -1727,7 +1729,9 @@ namespace ProSystemMonitor
             Font fl = F(13, true, false), frow = F(16, true, false);
             for (int col = 0; col < 2; col++)
             {
-                AudioDevice[] list = col == 0 ? AudioSwitch.Devices : AudioSwitch.MicDevices;
+                AudioDevice[] list0 = col == 0 ? AudioSwitch.Devices : AudioSwitch.MicDevices;
+                HashSet<string> fav = col == 0 ? _favs : _micFavs;
+                AudioDevice[] list = list0 == null ? new AudioDevice[0] : list0.Where(d0 => fav.Count == 0 || fav.Contains(d0.Id) || d0.IsDefault).ToArray();
                 float cx = c.X + col * (colW + 14);
                 Txt(col == 0 ? "ÇIKIŞ" : "GİRİŞ", fl, t.Dim, cx, y, colW, 18, 0);
                 if (list == null || list.Length == 0 || maxRows < 1) continue;

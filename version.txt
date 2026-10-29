@@ -1,4 +1,4 @@
-version=23
+version=24
 file=ProSystemMonitor.exe
-sha256=d9fb19cf5d92dad5b6c4302ed90bec783e38a0e20befe621ca6e99183dfb4076
-notes=SES paneli tıklama hatası düzeltildi (cihaz seçimi artık çalışır), iki sütunlu çıkış/giriş seçimi, RAM ile yer değiştirdi.
+sha256=a92eca5cccf79dcc648ff7ce8ce1abd10fa5922959f84202e4578167703160de
+notes=SES panelinde yalnızca işaretli çıkış/giriş cihazları görünür (mikrofonlara da onay kutusu eklendi).
