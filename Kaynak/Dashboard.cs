@@ -113,6 +113,30 @@ namespace ProSystemMonitor
             if (_timer != null) { _timer.Dispose(); _timer = null; }
         }
 
+        // wttr.in açıklamasını Türkçeye çevirir (zaten Türkçe ise dokunmaz).
+        private static string TrWx(string d)
+        {
+            if (string.IsNullOrEmpty(d)) return "";
+            string[][] map =
+            {
+                new[] { "patchy rain nearby", "Yer yer yağmurlu" }, new[] { "patchy light rain", "Yer yer hafif yağmur" }, new[] { "patchy light drizzle", "Yer yer çise" },
+                new[] { "patchy snow nearby", "Yer yer karlı" }, new[] { "patchy sleet nearby", "Yer yer karla karışık yağmur" }, new[] { "patchy freezing drizzle nearby", "Yer yer donan çise" },
+                new[] { "thundery outbreaks in nearby", "Yakında gök gürültülü fırtına" }, new[] { "thundery outbreaks possible", "Gök gürültülü fırtına olası" },
+                new[] { "partly cloudy", "Parçalı bulutlu" }, new[] { "partly sunny", "Parçalı güneşli" }, new[] { "overcast", "Kapalı" }, new[] { "cloudy", "Bulutlu" },
+                new[] { "sunny", "Güneşli" }, new[] { "clear", "Açık" }, new[] { "mist", "Puslu" }, new[] { "freezing fog", "Dondurucu sis" }, new[] { "fog", "Sisli" },
+                new[] { "light drizzle", "Çise" }, new[] { "drizzle", "Çise" }, new[] { "light rain shower", "Hafif sağanak" }, new[] { "moderate or heavy rain shower", "Şiddetli sağanak" },
+                new[] { "torrential rain shower", "Çok şiddetli sağanak" }, new[] { "rain shower", "Sağanak" }, new[] { "light rain", "Hafif yağmur" }, new[] { "moderate rain at times", "Ara sıra orta yağmur" },
+                new[] { "moderate rain", "Orta şiddetli yağmur" }, new[] { "heavy rain at times", "Ara sıra şiddetli yağmur" }, new[] { "heavy rain", "Şiddetli yağmur" },
+                new[] { "light sleet", "Hafif karla karışık yağmur" }, new[] { "sleet", "Karla karışık yağmur" }, new[] { "light snow showers", "Hafif kar sağanağı" },
+                new[] { "light snow", "Hafif kar" }, new[] { "moderate snow", "Orta şiddetli kar" }, new[] { "heavy snow", "Yoğun kar" }, new[] { "blowing snow", "Kar fırtınası" },
+                new[] { "blizzard", "Kar fırtınası" }, new[] { "ice pellets", "Buz taneleri" }, new[] { "thundery", "Gök gürültülü" }, new[] { "rain", "Yağmurlu" }, new[] { "snow", "Karlı" }
+            };
+            string l = d.ToLowerInvariant();
+            foreach (string[] m in map) if (l == m[0]) return m[1];
+            foreach (string[] m in map) if (l.Contains(m[0])) return m[1];
+            return d;
+        }
+
         private static void Fetch()
         {
             string city = _city;
@@ -124,7 +148,7 @@ namespace ProSystemMonitor
                     wc.Encoding = Encoding.UTF8;
                     string w = wc.DownloadString("https://wttr.in/" + Uri.EscapeDataString(city) + "?m&format=%t|%C&lang=tr").Trim();
                     string[] p = w.Split(new[] { '|' });
-                    if (p.Length >= 2) { WxTemp = p[0].Replace("+", ""); WxDesc = p[1]; }
+                    if (p.Length >= 2) { WxTemp = p[0].Replace("+", ""); WxDesc = TrWx(p[1].Trim()); }
                 }
             }
             catch { }

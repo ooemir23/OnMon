@@ -1,3 +1,4 @@
+v26 - Hava durumu açıklaması Türkçe.
 v25 - Güncelleme sayfası: son değişiklikler listesi ve net sonuç mesajı.
 v24 - SES panelinde yalnızca işaretli çıkış/giriş cihazları görünür.
 v23 - SES paneli tıklama hatası düzeltildi, iki sütunlu seçim, RAM ile yer değiştirdi.

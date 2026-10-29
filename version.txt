@@ -1,4 +1,4 @@
-version=25
+version=26
 file=ProSystemMonitor.exe
-sha256=cc93de02461eb685c75083f7ab95512a0f1bb75af86e27abd2ec1e30dd0358d1
-notes=Güncelleme sayfası son değişiklikleri listeler, denetim sonucu açıkça gösterilir.
+sha256=766b4bbf33bc72d41710a7a044ac584480fa25e83589bb9b86829eb143a1ea0c
+notes=Hava durumu açıklaması Türkçe.
