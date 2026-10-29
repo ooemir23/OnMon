@@ -12,11 +12,12 @@ namespace ProSystemMonitor
     /// <summary>GitHub'daki en son sürümü denetler, exe'yi indirip kendini değiştirir ve yeniden başlar.</summary>
     internal static class Updater
     {
-        public const int AppVersion = 24;
+        public const int AppVersion = 25;
         private const string RawBase = "https://raw.githubusercontent.com/ooemir23/OnMon/main/";
 
         public static volatile int LatestVersion;
         public static volatile string LatestNotes = "";
+        public static volatile string Changelog = "";
         public static volatile string Status = "Henüz denetlenmedi";
         public static volatile bool Busy;
         private static string _sha = "";
@@ -75,8 +76,14 @@ namespace ProSystemMonitor
                     else if (k == "file" && v.Length > 0) file = v;
                 }
                 if (ver <= 0) { Status = "Sürüm bilgisi okunamadı"; return false; }
+                try
+                {
+                    using (WebClient wc2 = Client())
+                        Changelog = wc2.DownloadString(RawBase + "changelog.txt?t=" + DateTime.UtcNow.Ticks).Replace("\r", "").Replace("\n", "\r\n");
+                }
+                catch { }
                 LatestVersion = ver; LatestNotes = notes; _sha = sha; _file = file;
-                Status = ver > AppVersion ? "Yeni sürüm var: v" + ver : "Güncelsin (v" + AppVersion + ")";
+                Status = ver > AppVersion ? "Yeni sürüm var: v" + ver + " (yüklü: v" + AppVersion + ")" : "Güncelsin — en son sürümü kullanıyorsun (v" + AppVersion + ")";
                 return true;
             }
             catch (Exception ex)

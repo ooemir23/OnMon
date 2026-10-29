@@ -460,8 +460,8 @@ namespace ProSystemMonitor
 
         private static void TrayUpdateCheck()
         {
-            if (!Updater.Check()) { ShowBalloon(Updater.Status); return; }
-            if (!Updater.UpdateAvailable) { ShowBalloon("Güncelsin (v" + Updater.Status.Replace("Güncelsin (v", "").Replace(")", "") + ")"); return; }
+            if (!Updater.Check()) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status, "ROG Pro System Monitor", MessageBoxButtons.OK, MessageBoxIcon.Warning); }); return; }
+            if (!Updater.UpdateAvailable) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status + "\r\n\r\nSon değişiklikler:\r\n" + Updater.Changelog, "ROG Pro System Monitor", MessageBoxButtons.OK, MessageBoxIcon.Information); }); return; }
             _ui.BeginInvoke((MethodInvoker)delegate
             {
                 string msg = "Yeni sürüm: v" + Updater.LatestVersion + " (şu an v" + Updater.AppVersion + ")\r\n\r\n" + Updater.LatestNotes + "\r\n\r\nŞimdi güncellenip yeniden başlatılsın mı?";

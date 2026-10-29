@@ -1,0 +1,14 @@
+v25 - Güncelleme sayfası: son değişiklikler listesi ve net sonuç mesajı.
+v24 - SES panelinde yalnızca işaretli çıkış/giriş cihazları görünür.
+v23 - SES paneli tıklama hatası düzeltildi, iki sütunlu seçim, RAM ile yer değiştirdi.
+v22 - Saat/tarih/vakit hatırlatıcısı alta taşındı, kısa cihaz adları.
+v21 - FPS düzeltmesi (ETW süzgeci kaldırıldı).
+v20 - CPU/RAM azaltma: önbellekler, saniyesiz saat, pano gizliyken seyrek okuma.
+v19 - Kayan yazı kaldırıldı, CPU/GPU adları kısaltıldı, 2 sn veri okuma.
+v18 - Çerçeve önbelleği ile CPU düşürüldü.
+v16 - UYGULAMALAR paneli (en çok CPU/RAM), SES başlığı tıklanır.
+v15 - SES paneli seçimleri, saat/ezan çubuğu.
+v14 - Yeni Oyun HUD, otomatik HUD geçişi, oturum kaydı, ses profilleri, cihaz pilleri.
+v13 - Esc kapatmaz, alt çubuk gizleme (B).
+v12 - Komuta Merkezi düzeni, alt çubukta ses kaydırıcısı.
+v11 - Uygulama içi güncelleme.

@@ -1,4 +1,4 @@
-version=24
+version=25
 file=ProSystemMonitor.exe
-sha256=a92eca5cccf79dcc648ff7ce8ce1abd10fa5922959f84202e4578167703160de
-notes=SES panelinde yalnızca işaretli çıkış/giriş cihazları görünür (mikrofonlara da onay kutusu eklendi).
+sha256=cc93de02461eb685c75083f7ab95512a0f1bb75af86e27abd2ec1e30dd0358d1
+notes=Güncelleme sayfası son değişiklikleri listeler, denetim sonucu açıkça gösterilir.

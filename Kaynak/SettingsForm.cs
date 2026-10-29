@@ -528,9 +528,9 @@ namespace ProSystemMonitor
             _updVer = new Label { Left = 0, Top = 76, Width = 740, Height = 28, ForeColor = Tx, Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
             _updStatus = new Label { Left = 0, Top = 108, Width = 740, Height = 26, ForeColor = Dim };
             p.Controls.Add(_updVer); p.Controls.Add(_updStatus);
-            _updNotes = new TextBox { Left = 0, Top = 146, Width = 740, Height = 150, Multiline = true, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.Vertical };
+            _updNotes = new TextBox { Left = 0, Top = 146, Width = 740, Height = 220, Multiline = true, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.Vertical };
             p.Controls.Add(_updNotes);
-            _updCheck = Bt("Güncellemeleri denetle", 0, 312, 220, delegate
+            _updCheck = Bt("Güncellemeleri denetle", 0, 380, 220, delegate
             {
                 _updStatus.Text = "Denetleniyor…";
                 _updCheck.Enabled = false;
@@ -541,7 +541,7 @@ namespace ProSystemMonitor
                 });
             });
             p.Controls.Add(_updCheck);
-            _updGo = Bt("Şimdi güncelle ve yeniden başlat", 232, 312, 280, delegate
+            _updGo = Bt("Şimdi güncelle ve yeniden başlat", 232, 380, 280, delegate
             {
                 if (MessageBox.Show(this, "Uygulama güncellenip yeniden başlatılacak. Devam edilsin mi?", "Güncelleme", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
                 _updGo.Enabled = false; _updStatus.Text = "İndiriliyor…";
@@ -552,7 +552,7 @@ namespace ProSystemMonitor
                 });
             });
             p.Controls.Add(_updGo);
-            p.Controls.Add(Ck("Açılışta ve 6 saatte bir otomatik denetle (yeni sürümde bildirim göster)", 0, 366, 740, Updater.AutoCheck, v => Updater.AutoCheck = v));
+            p.Controls.Add(Ck("Açılışta ve 6 saatte bir otomatik denetle (yeni sürümde bildirim göster)", 0, 424, 740, Updater.AutoCheck, v => Updater.AutoCheck = v));
             return p;
         }
 
@@ -560,7 +560,7 @@ namespace ProSystemMonitor
         {
             _updVer.Text = "Yüklü sürüm: v" + Updater.AppVersion + (Updater.LatestVersion > 0 ? "     Son sürüm: v" + Updater.LatestVersion : "");
             _updStatus.Text = Updater.Status;
-            _updNotes.Text = Updater.LatestNotes;
+            _updNotes.Text = (Updater.LatestNotes.Length > 0 && Updater.UpdateAvailable ? "YENİ: " + Updater.LatestNotes + "\r\n\r\n" : "") + (Updater.Changelog.Length > 0 ? "SON DEĞİŞİKLİKLER\r\n" + Updater.Changelog : Updater.LatestNotes);
             _updGo.Enabled = Updater.UpdateAvailable && !Updater.Busy;
             _updGo.ForeColor = Updater.UpdateAvailable ? _acc : Dim;
         }
