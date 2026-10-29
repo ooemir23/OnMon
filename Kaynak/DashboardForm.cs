@@ -34,9 +34,9 @@ namespace ProSystemMonitor
         private readonly StringFormat[] _sf = new StringFormat[3];
         private Graphics G;
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
-        private ToolStripMenuItem _infoItem;
         private bool _curHidden;
-        private bool _audioBar = true;
+        private bool _audioBar = true, _micBar = true;
+        private float _lastMic = -1; private bool _lastMuted;
         private readonly HashSet<string> _favs = new HashSet<string>();
         private readonly List<KeyValuePair<RectangleF, string>> _hits = new List<KeyValuePair<RectangleF, string>>();
         private float _ox, _oy, _sc = 1f;
@@ -59,6 +59,8 @@ namespace ProSystemMonitor
                     string k = line.Substring(0, i).Trim(), v = line.Substring(i + 1).Trim();
                     if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida")) _layout = v;
                     else if (k == "audiobar") _audioBar = v != "0";
+                    else if (k == "micbar") _micBar = v != "0";
+                    else if (k == "topmost") TopMost = v == "1";
                     else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _favs.Add(x); }
                     else if (k == "theme") _th = Themes.Get(v);
                     else if (k == "margin") int.TryParse(v, out _margin);
@@ -73,7 +75,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -114,6 +116,12 @@ namespace ProSystemMonitor
             _timer.Interval = 500;
             _timer.Tick += delegate
             {
+                if (_micBar)
+                {
+                    AudioSwitch.PollMic();
+                    float lv = AudioSwitch.MicLevel; bool mu = AudioSwitch.MicMuted;
+                    if (mu != _lastMuted || Math.Abs(lv - _lastMic) > 0.04f) { _lastMic = lv; _lastMuted = mu; _dirty = true; }
+                }
                 int sec = DateTime.Now.Second;
                 if (_dirty || sec != _lastSecond) { _dirty = false; _lastSecond = sec; Invalidate(); }
                 if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible) { _curHidden = true; Cursor.Hide(); }
@@ -146,6 +154,8 @@ namespace ProSystemMonitor
             else if (e.KeyCode == Keys.D3) SetLayout("cockpit");
             else if (e.KeyCode == Keys.D4) SetLayout("aida");
             else if (e.KeyCode == Keys.T) NextTheme();
+            else if (e.KeyCode == Keys.S) NextAudio();
+            else if (e.KeyCode == Keys.M) ToggleMic();
             else if (e.KeyCode == Keys.Escape) Close();
         }
 
@@ -185,7 +195,7 @@ namespace ProSystemMonitor
             Add("netDown", s.NetDown);
             Add("ping", s.Ping);
             Add("totalW", (double.IsNaN(s.CpuW) ? 0 : s.CpuW) + (double.IsNaN(s.GpuW) ? 0 : s.GpuW));
-            if (_infoItem != null) _infoItem.Text = s.Source;
+            _source = s.Source;
             _dirty = true;
         }
 
@@ -204,72 +214,229 @@ namespace ProSystemMonitor
         }
 
         // ---------------- menü ----------------
+        private sealed class MenuColors : ProfessionalColorTable
+        {
+            public Color Accent = Color.FromArgb(255, 74, 0);
+            public override Color ToolStripDropDownBackground { get { return Color.FromArgb(24, 26, 31); } }
+            public override Color ImageMarginGradientBegin { get { return Color.FromArgb(24, 26, 31); } }
+            public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(24, 26, 31); } }
+            public override Color ImageMarginGradientEnd { get { return Color.FromArgb(24, 26, 31); } }
+            public override Color MenuBorder { get { return Color.FromArgb(58, 62, 72); } }
+            public override Color MenuItemBorder { get { return Color.Transparent; } }
+            public override Color MenuItemSelected { get { return Color.FromArgb(44, 48, 58); } }
+            public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(44, 48, 58); } }
+            public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(44, 48, 58); } }
+            public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(52, 56, 68); } }
+            public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(52, 56, 68); } }
+            public override Color SeparatorDark { get { return Color.FromArgb(52, 56, 66); } }
+            public override Color SeparatorLight { get { return Color.FromArgb(24, 26, 31); } }
+            public override Color CheckBackground { get { return Color.Transparent; } }
+            public override Color CheckSelectedBackground { get { return Color.Transparent; } }
+            public override Color CheckPressedBackground { get { return Color.Transparent; } }
+        }
+
+        private sealed class MenuRenderer : ToolStripProfessionalRenderer
+        {
+            private readonly MenuColors _c;
+            public MenuRenderer(MenuColors c) : base(c) { _c = c; RoundedEdges = false; }
+
+            protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+            {
+                string tag = e.Item.Tag as string;
+                if (tag == "hdr") e.TextColor = _c.Accent;
+                else if (tag == "sec") e.TextColor = Color.FromArgb(120, 126, 140);
+                else if (tag == "dim") e.TextColor = Color.FromArgb(130, 136, 150);
+                else e.TextColor = e.Item.Enabled ? Color.FromArgb(232, 234, 238) : Color.FromArgb(110, 114, 124);
+                base.OnRenderItemText(e);
+            }
+
+            protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+            {
+                e.ArrowColor = Color.FromArgb(170, 176, 190);
+                base.OnRenderArrow(e);
+            }
+
+            protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
+            {
+                var r = e.ImageRectangle;
+                var g = e.Graphics;
+                var old = g.SmoothingMode;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var br = new SolidBrush(_c.Accent))
+                {
+                    float d = 8;
+                    g.FillEllipse(br, r.X + (r.Width - d) / 2f, r.Y + (r.Height - d) / 2f, d, d);
+                }
+                g.SmoothingMode = old;
+            }
+        }
+
+        private ToolStripMenuItem Mi(string text, string key, bool check, EventHandler click)
+        {
+            var it = new ToolStripMenuItem(text);
+            it.Padding = new Padding(2, 5, 2, 5);
+            it.Checked = check;
+            if (!string.IsNullOrEmpty(key)) it.ShortcutKeyDisplayString = key;
+            if (click != null) it.Click += click;
+            return it;
+        }
+
+        private ToolStripMenuItem Sec(string text)
+        {
+            var it = new ToolStripMenuItem(text.ToUpper(new CultureInfo("tr-TR")));
+            it.Tag = "sec";
+            it.Enabled = false;
+            it.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+            return it;
+        }
+
+        private string _source = "";
+
         private void BuildMenu()
         {
+            var colors = new MenuColors();
             var m = new ContextMenuStrip();
-            _infoItem = new ToolStripMenuItem("Sensör kaynağı") { Enabled = false };
-            m.Items.Add(_infoItem);
+            m.Renderer = new MenuRenderer(colors);
+            m.Font = new Font("Segoe UI", 10f);
+            m.ShowCheckMargin = true;
+            m.ShowImageMargin = false;
+            m.Opening += delegate { colors.Accent = _th.A1; PopulateMenu(m); };
+            ContextMenuStrip = m;
+        }
+
+        private void PopulateMenu(ContextMenuStrip m)
+        {
+            foreach (ToolStripItem old in new List<ToolStripItem>(m.Items.Cast<ToolStripItem>())) old.Dispose();
+            m.Items.Clear();
+            AudioSwitch.Refresh();
+
+            var hdr = new ToolStripMenuItem("ROG PRO SYSTEM MONITOR") { Tag = "hdr", Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+            m.Items.Add(hdr);
+            if (!string.IsNullOrEmpty(_source))
+            {
+                string src = _source.Length > 70 ? _source.Substring(0, 70) + "…" : _source;
+                m.Items.Add(new ToolStripMenuItem(src) { Tag = "dim", Enabled = false, Font = new Font("Segoe UI", 8f) });
+            }
             m.Items.Add(new ToolStripSeparator());
 
-            var lay = new ToolStripMenuItem("Düzen");
-            lay.DropDownItems.Add("1 · Klasik", null, delegate { SetLayout("classic"); });
-            lay.DropDownItems.Add("2 · Oyun HUD", null, delegate { SetLayout("hud"); });
-            lay.DropDownItems.Add("3 · Pro Kokpit", null, delegate { SetLayout("cockpit"); });
-            lay.DropDownItems.Add("4 · Sensör Paneli", null, delegate { SetLayout("aida"); });
-            m.Items.Add(lay);
+            // Görünüm
+            var view = new ToolStripMenuItem("Düzen") { Padding = new Padding(2, 5, 2, 5) };
+            view.DropDownItems.Add(Mi("Klasik", "1", _layout == "classic", delegate { SetLayout("classic"); }));
+            view.DropDownItems.Add(Mi("Oyun HUD", "2", _layout == "hud", delegate { SetLayout("hud"); }));
+            view.DropDownItems.Add(Mi("Pro Kokpit", "3", _layout == "cockpit", delegate { SetLayout("cockpit"); }));
+            view.DropDownItems.Add(Mi("Sensör Paneli", "4", _layout == "aida", delegate { SetLayout("aida"); }));
+            m.Items.Add(view);
 
-            var th = new ToolStripMenuItem("Tema (T)");
+            var th = new ToolStripMenuItem("Tema") { Padding = new Padding(2, 5, 2, 5), ShortcutKeyDisplayString = "T" };
             foreach (Theme t in Themes.All)
             {
                 Theme tt = t;
-                th.DropDownItems.Add(t.Name, null, delegate { SetTheme(tt); });
+                th.DropDownItems.Add(Mi(t.Name, null, t == _th, delegate { SetTheme(tt); }));
             }
             m.Items.Add(th);
 
-            var mar = new ToolStripMenuItem("Kenar boşluğu");
+            var mar = new ToolStripMenuItem("Kenar boşluğu") { Padding = new Padding(2, 5, 2, 5) };
             foreach (int v in new[] { 0, 8, 16, 24, 32, 48 })
             {
                 int vv = v;
-                mar.DropDownItems.Add(v + " px", null, delegate { _margin = vv; SaveSettings(); Invalidate(); });
+                mar.DropDownItems.Add(Mi(v == 0 ? "Yok" : v + " px", null, _margin == v, delegate { _margin = vv; SaveSettings(); Invalidate(); }));
             }
             m.Items.Add(mar);
+            m.Items.Add(new ToolStripSeparator());
 
-            var city = new ToolStripMenuItem("Şehir (hava & namaz)");
+            // Ses
+            var snd = new ToolStripMenuItem("Ses çıkışı") { Padding = new Padding(2, 5, 2, 5), ShortcutKeyDisplayString = "S" };
+            snd.DropDownItems.Add(Sec("Çıkış cihazı"));
+            foreach (AudioDevice d in AudioSwitch.Devices)
+            {
+                AudioDevice dd = d;
+                snd.DropDownItems.Add(Mi(d.Name, null, d.IsDefault, delegate { SwitchAudio(dd.Id); }));
+            }
+            if (AudioSwitch.Devices.Length == 0) snd.DropDownItems.Add(new ToolStripMenuItem("Cihaz bulunamadı") { Enabled = false });
+            snd.DropDownItems.Add(new ToolStripSeparator());
+            snd.DropDownItems.Add(Sec("Hızlı geçiş listesi (ekran çubuğu)"));
+            foreach (AudioDevice d in AudioSwitch.Devices)
+            {
+                AudioDevice dd = d;
+                snd.DropDownItems.Add(Mi(d.Name, null, _favs.Contains(d.Id), delegate { if (!_favs.Remove(dd.Id)) _favs.Add(dd.Id); SaveSettings(); _dirty = true; }));
+            }
+            snd.DropDownItems.Add(new ToolStripSeparator());
+            snd.DropDownItems.Add(Mi("Sonraki cihaza geç", "S", false, delegate { NextAudio(); }));
+            snd.DropDownItems.Add(Mi("Ses çubuğunu göster", null, _audioBar, delegate { _audioBar = !_audioBar; SaveSettings(); Invalidate(); }));
+            m.Items.Add(snd);
+
+            // Mikrofon
+            var mic = new ToolStripMenuItem("Mikrofon") { Padding = new Padding(2, 5, 2, 5), ShortcutKeyDisplayString = "M" };
+            mic.DropDownItems.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", AudioSwitch.MicMuted, delegate { ToggleMic(); }));
+            mic.DropDownItems.Add(new ToolStripSeparator());
+            mic.DropDownItems.Add(Sec("Giriş cihazı"));
+            foreach (AudioDevice d in AudioSwitch.MicDevices)
+            {
+                AudioDevice dd = d;
+                mic.DropDownItems.Add(Mi(d.Name, null, d.IsDefault, delegate { SwitchAudio(dd.Id); }));
+            }
+            if (AudioSwitch.MicDevices.Length == 0) mic.DropDownItems.Add(new ToolStripMenuItem("Mikrofon bulunamadı") { Enabled = false });
+            mic.DropDownItems.Add(new ToolStripSeparator());
+            mic.DropDownItems.Add(Mi("Mikrofon göstergesini göster", null, _micBar, delegate { _micBar = !_micBar; SaveSettings(); Invalidate(); }));
+            m.Items.Add(mic);
+            m.Items.Add(new ToolStripSeparator());
+
+            // Veri
+            var city = new ToolStripMenuItem("Şehir (hava durumu ve namaz)") { Padding = new Padding(2, 5, 2, 5) };
             foreach (string c in new[] { "istanbul", "ankara", "izmir", "bursa", "antalya", "adana", "konya", "trabzon", "kocaeli", "gaziantep" })
             {
                 string cc = c;
-                city.DropDownItems.Add(char.ToUpper(c[0]) + c.Substring(1), null, delegate { _city = cc; SaveSettings(); Extras.Start(_city); });
+                city.DropDownItems.Add(Mi(char.ToUpper(c[0]) + c.Substring(1), null, _city == c, delegate { _city = cc; SaveSettings(); Extras.Start(_city); }));
             }
             m.Items.Add(city);
-
-            var snd = new ToolStripMenuItem("Ses cihazı");
-            var fav = new ToolStripMenuItem("Hızlı geçiş listesi");
-            var bar = new ToolStripMenuItem("Ses çubuğunu göster") { Checked = _audioBar, CheckOnClick = false };
-            bar.Click += delegate { _audioBar = !_audioBar; SaveSettings(); Invalidate(); };
-            m.Opening += delegate
-            {
-                snd.DropDownItems.Clear(); fav.DropDownItems.Clear();
-                bar.Checked = _audioBar;
-                AudioSwitch.Refresh();
-                foreach (AudioDevice d in AudioSwitch.Devices)
-                {
-                    AudioDevice dd = d;
-                    var it = new ToolStripMenuItem(d.Name) { Checked = d.IsDefault };
-                    it.Click += delegate { SwitchAudio(dd.Id); };
-                    snd.DropDownItems.Add(it);
-                    var fi = new ToolStripMenuItem(d.Name) { Checked = _favs.Contains(d.Id) };
-                    fi.Click += delegate { if (!_favs.Remove(dd.Id)) _favs.Add(dd.Id); SaveSettings(); _dirty = true; };
-                    fav.DropDownItems.Add(fi);
-                }
-                if (snd.DropDownItems.Count == 0) snd.DropDownItems.Add(new ToolStripMenuItem("Cihaz bulunamadı") { Enabled = false });
-            };
-            m.Items.Add(snd);
-            m.Items.Add(fav);
-            m.Items.Add(bar);
+            m.Items.Add(Mi("Isı uyarıları", null, Program.AlertsEnabled, delegate { Program.SetAlertsEnabled(!Program.AlertsEnabled); }));
+            m.Items.Add(Mi("Sensör listesini masaüstüne kaydet", null, false, delegate { Program.RequestSensorDump(); }));
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add("Tarayıcıda aç (daha çok RAM kullanır)", null, delegate { Program.LaunchBrowserDashboard(); });
-            m.Items.Add("Panoyu kapat (Esc)", null, delegate { Close(); });
-            ContextMenuStrip = m;
+
+            // Pencere
+            var win = new ToolStripMenuItem("Pencere") { Padding = new Padding(2, 5, 2, 5) };
+            win.DropDownItems.Add(Mi("Diğer monitöre taşı", null, false, delegate { MoveToNextScreen(); }));
+            win.DropDownItems.Add(Mi("Her zaman üstte", null, TopMost, delegate { TopMost = !TopMost; SaveSettings(); }));
+            win.DropDownItems.Add(new ToolStripSeparator());
+            win.DropDownItems.Add(Mi("Tarayıcıda aç (daha çok RAM)", null, false, delegate { Program.LaunchBrowserDashboard(); }));
+            win.DropDownItems.Add(Mi("Edge uygulaması olarak aç (daha çok RAM)", null, false, delegate { Program.LaunchEdgeDashboard(); }));
+            m.Items.Add(win);
+
+            bool auto = false;
+            try { auto = Program.IsAutostartEnabled(); } catch { }
+            m.Items.Add(Mi("Windows ile başlat", null, auto, delegate
+            {
+                bool want = !auto;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(want); });
+            }));
+            m.Items.Add(new ToolStripSeparator());
+            m.Items.Add(Mi("Panoyu kapat", "Esc", false, delegate { Close(); }));
+            m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitApp(); }));
+        }
+
+        private void MoveToNextScreen()
+        {
+            Screen[] all = Screen.AllScreens;
+            if (all.Length < 2) return;
+            Screen cur = Screen.FromControl(this);
+            int i = Array.FindIndex(all, s => s.DeviceName == cur.DeviceName);
+            _target = all[(i + 1) % all.Length].Bounds;
+            Bounds = _target;
+            Invalidate();
+        }
+
+        private void NextAudio()
+        {
+            var list = new List<AudioDevice>();
+            foreach (AudioDevice d in AudioSwitch.Devices) if (_favs.Count == 0 || _favs.Contains(d.Id) || d.IsDefault) list.Add(d);
+            if (list.Count < 2) return;
+            int i = list.FindIndex(d => d.IsDefault);
+            SwitchAudio(list[(i + 1) % list.Count].Id);
+        }
+
+        private void ToggleMic()
+        {
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.ToggleMicMute(); AudioSwitch.PollMic(); _dirty = true; });
         }
 
         private void SwitchAudio(string id)
@@ -287,7 +454,7 @@ namespace ProSystemMonitor
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
             float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
             foreach (var h in _hits)
-                if (h.Key.Contains(cx, cy)) { SwitchAudio(h.Value); return; }
+                if (h.Key.Contains(cx, cy)) { if (h.Value == "mic:toggle") ToggleMic(); else SwitchAudio(h.Value); return; }
         }
 
         private void SetLayout(string id) { _layout = id; SaveSettings(); _dirty = true; Invalidate(); }
@@ -643,7 +810,8 @@ namespace ProSystemMonitor
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
-            float chh = _audioBar ? 1112f : 1080f;
+            bool strip = _audioBar || _micBar;
+            float chh = strip ? 1112f : 1080f;
             float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
 
@@ -668,7 +836,7 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 14, _audioBar ? 1084 : 1054, w, 26);
+                    var r = new RectangleF(1920 - w - 14 - (_micBar ? 262 : 0), (_audioBar || _micBar) ? 1084 : 1054, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
@@ -981,14 +1149,15 @@ namespace ProSystemMonitor
         private void DrawAudioBar()
         {
             _hits.Clear();
-            if (!_audioBar) return;
             Theme t = _th;
+            if (_micBar) DrawMic();
+            if (!_audioBar) return;
             AudioDevice[] all = AudioSwitch.Devices;
             if (all == null || all.Length == 0) return;
             var show = new List<AudioDevice>();
             foreach (AudioDevice d in all) if (_favs.Count == 0 || _favs.Contains(d.Id) || d.IsDefault) show.Add(d);
             Font f = F(18, true, false);
-            float x = 10, y = 1084, h = 26, maxX = 1920 - 340;
+            float x = 10, y = 1084, h = 26, maxX = 1920 - 340 - (_micBar ? 262 : 0);
             Txt("♪", F(20, true, false), t.A1, x, y, 20, h, 1);
             x += 24;
             foreach (AudioDevice d in show)
@@ -1006,6 +1175,43 @@ namespace ProSystemMonitor
                 _hits.Add(new KeyValuePair<RectangleF, string>(r, d.Id));
                 x += w + 8;
             }
+        }
+
+        private void DrawMic()
+        {
+            Theme t = _th;
+            float w = 250, h = 26, x = 1920 - 14 - w, y = 1084;
+            var r = new RectangleF(x, y, w, h);
+            bool avail = AudioSwitch.MicAvailable, muted = AudioSwitch.MicMuted;
+            using (GraphicsPath p = RR(r, h / 2f))
+            {
+                if (!avail) { G.FillPath(Br(t.Tile), p); G.DrawPath(Pn(t.Line, 1), p); }
+                else if (muted) G.FillPath(Br(t.Crit), p);
+                else { G.FillPath(Br(t.Tile), p); G.DrawPath(Pn(t.A1, 1.5f), p); }
+            }
+            Color ic = muted ? Color.White : (avail ? t.A1 : t.Dim);
+            // mikrofon simgesi
+            using (GraphicsPath cap = RR(new RectangleF(x + 11, y + 4, 7, 12), 3.5f)) G.FillPath(Br(ic), cap);
+            G.DrawArc(Pn(ic, 1.6f), x + 8, y + 7, 13, 11, 0, 180);
+            G.DrawLine(Pn(ic, 1.6f), x + 14.5f, y + 18.5f, x + 14.5f, y + 21);
+            G.DrawLine(Pn(ic, 1.6f), x + 11, y + 21, x + 18, y + 21);
+            if (muted) G.DrawLine(Pn(Color.White, 2.4f), x + 7, y + 22, x + 22, y + 4);
+            Font f = F(17, true, false);
+            if (!avail) { Txt("Mikrofon yok", f, t.Dim, x + 30, y, w - 40, h, 0); }
+            else
+            {
+                string lab = muted ? "KAPALI" : "AÇIK";
+                float lw = 66;
+                if (!muted)
+                {
+                    float bx = x + 32, bw = w - 32 - lw - 12;
+                    float lv = (float)Math.Sqrt(Math.Max(0, Math.Min(1, AudioSwitch.MicLevel)));
+                    BarAt(bx, y + h / 2f - 4, bw, lv * 100, lv > 0.92f, 8);
+                }
+                else Txt("MİKROFON", f, Color.White, x + 32, y, w - 32 - lw - 12, h, 0);
+                Txt(lab, f, muted ? Color.White : t.Tx, x + w - lw - 10, y, lw, h, 2);
+            }
+            _hits.Add(new KeyValuePair<RectangleF, string>(r, "mic:toggle"));
         }
 
         // ---------------- Sensör Paneli düzeni ----------------
@@ -1101,7 +1307,7 @@ namespace ProSystemMonitor
             Dial(c.X + 160, c.Y + 150, 290, s.GpuLoad, I0(s.GpuLoad), "%", "YÜK", 96);
             var gr = new RectangleF(c.X, c.Y + 316, 320, c.Height - 316);
             Graph(gr, "fps", 60, 0, true, true);
-            Txt("FPS " + (s.Fps > 0 ? I0(s.Fps) : "0"), F(46, true, false), Al(t.Tx, 70), gr.X, gr.Y, gr.Width, gr.Height, 1);
+            Txt("FPS " + (s.Fps > 0 ? I0(s.Fps) : "--"), F(46, true, false), Al(t.Tx, 70), gr.X, gr.Y, gr.Width, gr.Height, 1);
             float rx = c.X + 350, rw = c.Width - 350;
             StatColumn(rx, c.Y, rw, 300,
                 new[] { "Sıcaklık", "Güç", "Saat", "VRAM", "Fan" },
@@ -1125,9 +1331,10 @@ namespace ProSystemMonitor
                 float y = c.Y + i * rh;
                 string nm = !string.IsNullOrEmpty(d.Name) ? d.Name : (d.Mount ?? d.Letter);
                 Txt(Fit(nm, fn, c.Width * 0.5f), fn, t.Tx, c.X, y, c.Width * 0.5f, rh, 0);
+                bool noData = double.IsNaN(d.TempC) && d.UsedPct <= 0.01;
                 double pv = double.IsNaN(d.TempC) ? d.UsedPct : d.TempC;
                 BarAt(c.X + c.Width * 0.52f, y + rh / 2f - 7, c.Width * 0.34f, double.IsNaN(d.TempC) ? d.UsedPct : Ratio(d.TempC, 100), pv > 90, 14);
-                Txt(double.IsNaN(d.TempC) ? Pct(d.UsedPct) : Tc(d.TempC), fv, t.Tx, c.X + c.Width * 0.88f - 10, y, c.Width * 0.12f + 10, rh, 2);
+                Txt(noData ? "--" : (double.IsNaN(d.TempC) ? Pct(d.UsedPct) : Tc(d.TempC)), fv, t.Tx, c.X + c.Width * 0.88f - 10, y, c.Width * 0.12f + 10, rh, 2);
             }
         }
 

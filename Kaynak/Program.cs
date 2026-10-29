@@ -133,7 +133,7 @@ namespace ProSystemMonitor
             catch { }
         }
 
-        private static void SetAlertsEnabled(bool on)
+        public static void SetAlertsEnabled(bool on)
         {
             AlertsEnabled = on;
             try
@@ -170,12 +170,12 @@ namespace ProSystemMonitor
             catch { return -1; }
         }
 
-        private static bool IsAutostartEnabled()
+        public static bool IsAutostartEnabled()
         {
             return RunSchtasks("/Query /TN " + AutostartTask) == 0;
         }
 
-        private static bool SetAutostart(bool on)
+        public static bool SetAutostart(bool on)
         {
             if (!on) return RunSchtasks("/Delete /TN " + AutostartTask + " /F") == 0;
 
@@ -452,6 +452,14 @@ namespace ProSystemMonitor
             try { EventWaitHandle.OpenExisting("Global\\ProSystemMonitor_ShowDash").Set(); } catch { }
         }
 
+        public static void RequestSensorDump() { if (_collector != null) _collector.RequestSensorDump(); }
+
+        public static void ExitApp()
+        {
+            try { _running = false; if (_trayIcon != null) { _trayIcon.Visible = false; } } catch { }
+            Application.Exit();
+        }
+
         public static void LaunchBrowserDashboard()
         {
             try { Process.Start(new ProcessStartInfo("http://127.0.0.1:" + Port) { UseShellExecute = true }); } catch { }
@@ -667,6 +675,8 @@ namespace ProSystemMonitor
 
         private Computer _lhmComputer;
         private bool _lhmInitialized = false;
+        private DateTime _lhmLastTry = DateTime.MinValue;
+        public static volatile string LhmError = "";
         private DateTime _lastStoragePoll = DateTime.MinValue;
         private DateTime _lastSlowPoll = DateTime.MinValue;
         private readonly Dictionary<string, double> _cachedDriveTemps = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -1202,7 +1212,7 @@ namespace ProSystemMonitor
                 }
             }
 
-            string sensorSource = "Yerleşik: LHM + NVML | " + _fps.StatusText + (Program.IsAdministrator() ? "" : " | YÖNETİCİ DEĞİL");
+            string sensorSource = "Yerleşik: LHM + NVML | " + _fps.StatusText + (Program.IsAdministrator() ? "" : " | YÖNETİCİ DEĞİL") + (string.IsNullOrEmpty(LhmError) ? "" : " | LHM HATA: " + LhmError);
 
             // Okunamayan sensörler NaN kalır (JSON'da null); uydurma/tahmini değer gösterilmez.
             LhmReading lhm = GetLhmCached();
@@ -1491,10 +1501,10 @@ namespace ProSystemMonitor
             var r = new LhmReading();
             try
             {
-                if (!_lhmInitialized)
+                if (!_lhmInitialized && (DateTime.UtcNow - _lhmLastTry).TotalSeconds >= 30)
                 {
-                    // Başarısız olsa bile her saniye yeniden denemeyelim.
-                    _lhmInitialized = true;
+                    // Başarısız olsa bile her saniye yeniden denemeyelim (30 sn'de bir dene).
+                    _lhmLastTry = DateTime.UtcNow;
                     try
                     {
                         _lhmComputer = new Computer
@@ -1506,8 +1516,16 @@ namespace ProSystemMonitor
                             IsMemoryEnabled = true
                         };
                         _lhmComputer.Open();
+                        _lhmInitialized = true;
+                        LhmError = "";
                     }
-                    catch { _lhmComputer = null; }
+                    catch (Exception ex)
+                    {
+                        try { if (_lhmComputer != null) _lhmComputer.Close(); } catch { }
+                        _lhmComputer = null;
+                        LhmError = ex.GetType().Name + ": " + ex.Message;
+                        Program.Log("LHM açılamadı", ex);
+                    }
                 }
                 if (_lhmComputer == null) return r;
 

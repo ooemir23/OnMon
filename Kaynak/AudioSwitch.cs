@@ -15,6 +15,10 @@ namespace ProSystemMonitor
     {
         public static volatile AudioDevice[] Devices = new AudioDevice[0];
         public static volatile string DefaultName = "";
+        public static volatile AudioDevice[] MicDevices = new AudioDevice[0];
+        public static volatile string MicName = "";
+        public static volatile bool MicAvailable, MicMuted;
+        public static volatile float MicLevel;
         private static readonly object _lock = new object();
 
         [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
@@ -80,6 +84,30 @@ namespace ProSystemMonitor
             [PreserveSig] int SetEndpointVisibility([MarshalAs(UnmanagedType.LPWStr)] string n, int vis);
         }
 
+        [Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IMeter
+        {
+            [PreserveSig] int GetPeakValue(out float peak);
+        }
+
+        [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IEpVol
+        {
+            [PreserveSig] int RegisterControlChangeNotify(IntPtr n);
+            [PreserveSig] int UnregisterControlChangeNotify(IntPtr n);
+            [PreserveSig] int GetChannelCount(out int c);
+            [PreserveSig] int SetMasterVolumeLevel(float db, ref Guid ctx);
+            [PreserveSig] int SetMasterVolumeLevelScalar(float v, ref Guid ctx);
+            [PreserveSig] int GetMasterVolumeLevel(out float db);
+            [PreserveSig] int GetMasterVolumeLevelScalar(out float v);
+            [PreserveSig] int SetChannelVolumeLevel(uint ch, float db, ref Guid ctx);
+            [PreserveSig] int SetChannelVolumeLevelScalar(uint ch, float v, ref Guid ctx);
+            [PreserveSig] int GetChannelVolumeLevel(uint ch, out float db);
+            [PreserveSig] int GetChannelVolumeLevelScalar(uint ch, out float v);
+            [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid ctx);
+            [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+        }
+
         private static string FriendlyName(IDev d)
         {
             IProps ps = null;
@@ -100,7 +128,37 @@ namespace ProSystemMonitor
             return "?";
         }
 
-        /// <summary>Aktif çıkış cihazlarını okuyup önbelleğe alır.</summary>
+        private static AudioDevice[] ListFlow(IEnum en, int flow, out string defName)
+        {
+            defName = "";
+            string defId = null;
+            IDev dd;
+            if (en.GetDefaultAudioEndpoint(flow, 1, out dd) == 0 && dd != null)
+            {
+                dd.GetId(out defId);
+                Marshal.ReleaseComObject(dd);
+            }
+            var list = new List<AudioDevice>();
+            IColl coll;
+            if (en.EnumAudioEndpoints(flow, 1, out coll) == 0 && coll != null)
+            {
+                int n; coll.GetCount(out n);
+                for (int i = 0; i < n; i++)
+                {
+                    IDev d;
+                    if (coll.Item(i, out d) != 0 || d == null) continue;
+                    string id; d.GetId(out id);
+                    var ad = new AudioDevice { Id = id, Name = FriendlyName(d), IsDefault = id == defId };
+                    if (ad.IsDefault) defName = ad.Name;
+                    list.Add(ad);
+                    Marshal.ReleaseComObject(d);
+                }
+                Marshal.ReleaseComObject(coll);
+            }
+            return list.ToArray();
+        }
+
+        /// <summary>Aktif çıkış ve giriş cihazlarını okuyup önbelleğe alır.</summary>
         public static void Refresh()
         {
             lock (_lock)
@@ -108,35 +166,76 @@ namespace ProSystemMonitor
                 try
                 {
                     var en = (IEnum)(new MMDeviceEnumeratorCom());
-                    string defId = null;
-                    IDev dd;
-                    if (en.GetDefaultAudioEndpoint(0, 1, out dd) == 0 && dd != null)
-                    {
-                        dd.GetId(out defId);
-                        Marshal.ReleaseComObject(dd);
-                    }
-                    IColl coll;
-                    var list = new List<AudioDevice>();
-                    if (en.EnumAudioEndpoints(0, 1, out coll) == 0 && coll != null)
-                    {
-                        int n; coll.GetCount(out n);
-                        for (int i = 0; i < n; i++)
-                        {
-                            IDev d;
-                            if (coll.Item(i, out d) != 0 || d == null) continue;
-                            string id; d.GetId(out id);
-                            list.Add(new AudioDevice { Id = id, Name = FriendlyName(d), IsDefault = id == defId });
-                            Marshal.ReleaseComObject(d);
-                        }
-                        Marshal.ReleaseComObject(coll);
-                    }
+                    string dn, mn;
+                    Devices = ListFlow(en, 0, out dn);
+                    DefaultName = dn;
+                    MicDevices = ListFlow(en, 1, out mn);
+                    MicName = mn;
+                    MicAvailable = mn.Length > 0;
                     Marshal.ReleaseComObject(en);
-                    Devices = list.ToArray();
-                    var cur = list.Find(x => x.IsDefault);
-                    DefaultName = cur != null ? cur.Name : "";
                 }
                 catch { }
             }
+        }
+
+        private static IDev DefaultMic(IEnum en)
+        {
+            IDev d;
+            return (en.GetDefaultAudioEndpoint(1, 0, out d) == 0) ? d : null;
+        }
+
+        /// <summary>Varsayılan mikrofonun anlık seviyesini ve sessiz durumunu okur (hafif; sık çağrılabilir).</summary>
+        public static void PollMic()
+        {
+            try
+            {
+                var en = (IEnum)(new MMDeviceEnumeratorCom());
+                IDev d = DefaultMic(en);
+                if (d == null) { MicAvailable = false; Marshal.ReleaseComObject(en); return; }
+                object o;
+                Guid gm = typeof(IMeter).GUID, gv = typeof(IEpVol).GUID;
+                float peak = 0; bool muted = false;
+                if (d.Activate(ref gm, 23, IntPtr.Zero, out o) == 0 && o != null)
+                {
+                    ((IMeter)o).GetPeakValue(out peak);
+                    Marshal.ReleaseComObject(o);
+                }
+                if (d.Activate(ref gv, 23, IntPtr.Zero, out o) == 0 && o != null)
+                {
+                    ((IEpVol)o).GetMute(out muted);
+                    Marshal.ReleaseComObject(o);
+                }
+                MicLevel = peak; MicMuted = muted; MicAvailable = true;
+                Marshal.ReleaseComObject(d);
+                Marshal.ReleaseComObject(en);
+            }
+            catch { MicAvailable = false; }
+        }
+
+        /// <summary>Varsayılan mikrofonu sessize alır / açar.</summary>
+        public static bool ToggleMicMute()
+        {
+            try
+            {
+                var en = (IEnum)(new MMDeviceEnumeratorCom());
+                IDev d = DefaultMic(en);
+                if (d == null) return false;
+                object o; Guid gv = typeof(IEpVol).GUID;
+                bool ok = false;
+                if (d.Activate(ref gv, 23, IntPtr.Zero, out o) == 0 && o != null)
+                {
+                    var ev = (IEpVol)o;
+                    bool m; ev.GetMute(out m);
+                    Guid ctx = Guid.Empty;
+                    ok = ev.SetMute(!m, ref ctx) == 0;
+                    MicMuted = ok ? !m : m;
+                    Marshal.ReleaseComObject(o);
+                }
+                Marshal.ReleaseComObject(d);
+                Marshal.ReleaseComObject(en);
+                return ok;
+            }
+            catch { return false; }
         }
 
         /// <summary>Varsayılan ses çıkışını değiştirir (oyun, iletişim ve çoklu ortam rolleri).</summary>
