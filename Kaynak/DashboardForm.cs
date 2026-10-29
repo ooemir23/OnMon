@@ -135,31 +135,27 @@ namespace ProSystemMonitor
 
             GameSession.LoadHistory(); AudioProfiles.Load(); Peripherals.StartBackground();
             BuildMenu();
-            _timer.Interval = 125;
+            _timer.Interval = 500;
             _timer.Tick += delegate
             {
+                if (WindowState == FormWindowState.Minimized || !Visible) return;
                 _tickN++;
-                if (_tickN % 4 == 0)
+                if (_micBar || _layout == "studio" || _layout == "hud")
                 {
-                    if (_micBar || _layout == "studio" || _layout == "hud")
-                    {
-                        AudioSwitch.PollMic();
-                        float lv = AudioSwitch.MicLevel; bool mu = AudioSwitch.MicMuted;
-                        if (mu != _lastMuted || Math.Abs(lv - _lastMic) > 0.04f) { _lastMic = lv; _lastMuted = mu; _dirty = true; }
-                    }
-                    if ((_volBar || _layout == "studio" || _layout == "hud") && (_tickN & 15) == 0)
-                    {
-                        AudioSwitch.PollVolume();
-                        float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
-                        if (vm != _lastVolMuted || Math.Abs(vl - _lastVol) > 0.004f) { _lastVol = vl; _lastVolMuted = vm; _dirty = true; }
-                    }
-                    int sec = DateTime.Now.Second;
-                    if (sec != _lastSecond) { _lastSecond = sec; _dirty = true; }
-                    if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
+                    AudioSwitch.PollMic();
+                    bool mu = AudioSwitch.MicMuted;
+                    if (mu != _lastMuted) { _lastMuted = mu; _dirty = true; }
                 }
+                if ((_volBar || _layout == "studio" || _layout == "hud") && (_tickN & 3) == 0)
+                {
+                    AudioSwitch.PollVolume();
+                    float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
+                    if (vm != _lastVolMuted || Math.Abs(vl - _lastVol) > 0.004f) { _lastVol = vl; _lastVolMuted = vm; _dirty = true; }
+                }
+                int min = DateTime.Now.Minute;
+                if (min != _lastSecond) { _lastSecond = min; _dirty = true; }
+                if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
                 if (_dirty) { _dirty = false; Invalidate(); }
-                else if (_marqRects.Count > 0 && (_tickN & 1) == 0)
-                    foreach (Rectangle mr in _marqRects.ToArray()) Invalidate(mr);
             };
             _timer.Start();
             Extras.Start(_city);
@@ -207,8 +203,23 @@ namespace ProSystemMonitor
             else if (e.KeyCode == Keys.B) ToggleStrip();
         }
 
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            Program.DashVisible = WindowState != FormWindowState.Minimized && Visible;
+            if (WindowState == FormWindowState.Minimized && _frame != null) { _frame.Dispose(); _frame = null; _twCache.Clear(); Program.TrimProcessMemory(); }
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            Program.DashVisible = WindowState != FormWindowState.Minimized && Visible;
+        }
+
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            Program.DashVisible = false;
+            if (_frame != null) { _frame.Dispose(); _frame = null; }
             base.OnFormClosed(e);
             _timer.Stop();
             try { if (_settings != null && !_settings.IsDisposed) _settings.Close(); } catch { }
@@ -251,7 +262,7 @@ namespace ProSystemMonitor
             Add("ping", s.Ping);
             Add("totalW", (double.IsNaN(s.CpuW) ? 0 : s.CpuW) + (double.IsNaN(s.GpuW) ? 0 : s.GpuW));
             _source = s.Source;
-            _dirty = true;
+            if (WindowState != FormWindowState.Minimized) _dirty = true;
         }
 
         private void Add(string key, double v)
@@ -1171,7 +1182,6 @@ namespace ProSystemMonitor
             float th = narrow ? c.Height * 0.42f : c.Height * 0.8f;
             Txt(tm, ft, _th.Tx, c.X, c.Y, areaW + 10, th, 0);
             float sw = TW(tm, ft);
-            Txt(now.ToString("ss", tr), F(Math.Max(26, fs * 0.4f), false, true), _th.A1, c.X + sw + 8, c.Y, 80, th, 0);
             Txt(Extras.WxDesc, F(24, false, true), _th.Dim, c.X, narrow ? c.Y + th : c.Bottom - 40, c.Width * 0.5f, 36, 0);
             int next = NextPrayer(now);
             if (narrow)
@@ -1230,7 +1240,7 @@ namespace ProSystemMonitor
             G.FillRectangle(Br(t.A1), 14, y + 4, 5, h - 8);
             Txt(brand, fb, t.Tx, 28, y, 300, h, 0);
             if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 28 + TW(brand, fb) + 22, y, 500, h, 0);
-            string clock = now.ToString("HH:mm:ss", tr);
+            string clock = now.ToString("HH:mm", tr);
             string date = now.ToString("d MMMM dddd", tr);
             string pr = PrayerLeft(now);
             float x = 1920 - 14;
@@ -1463,7 +1473,7 @@ namespace ProSystemMonitor
             float fs = 56; Font fb = F(fs, true, false);
             while (fs > 24 && TW(brand, fb) > r.Width - 40) { fs -= 4; fb = F(fs, true, false); }
             Txt(brand, fb, t.Tx, r.X, r.Y + 8, r.Width, 70, 1);
-            Txt(now.ToString("HH:mm:ss", CultureInfo.InvariantCulture), F(64, false, true), t.Tx, r.X, r.Y + 76, r.Width, 76, 1);
+            Txt(now.ToString("HH:mm", CultureInfo.InvariantCulture), F(64, false, true), t.Tx, r.X, r.Y + 76, r.Width, 76, 1);
             var pill = new RectangleF(r.X + 50, r.Y + 156, r.Width - 100, 36);
             using (GraphicsPath p = RR(pill, 8)) G.FillPath(Br(t.Tx), p);
             Txt(now.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture), F(26, true, false), t.Bg, pill.X, pill.Y, pill.Width, pill.Height, 1);

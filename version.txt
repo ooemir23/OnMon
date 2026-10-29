@@ -1,4 +1,4 @@
-version=19
+version=20
 file=ProSystemMonitor.exe
-sha256=457ae6254be2a3372d422819b6d0d888b79cb7ad4cbdc12085fcb6e70d030365
-notes=Kayan yazı kaldırıldı; CPU/GPU adları kısaltıldı ve sığdırıldı.\nCPU: veri 2 sn, anakart sensörleri 3 sn, ses cihaz taraması 15 sn.
+sha256=ed41b89d3f5c282f46f9fd871f584bdbc1f27f27553894cbf84bb694ad905989
+notes=En düşük kaynak: ETW yalnızca Present olaylarını alır, ses COM nesneleri önbellekte, saniye göstergesi kaldırıldı (dakikada bir çizim), pano gizliyken 5 sn okuma ve bellek boşaltma.

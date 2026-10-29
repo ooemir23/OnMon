@@ -186,8 +186,68 @@ namespace ProSystemMonitor
             return (en.GetDefaultAudioEndpoint(1, 0, out d) == 0) ? d : null;
         }
 
+        // Sık çağrılan okumalar için COM nesneleri önbellekte tutulur (yalnızca oluşturan iş parçacığında kullanılır).
+        private static IMeter _cMicMeter; private static IEpVol _cMicVol, _cOutVol;
+        private static int _cThread = -1; private static DateTime _cAt = DateTime.MinValue;
+
+        public static void InvalidateCache() { _cAt = DateTime.MinValue; }
+
+        private static void Rel(object o) { try { if (o != null) Marshal.ReleaseComObject(o); } catch { } }
+
+        private static bool EnsureCache()
+        {
+            int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            if (_cThread != -1 && _cThread != tid) return false;
+            if (_cThread == tid && (DateTime.UtcNow - _cAt).TotalSeconds < 20) return true;
+            Rel(_cMicMeter); Rel(_cMicVol); Rel(_cOutVol); _cMicMeter = null; _cMicVol = null; _cOutVol = null;
+            try
+            {
+                var en = (IEnum)(new MMDeviceEnumeratorCom());
+                IDev d = DefaultMic(en);
+                object o;
+                if (d != null)
+                {
+                    string mid; d.GetId(out mid);
+                    if (mid != _micId || MicName.Length == 0) { _micId = mid; MicName = FriendlyName(d); }
+                    Guid gm = typeof(IMeter).GUID, gv = typeof(IEpVol).GUID;
+                    if (d.Activate(ref gm, 23, IntPtr.Zero, out o) == 0) _cMicMeter = o as IMeter;
+                    if (d.Activate(ref gv, 23, IntPtr.Zero, out o) == 0) _cMicVol = o as IEpVol;
+                    Rel(d);
+                }
+                IDev od;
+                if (en.GetDefaultAudioEndpoint(0, 0, out od) == 0 && od != null)
+                {
+                    Guid gv = typeof(IEpVol).GUID;
+                    if (od.Activate(ref gv, 23, IntPtr.Zero, out o) == 0) _cOutVol = o as IEpVol;
+                    Rel(od);
+                }
+                Rel(en);
+            }
+            catch { }
+            _cThread = tid; _cAt = DateTime.UtcNow;
+            return true;
+        }
+
         /// <summary>Varsayılan mikrofonun anlık seviyesini ve sessiz durumunu okur (hafif; sık çağrılabilir).</summary>
         public static void PollMic()
+        {
+            if (EnsureCache())
+            {
+                try
+                {
+                    if (_cMicVol == null) { MicAvailable = false; return; }
+                    float peak = 0; bool muted;
+                    if (_cMicMeter != null) _cMicMeter.GetPeakValue(out peak);
+                    _cMicVol.GetMute(out muted);
+                    MicLevel = peak; MicMuted = muted; MicAvailable = true;
+                    return;
+                }
+                catch { _cAt = DateTime.MinValue; }
+            }
+            PollMicSlow();
+        }
+
+        private static void PollMicSlow()
         {
             try
             {
@@ -255,6 +315,17 @@ namespace ProSystemMonitor
         /// <summary>Varsayılan çıkış cihazının ses seviyesini ve sessiz durumunu okur.</summary>
         public static void PollVolume()
         {
+            if (EnsureCache() && _cOutVol != null)
+            {
+                try
+                {
+                    float lv; bool mu;
+                    _cOutVol.GetMasterVolumeLevelScalar(out lv); _cOutVol.GetMute(out mu);
+                    VolLevel = lv; VolMuted = mu; VolAvailable = true;
+                    return;
+                }
+                catch { _cAt = DateTime.MinValue; }
+            }
             try
             {
                 IDev d; IEnum en;
@@ -325,6 +396,7 @@ namespace ProSystemMonitor
                 int hr = 0;
                 for (int role = 0; role < 3; role++) hr |= pc.SetDefaultEndpoint(id, role);
                 Marshal.ReleaseComObject(pc);
+                InvalidateCache();
                 Refresh();
                 return hr == 0;
             }

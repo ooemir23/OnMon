@@ -26,6 +26,7 @@ namespace ProSystemMonitor
         public static int Port = 17500;
         public static volatile int PollIntervalMs = 2000;
         public static double CollectMs;
+        public static volatile bool DashVisible;
         public static string LatestJson = "{}";
         private static NotifyIcon _trayIcon;
         private static TelemetryCollector _collector;
@@ -263,6 +264,7 @@ namespace ProSystemMonitor
                 sw.Stop();
                 CollectMs = CollectMs * 0.8 + sw.Elapsed.TotalMilliseconds * 0.2;
                 int targetMs = Math.Max(300, Math.Min(5000, PollIntervalMs));
+                if (!DashVisible && _sseClients.IsEmpty) targetMs = 5000;   // pano görünmüyorsa yalnızca uyarılar için seyrek oku
                 int sleepMs = Math.Max(150, targetMs - (int)sw.ElapsedMilliseconds);
                 Thread.Sleep(sleepMs);
             }
@@ -1086,7 +1088,8 @@ namespace ProSystemMonitor
             }
             catch { }
 
-            // 2. Top 5 Memory Processes (every 4 seconds, disposed immediately)
+            // 2. En çok kaynak kullanan işlemler (yalnızca pano görünürken)
+            if (!Program.DashVisible) return;
             try
             {
                 var procs = Process.GetProcesses();
@@ -2039,8 +2042,9 @@ namespace ProSystemMonitor
                 _session = handle;
 
                 Guid g1 = DxgiGuid, g2 = D3D9Guid, g3 = DxgKrnlGuid;
-                EtwNative.EnableTraceEx2(_session, ref g1, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
-                EtwNative.EnableTraceEx2(_session, ref g2, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
+                // Yalnızca Present_Start olayları teslim edilsin (diğer DXGI/D3D9 olayları süzülür → çok daha az CPU).
+                if (EnableFiltered(g1, 42) != 0) EtwNative.EnableTraceEx2(_session, ref g1, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
+                if (EnableFiltered(g2, 1) != 0) EtwNative.EnableTraceEx2(_session, ref g2, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
                 if (UseKernelFallback) EtwNative.EnableTraceEx2(_session, ref g3, 1, 4, 0x1, 0, 0, IntPtr.Zero);
 
                 _callback = OnEvent;
@@ -2101,6 +2105,35 @@ namespace ProSystemMonitor
             }
             catch { }
             finally { if (props != IntPtr.Zero) Marshal.FreeHGlobal(props); }
+        }
+
+        private uint EnableFiltered(Guid provider, ushort eventId)
+        {
+            IntPtr ids = IntPtr.Zero, desc = IntPtr.Zero, prm = IntPtr.Zero;
+            try
+            {
+                // EVENT_FILTER_EVENT_ID { BOOLEAN FilterIn; UCHAR Reserved; USHORT Count; USHORT Events[1]; }
+                ids = Marshal.AllocHGlobal(8);
+                Marshal.WriteByte(ids, 0, 1); Marshal.WriteByte(ids, 1, 0);
+                Marshal.WriteInt16(ids, 2, 1); Marshal.WriteInt16(ids, 4, (short)eventId); Marshal.WriteInt16(ids, 6, 0);
+                // EVENT_FILTER_DESCRIPTOR { ULONGLONG Ptr; ULONG Size; ULONG Type; }
+                desc = Marshal.AllocHGlobal(16);
+                Marshal.WriteInt64(desc, 0, ids.ToInt64()); Marshal.WriteInt32(desc, 8, 6); Marshal.WriteInt32(desc, 12, unchecked((int)0x80000200));
+                // ENABLE_TRACE_PARAMETERS (x64): Version@0, EnableProperty@4, ControlFlags@8, SourceId@12, EnableFilterDesc@32, FilterDescCount@40
+                prm = Marshal.AllocHGlobal(48);
+                for (int i = 0; i < 48; i += 4) Marshal.WriteInt32(prm, i, 0);
+                Marshal.WriteInt32(prm, 0, 2);
+                Marshal.WriteInt64(prm, 32, desc.ToInt64());
+                Marshal.WriteInt32(prm, 40, 1);
+                return EtwNative.EnableTraceEx2(_session, ref provider, 1, 5, ulong.MaxValue, 0, 0, prm);
+            }
+            catch { return 1; }
+            finally
+            {
+                if (prm != IntPtr.Zero) Marshal.FreeHGlobal(prm);
+                if (desc != IntPtr.Zero) Marshal.FreeHGlobal(desc);
+                if (ids != IntPtr.Zero) Marshal.FreeHGlobal(ids);
+            }
         }
 
         private void OnEvent(IntPtr rec)
