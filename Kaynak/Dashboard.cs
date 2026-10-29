@@ -121,7 +121,7 @@ namespace ProSystemMonitor
                 using (var wc = new WebClient())
                 {
                     wc.Encoding = Encoding.UTF8;
-                    string w = wc.DownloadString("https://wttr.in/" + Uri.EscapeDataString(city) + "?format=%t|%C&lang=tr").Trim();
+                    string w = wc.DownloadString("https://wttr.in/" + Uri.EscapeDataString(city) + "?m&format=%t|%C&lang=tr").Trim();
                     string[] p = w.Split('|');
                     if (p.Length >= 2) { WxTemp = p[0].Replace("+", ""); WxDesc = p[1]; }
                 }

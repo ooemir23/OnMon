@@ -280,7 +280,17 @@ namespace ProSystemMonitor
         private void Txt(string s, Font f, Color c, float x, float y, float w, float h, int al)
         {
             if (string.IsNullOrEmpty(s)) return;
+            float need = f.Size * 1.45f;
+            if (h < need) { y -= (need - h) / 2f; h = need; }
             G.DrawString(s, f, Br(c), new RectangleF(x, y, w, h), _sf[al]);
+        }
+
+        private string Fit(string s, Font f, float maxW)
+        {
+            if (string.IsNullOrEmpty(s) || maxW < 20) return "";
+            if (TW(s, f) <= maxW) return s;
+            while (s.Length > 1 && TW(s + "…", f) > maxW) s = s.Substring(0, s.Length - 1);
+            return s.Length > 1 ? s.TrimEnd() + "…" : "";
         }
 
         private float TW(string s, Font f)
@@ -413,7 +423,8 @@ namespace ProSystemMonitor
                 ew = TW(extra, fe) + 10;
                 Txt(extra, fe, t.A1, r.Right - 20 - ew, y, ew, 36, 2);
             }
-            if (!string.IsNullOrEmpty(sub)) Txt(sub, fs, t.Tx, sx, y, Math.Max(10, r.Right - 20 - ew - 10 - sx), 36, 0);
+            float avail = r.Right - 20 - ew - 10 - sx;
+            if (!string.IsNullOrEmpty(sub)) Txt(Fit(sub, fs, avail), fs, t.Tx, sx, y, Math.Max(10, avail), 36, 0);
             return new RectangleF(r.X + 20, r.Y + 60, r.Width - 40, r.Height - 74);
         }
 
@@ -460,23 +471,27 @@ namespace ProSystemMonitor
             }
         }
 
-        private void Stat(float x, float y, float w, string label, string val, double pct, bool hot)
+        private void Stat(float x, float y, float w, string label, string val, double pct, bool hot, float item)
         {
             Theme t = _th;
-            BarAt(x, y, w, pct, hot, 15);
-            Txt(label, F(29, false, true), t.Tx, x, y + 21, w * 0.55f, 34, 0);
-            Txt(val, F(29, true, false), t.Tx, x + w * 0.35f, y + 21, w * 0.65f, 34, 2);
+            float bh = Math.Min(15f, item * 0.27f);
+            BarAt(x, y, w, pct, hot, bh);
+            float fz = Math.Min(29f, item * 0.52f);
+            Font fl = F(fz, false, true), fv = F(fz, true, false);
+            while (fz > 14 && TW(label, fl) + TW(val, fv) + 14 > w) { fz -= 2; fl = F(fz, false, true); fv = F(fz, true, false); }
+            float ty = y + bh + 4;
+            Txt(label, fl, t.Tx, x, ty, w, item - bh - 4, 0);
+            Txt(val, fv, t.Tx, x, ty, w, item - bh - 4, 2);
         }
 
-        /// <summary>Dikeyde "space-around" dağıtımıyla n adet stat çizer.</summary>
+        /// <summary>Dikeyde eşit dağıtımla n adet stat çizer.</summary>
         private void StatColumn(float x, float y, float w, float h, string[] labels, string[] vals, double[] pcts, bool[] hots)
         {
             int n = labels.Length;
-            float item = 55, free = h - n * item;
-            if (free < 0) free = 0;
-            float gap = free / n;
+            float item = Math.Min(58f, h / n);
+            float gap = (h - n * item) / n;
             for (int i = 0; i < n; i++)
-                Stat(x, y + gap / 2f + i * (item + gap), w, labels[i], vals[i], pcts[i], hots != null && hots[i]);
+                Stat(x, y + gap / 2f + i * (item + gap), w, labels[i], vals[i], pcts[i], hots != null && hots[i], item);
         }
 
         private void Dial(float cx, float cy, float size, double pct, string big, string unit, string label, float bigSize)
@@ -584,7 +599,7 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 14, 14, w, 34);
+                    var r = new RectangleF(1920 - w - 24, 1080 - 26, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
@@ -713,7 +728,7 @@ namespace ProSystemMonitor
             if (big)
             {
                 Txt("%1 Düşük " + (double.IsNaN(s.Low1) ? "--" : I0(s.Low1)), F(30, true, false), _th.Tx, sx, c.Y + 8, sw, 38, 0);
-                Graph(new RectangleF(sx, c.Y + 54, sw, c.Height - 54), "frame", 16.7f, 0, true, true);
+                Graph(new RectangleF(sx, c.Y + 54, sw, c.Height - 54), "fps", 60, 0, true, true);
             }
             else
             {
@@ -766,7 +781,7 @@ namespace ProSystemMonitor
                 CoreTelemetry k = s.Cores[i];
                 BarAt(x + 4, y + 4, cw - 14, k.LoadPct, k.LoadPct > 92, 12);
                 Txt(I0(k.LoadPct) + "%", F(20, true, false), _th.Tx, x + 4, y + 20, cw / 2, 26, 0);
-                Txt(I0(k.ClockMhz), F(18, false, true), _th.Dim, x + cw / 2 - 6, y + 20, cw / 2 - 4, 26, 2);
+                if (cw >= 140) Txt(I0(k.ClockMhz), F(18, false, true), _th.Dim, x + cw / 2 - 6, y + 20, cw / 2 - 4, 26, 2);
             }
         }
 
@@ -788,17 +803,38 @@ namespace ProSystemMonitor
             DateTime now = DateTime.Now;
             var tr = new CultureInfo("tr-TR");
             RectangleF c = Card(r, "SAAT", now.ToString("d MMMM dddd", tr), Extras.WxTemp);
-            Txt(now.ToString("HH:mm", tr), F(Math.Min(150, c.Height * 0.62f), true, false), _th.Tx, c.X, c.Y, c.Width * 0.55f, c.Height * 0.8f, 0);
-            Txt(now.ToString("ss", tr), F(60, false, true), _th.A1, c.X + c.Width * 0.45f, c.Y + c.Height * 0.18f, 100, 70, 0);
-            Txt(Extras.WxDesc, F(26, false, true), _th.Dim, c.X, c.Bottom - 40, c.Width * 0.5f, 36, 0);
-            // namaz vakitleri
-            float px = c.X + c.Width * 0.58f, pw = c.Width * 0.42f, ph = c.Height / 6f;
+            bool narrow = c.Width < 700;
+            string tm = now.ToString("HH:mm", tr);
+            float areaW = narrow ? c.Width * 0.62f : c.Width * 0.5f;
+            float fs = Math.Min(150, narrow ? c.Height * 0.3f : c.Height * 0.62f);
+            Font ft = F(fs, true, false);
+            while (fs > 30 && TW(tm, ft) > areaW) { fs -= 4; ft = F(fs, true, false); }
+            float th = narrow ? c.Height * 0.42f : c.Height * 0.8f;
+            Txt(tm, ft, _th.Tx, c.X, c.Y, areaW + 10, th, 0);
+            float sw = TW(tm, ft);
+            Txt(now.ToString("ss", tr), F(Math.Max(26, fs * 0.4f), false, true), _th.A1, c.X + sw + 8, c.Y, 80, th, 0);
+            Txt(Extras.WxDesc, F(24, false, true), _th.Dim, c.X, narrow ? c.Y + th : c.Bottom - 40, c.Width * 0.5f, 36, 0);
             int next = NextPrayer(now);
-            for (int i = 0; i < 6; i++)
+            if (narrow)
             {
-                Color col = i == next ? _th.A1 : _th.Tx;
-                Txt(Extras.PrayerNames[i], F(24, i == next, false), col, px, c.Y + i * ph, pw / 2, ph, 0);
-                Txt(Extras.Prayer[i], F(24, true, false), col, px + pw / 2, c.Y + i * ph, pw / 2, ph, 2);
+                float py = c.Y + th + 36, ph = (c.Bottom - py) / 3f, cw = c.Width / 2f;
+                for (int i = 0; i < 6; i++)
+                {
+                    float x = c.X + (i % 2) * cw, y = py + (i / 2) * ph;
+                    Color col = i == next ? _th.A1 : _th.Tx;
+                    Txt(Extras.PrayerNames[i], F(22, i == next, false), col, x, y, cw * 0.5f, ph, 0);
+                    Txt(Extras.Prayer[i], F(22, true, false), col, x + cw * 0.35f, y, cw * 0.55f, ph, 2);
+                }
+            }
+            else
+            {
+                float px = c.X + c.Width * 0.58f, pw = c.Width * 0.42f, ph = c.Height / 6f;
+                for (int i = 0; i < 6; i++)
+                {
+                    Color col = i == next ? _th.A1 : _th.Tx;
+                    Txt(Extras.PrayerNames[i], F(24, i == next, false), col, px, c.Y + i * ph, pw / 2, ph, 0);
+                    Txt(Extras.Prayer[i], F(24, true, false), col, px + pw / 2, c.Y + i * ph, pw / 2, ph, 2);
+                }
             }
         }
 
