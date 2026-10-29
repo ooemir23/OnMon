@@ -1,4 +1,4 @@
-version=22
+version=23
 file=ProSystemMonitor.exe
-sha256=7a34a3a608c88f8219357a37b295de5804aae701913be2163c6b6e431705c781
-notes=SES paneli kısa cihaz adlarıyla sıkıştırıldı.\nSaat, tarih ve vakit hatırlatıcısı alta taşındı ve kısaltıldı (örn. İkindiye 1sa 23dk).
+sha256=d9fb19cf5d92dad5b6c4302ed90bec783e38a0e20befe621ca6e99183dfb4076
+notes=SES paneli tıklama hatası düzeltildi (cihaz seçimi artık çalışır), iki sütunlu çıkış/giriş seçimi, RAM ile yer değiştirdi.

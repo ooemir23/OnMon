@@ -934,7 +934,7 @@ namespace ProSystemMonitor
             G.PixelOffsetMode = PixelOffsetMode.HighQuality;
             Theme t = _th;
             G.Clear(t.Bg);
-            _marqActive = false; _marqRects.Clear(); _marqItems.Clear();
+            _marqActive = false; _marqRects.Clear(); _marqItems.Clear(); _hits.Clear();
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
@@ -1342,7 +1342,6 @@ namespace ProSystemMonitor
         // ---------------- ses cihazı çubuğu ----------------
         private void DrawAudioBar()
         {
-            _hits.Clear();
             Theme t = _th;
             if (_hideStrip) return;
             if (_micBar) DrawMic();
@@ -1720,16 +1719,42 @@ namespace ProSystemMonitor
                 _hits.Add(new KeyValuePair<RectangleF, string>(mr, "mic:toggle"));
             }
             y += mr.Height + 8;
-            // seçim çipleri: çıkış cihazları, giriş cihazları, profiller
-            var outs = new List<Chip>();
-            foreach (AudioDevice d in AudioSwitch.Devices) outs.Add(new Chip { Text = DevShort(d.Name, AudioSwitch.Devices), Id = d.Id, Active = d.IsDefault });
-            if (outs.Count > 0 && y + 30 <= c.Bottom + 2) y = FlowRow("ÇIKIŞ", outs, c.X, y, c.Width, c.Bottom, 2);
-            var ins = new List<Chip>();
-            foreach (AudioDevice d in AudioSwitch.MicDevices) ins.Add(new Chip { Text = DevShort(d.Name, AudioSwitch.MicDevices), Id = d.Id, Active = d.IsDefault });
-            if (ins.Count > 1 && y + 30 <= c.Bottom + 2) y = FlowRow("GİRİŞ", ins, c.X, y, c.Width, c.Bottom, 2);
-            var profs = new List<Chip>();
-            for (int i = 0; i < AudioProfiles.All.Count; i++) profs.Add(new Chip { Text = AudioProfiles.All[i].Name, Id = "prof:" + i, Prof = true });
-            if (profs.Count > 0 && y + 30 <= c.Bottom + 2) FlowRow("PROFİL", profs, c.X, y, c.Width, c.Bottom, 1);
+            // iki sütun: ÇIKIŞ | GİRİŞ — her cihaz büyük, tıklanabilir bir satır
+            bool profRow = AudioProfiles.All.Count > 0 && c.Height >= 230;
+            float reserve = profRow ? 38f : 0f;
+            float colW = (c.Width - 14) / 2f, rowH2 = 28f, gap = 4f;
+            int maxRows = (int)Math.Floor((c.Bottom - (y + 20) - reserve + gap) / (rowH2 + gap));
+            Font fl = F(13, true, false), frow = F(16, true, false);
+            for (int col = 0; col < 2; col++)
+            {
+                AudioDevice[] list = col == 0 ? AudioSwitch.Devices : AudioSwitch.MicDevices;
+                float cx = c.X + col * (colW + 14);
+                Txt(col == 0 ? "ÇIKIŞ" : "GİRİŞ", fl, t.Dim, cx, y, colW, 18, 0);
+                if (list == null || list.Length == 0 || maxRows < 1) continue;
+                var order = new List<AudioDevice>(list);
+                int di = order.FindIndex(d => d.IsDefault);
+                if (di >= maxRows) { AudioDevice dd = order[di]; order.RemoveAt(di); order.Insert(maxRows - 1, dd); }
+                float ry = y + 20;
+                for (int k = 0; k < order.Count && k < maxRows; k++, ry += rowH2 + gap)
+                {
+                    AudioDevice d = order[k];
+                    var rr = new RectangleF(cx, ry, colW, rowH2);
+                    using (GraphicsPath rp = RR(rr, 8))
+                    {
+                        if (d.IsDefault) G.FillPath(Br(t.A1), rp);
+                        else { G.FillPath(Br(t.Tile), rp); G.DrawPath(Pn(t.Line, 1), rp); }
+                    }
+                    string nm = DevShort(d.Name, list);
+                    Txt(Fit(nm, frow, colW - 16), frow, d.IsDefault ? t.Bg : t.Tx, rr.X + 8, rr.Y, colW - 12, rr.Height, 0);
+                    _hits.Add(new KeyValuePair<RectangleF, string>(rr, d.Id));
+                }
+            }
+            if (profRow)
+            {
+                var profs = new List<Chip>();
+                for (int i2 = 0; i2 < AudioProfiles.All.Count; i2++) profs.Add(new Chip { Text = AudioProfiles.All[i2].Name, Id = "prof:" + i2, Prof = true });
+                FlowRow("PROFİL", profs, c.X, c.Bottom - 32, c.Width, c.Bottom + 4, 1);
+            }
         }
 
         private void DrawStudio(Snap s)
@@ -1768,8 +1793,8 @@ namespace ProSystemMonitor
             PTemps(new RectangleF(a[2].X, a[2].Y, a[2].Width, 200), s);
             PGpuGraph(new RectangleF(a[2].X, a[2].Y + 210, a[2].Width, 200), s);
             PPower(new RectangleF(a[2].X, a[2].Y + 420, a[2].Width, 200), s);
-            RectangleF[] b = Row(736, 338, 340, 360, 360, 440, 360);
-            PMem(b[0], s); PNet(b[1], s); PDisks(b[2], s); PSound(b[3], s); PApps(b[4], s);
+            RectangleF[] b = Row(736, 338, 440, 360, 360, 340, 360);
+            PSound(b[0], s); PNet(b[1], s); PDisks(b[2], s); PMem(b[3], s); PApps(b[4], s);
         }
 
         private static string Dur(TimeSpan t)
