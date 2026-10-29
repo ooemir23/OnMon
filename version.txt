@@ -1,4 +1,4 @@
-version=17
+version=18
 file=ProSystemMonitor.exe
-sha256=f375249e2c5318d325fb13cf3d083e5f8376d92d9e078820f11db405b27619d3
-notes=CPU kullanımı düşürüldü: kayan yazı yalnızca kendi alanını yeniler, işlem CPU ölçümü sadece HUD açıkken çalışır.\nDüşük CPU modu eklendi.
+sha256=5200d86075bd855bb64a9045b936e4fa4beba459c06665432cd0a465e6be92f5
+notes=CPU: çerçeve önbelleğe alınır, ölçüm önbelleği, kayan yazı yalnızca yazı katmanını çizer.

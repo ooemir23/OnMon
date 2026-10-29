@@ -568,20 +568,22 @@ namespace ProSystemMonitor
             float tw = TW(s, f);
             if (tw <= w) { Txt(s, f, c, x, y, w, h, al); return; }
             _marqActive = true;
-            float scroll = tw - w + 8;
-            double sec = DateTime.UtcNow.Ticks / 1e7, period = scroll / 28.0 + 2.5, p = sec % period;
-            float off = p < 1.0 ? 0 : (float)Math.Min(scroll, (p - 1.0) * 28.0);
             float need = f.Size * 1.45f, ch = Math.Max(h, need), cy = y - (ch - h) / 2f;
             float ty = _topBar ? TopH : 0;
             _marqRects.Add(Rectangle.FromLTRB((int)(_ox + x * _sc) - 3, (int)(_oy + (cy + ty) * _sc) - 3, (int)(_ox + (x + w) * _sc) + 3, (int)(_oy + (cy + ch + ty) * _sc) + 3));
-            G.SetClip(new RectangleF(x, cy, w, ch));
-            Txt(s, f, c, x - off, y, tw + 24, h, 0);
-            G.ResetClip();
+            _marqItems.Add(new MItem { S = s, F = f, C = c, X = x, Y = y, W = w, H = h, Tw = tw, M = G.Transform });
         }
 
+        private readonly Dictionary<string, float> _twCache = new Dictionary<string, float>();
         private float TW(string s, Font f)
         {
-            return G.MeasureString(s, f, 100000, _sf[0]).Width;
+            string key = f.Name + "|" + f.Size + "|" + (f.Bold ? "b" : "r") + "|" + s;
+            float w;
+            if (_twCache.TryGetValue(key, out w)) return w;
+            w = G.MeasureString(s, f, 100000, _sf[0]).Width;
+            if (_twCache.Count > 4000) _twCache.Clear();
+            _twCache[key] = w;
+            return w;
         }
 
         private GraphicsPath RR(RectangleF r, float rad)
@@ -860,23 +862,68 @@ namespace ProSystemMonitor
 
         // ---------------- ana çizim ----------------
         private bool _loggedPaint;
+        private Bitmap _frame;
+        private bool _frameDirty = true;
+        public new void Invalidate() { _frameDirty = true; base.Invalidate(); }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             if (WindowState == FormWindowState.Minimized) return;
-            var swp = System.Diagnostics.Stopwatch.StartNew();
-            try { PaintAll(e); _paintMs = _paintMs * 0.9 + swp.Elapsed.TotalMilliseconds * 0.1; }
+            try
+            {
+                Size cs = ClientSize;
+                if (cs.Width <= 0 || cs.Height <= 0) return;
+                if (_frame == null || _frame.Width != cs.Width || _frame.Height != cs.Height)
+                {
+                    if (_frame != null) _frame.Dispose();
+                    _frame = new Bitmap(cs.Width, cs.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                    _frameDirty = true;
+                }
+                if (_frameDirty)
+                {
+                    _frameDirty = false;
+                    var swp = System.Diagnostics.Stopwatch.StartNew();
+                    using (Graphics fg = Graphics.FromImage(_frame)) PaintAll(fg);
+                    _paintMs = _paintMs * 0.8 + swp.Elapsed.TotalMilliseconds * 0.2;
+                }
+                e.Graphics.DrawImageUnscaled(_frame, 0, 0);
+                DrawMarquees(e.Graphics);
+            }
             catch (Exception ex) { if (!_loggedPaint) { _loggedPaint = true; Program.Log("paint", ex); } }
         }
 
-        private void PaintAll(PaintEventArgs e)
+        private sealed class MItem { public string S; public Font F; public Color C; public float X, Y, W, H, Tw; public System.Drawing.Drawing2D.Matrix M; }
+        private readonly List<MItem> _marqItems = new List<MItem>();
+
+        private void DrawMarquees(Graphics g)
         {
-            G = e.Graphics;
+            if (_marqItems.Count == 0) return;
+            G = g;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAlias;
+            foreach (MItem it in _marqItems)
+            {
+                var st = g.Save();
+                g.Transform = it.M;
+                float scroll = it.Tw - it.W + 8;
+                double sec = DateTime.UtcNow.Ticks / 1e7, period = scroll / 28.0 + 2.5, p = sec % period;
+                float off = p < 1.0 ? 0 : (float)Math.Min(scroll, (p - 1.0) * 28.0);
+                float need = it.F.Size * 1.45f, ch = Math.Max(it.H, need), cy = it.Y - (ch - it.H) / 2f;
+                g.SetClip(new RectangleF(it.X, cy, it.W, ch), CombineMode.Intersect);
+                Txt(it.S, it.F, it.C, it.X - off, it.Y, it.Tw + 24, it.H, 0);
+                g.Restore(st);
+            }
+        }
+
+        private void PaintAll(Graphics gr)
+        {
+            G = gr;
             G.SmoothingMode = SmoothingMode.AntiAlias;
             G.TextRenderingHint = TextRenderingHint.AntiAlias;
             G.PixelOffsetMode = PixelOffsetMode.HighQuality;
             Theme t = _th;
             G.Clear(t.Bg);
-            _marqActive = false; _marqRects.Clear();
+            _marqActive = false; _marqRects.Clear(); _marqItems.Clear();
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
