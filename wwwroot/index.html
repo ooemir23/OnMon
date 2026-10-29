@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ROG Pro Telemetry Studio</title>
+<style>
+  :root {
+    --bg:#000; --panel:#050505; --tile:#0b0b0d; --line:#2b2b2e;
+    --a1:#ff4500; --a2:#ffa000; --track:#303033;
+    --tx:#fff; --dim:#a4a4aa; --good:#22c55e; --crit:#ff2d2d;
+    --r:12px; --glow:none; --bgfx:none; --pfx:none;
+    --font:"Bahnschrift","DIN Alternate","Segoe UI",system-ui,sans-serif;
+    --fw-light:300;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; user-select:none; -webkit-user-select:none; }
+  html,body { width:100vw; height:100vh; overflow:hidden; background:var(--bg); color:var(--tx);
+    font-family:var(--font); -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums; }
+  body { background:var(--bgfx), var(--bg); transition:background .4s; }
+  body.idle { cursor:none; }
+
+  /* ---------- 1920x1080 auto-scaled stage ---------- */
+  .stage { position:fixed; top:0; left:0; width:1920px; height:1080px; transform-origin:0 0; padding:10px; }
+  .view { display:none; width:100%; height:100%; gap:10px; min-height:0; }
+  .view.active { display:grid; animation:fadeIn .35s ease; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none} }
+
+  /* ---------- panel + style families ---------- */
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+    padding:14px 20px; display:flex; flex-direction:column; gap:10px; min-width:0; min-height:0;
+    position:relative; overflow:hidden; box-shadow:var(--pfx); transition:background .4s,border-color .4s; }
+  body[data-style="glass"] .panel { background:linear-gradient(155deg,color-mix(in srgb,var(--panel) 78%,transparent),color-mix(in srgb,var(--tile) 52%,transparent));
+    backdrop-filter:blur(14px); border-color:color-mix(in srgb,var(--tx) 14%,transparent);
+    box-shadow:0 12px 34px rgba(0,0,0,.35), inset 0 1px 0 color-mix(in srgb,var(--tx) 14%,transparent); }
+  body[data-style="neon"] .panel { border-color:color-mix(in srgb,var(--a1) 55%,transparent);
+    box-shadow:0 0 22px color-mix(in srgb,var(--a1) 20%,transparent), inset 0 0 30px color-mix(in srgb,var(--a1) 7%,transparent); }
+  body[data-style="clip"] .panel { border:none; border-radius:0;
+    clip-path:polygon(0 0,calc(100% - 26px) 0,100% 26px,100% 100%,26px 100%,0 calc(100% - 26px));
+    box-shadow:inset 4px 0 0 var(--a1), inset 0 0 0 1px var(--line); }
+  body[data-style="mono"] .panel { border-radius:4px; }
+
+  .ph { display:flex; align-items:center; gap:12px; flex-shrink:0; min-width:0; }
+  .ph svg { width:36px; height:36px; color:var(--tx); flex-shrink:0; stroke-width:1.6; }
+  .ph .t { font-size:30px; font-weight:700; letter-spacing:.01em; text-transform:uppercase; white-space:nowrap; }
+  .ph .s { font-size:30px; font-weight:var(--fw-light); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--tx); }
+  .ph .x { margin-left:auto; color:var(--a1); font-weight:700; font-size:26px; white-space:nowrap; }
+
+  /* ---------- bars ---------- */
+  .bar { height:15px; background:var(--track); border-radius:4px; overflow:hidden; position:relative; flex-shrink:0; }
+  .bar i { display:block; height:100%; width:0; border-radius:inherit; transition:width .45s ease;
+    background:linear-gradient(90deg,var(--a1),var(--a2)); box-shadow:var(--glow); }
+  .bar i.hot { background:linear-gradient(90deg,var(--crit),#ff7a00); }
+  body[data-bars="seg"] .bar { background:repeating-linear-gradient(90deg,var(--track) 0 8px,transparent 8px 11px); border-radius:0; }
+  body[data-bars="seg"] .bar i { border-radius:0; -webkit-mask:repeating-linear-gradient(90deg,#000 0 8px,transparent 8px 11px); mask:repeating-linear-gradient(90deg,#000 0 8px,transparent 8px 11px); }
+  body[data-bars="thin"] .bar { height:8px; border-radius:8px; }
+  body[data-bars="thin"] .bar i { border-radius:8px; }
+
+  .stat { display:flex; flex-direction:column; gap:6px; }
+  .sl { display:flex; justify-content:space-between; align-items:baseline; font-size:29px; }
+  .sl span { font-weight:var(--fw-light); }
+  .sl b { font-weight:800; font-size:29px; }
+  .sl b small, .sl span small { font-size:.62em; font-weight:300; opacity:.85; }
+  .dim { color:var(--dim); }
+
+  /* ---------- dial ---------- */
+  .dial { position:relative; display:flex; align-items:center; justify-content:center; }
+  .dial svg { width:100%; height:100%; }
+  .dial circle { fill:none; stroke-width:9; stroke-linecap:round; }
+  .dial .dt { stroke:var(--track); stroke-dasharray:188.5 251.3; }
+  .dial .da { stroke:url(#gA); stroke-dasharray:188.5 251.3; stroke-dashoffset:188.5; transition:stroke-dashoffset .6s ease;
+    filter:drop-shadow(0 0 5px color-mix(in srgb,var(--a1) 55%,transparent)); }
+  .dial .dc { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-bottom:6%; }
+  .dial .dn { display:flex; align-items:baseline; gap:4px; }
+  .dial .dn b { font-size:var(--dn,72px); font-weight:800; line-height:1; }
+  .dial .dn small { font-size:calc(var(--dn,72px) * .38); font-weight:400; }
+  .dial em { position:absolute; bottom:2%; left:0; right:0; text-align:center; font-style:normal; font-size:28px; font-weight:var(--fw-light); color:var(--dim); }
+
+  /* ---------- graph ---------- */
+  .gbox { position:relative; min-height:0; min-width:0; flex:1; }
+  .gbox canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .gbox .wm { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:26px;
+    font-size:64px; font-weight:300; color:color-mix(in srgb,var(--a1) 62%,transparent); pointer-events:none; letter-spacing:.04em; }
+  .gcap { display:flex; justify-content:space-between; white-space:nowrap; gap:10px; font-size:18px; color:var(--dim); font-weight:600; flex-shrink:0; }
+  .gcap b { color:var(--tx); font-weight:800; }
+  .gcard { display:flex; flex-direction:column; gap:4px; min-height:0; min-width:0; }
+
+  /* ================= CLASSIC (photo) ================= */
+  #v-classic { grid-template-rows:236px 560px 1fr; }
+  .c-top { display:grid; grid-template-columns:470px 470px 1fr; gap:10px; min-height:0; }
+  .c-mid { display:grid; grid-template-columns:1fr 1fr; gap:10px; min-height:0; }
+  .c-bot { display:grid; grid-template-columns:50% 17% 1fr; gap:10px; min-height:0; }
+
+  .clock { align-items:center; justify-content:space-between; text-align:center; padding:10px 18px 12px; gap:4px; }
+  .clock .brand { font-size:50px; font-weight:900; letter-spacing:.16em; line-height:1; padding-left:.16em; }
+  .clock .time { font-size:68px; font-weight:300; line-height:1; letter-spacing:.03em; }
+  .clock .date { background:var(--tx); color:var(--bg); font-weight:800; font-size:28px; line-height:1.15; border-radius:6px; width:88%; padding:0; letter-spacing:.06em; }
+  .clock .sub { display:flex; justify-content:space-between; width:100%; font-size:22px; color:var(--dim); font-weight:var(--fw-light); }
+  .clock .sub b { color:var(--tx); font-weight:700; }
+
+  .mem-body { flex:1; display:flex; flex-direction:column; justify-content:space-around; }
+  .mrow { display:grid; grid-template-columns:100px 1fr 120px; align-items:center; gap:16px; font-size:21px; }
+  .mrow span { color:var(--dim); font-weight:var(--fw-light); }
+  .mrow b { text-align:right; font-weight:800; font-size:21px; }
+  .mrow b.sm { font-size:19px; }
+
+  .mobo-body { flex:1; display:grid; grid-template-columns:2fr 1fr; gap:28px; min-height:0; }
+  .mlines { display:flex; flex-direction:column; justify-content:space-around; font-size:20px; min-width:0; }
+  .mline { display:flex; gap:14px; white-space:nowrap; }
+  .mline span { color:var(--dim); font-weight:var(--fw-light); min-width:104px; }
+  .mline b { font-weight:700; overflow:hidden; text-overflow:ellipsis; }
+  .mtemp { display:flex; flex-direction:column; justify-content:center; gap:14px; }
+  .mtemp .row { display:flex; justify-content:space-between; align-items:baseline; font-size:26px; }
+  .mtemp .row span { font-weight:var(--fw-light); }
+  .mtemp .row b { font-size:40px; font-weight:800; }
+
+  .tele { flex:1; display:grid; grid-template-columns:400px 1fr; grid-template-rows:1fr 170px; gap:6px 24px; min-height:0; }
+  .tele .dial { --dn:92px; width:300px; height:300px; margin:auto; }
+  .tele .stats { display:flex; flex-direction:column; justify-content:space-around; gap:6px; padding-top:4px; }
+  .cores { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(4,1fr); gap:6px 18px; align-content:center; }
+  .core { display:grid; grid-template-columns:76px 1fr 82px; gap:8px; align-items:center; font-size:17px; }
+  .core span { color:var(--dim); font-weight:600; white-space:nowrap; }
+  .core b { text-align:right; font-weight:700; font-size:17px; }
+  .core .bar { height:11px; }
+  .gpu-graphs { grid-column:1 / 3; display:grid; grid-template-columns:1.15fr 1fr; gap:18px; min-height:0; }
+
+  .stor { flex:1; display:flex; flex-direction:column; justify-content:space-around; gap:6px; }
+  .srow { display:grid; grid-template-columns:minmax(0,42%) minmax(0,1fr) 90px; gap:20px; align-items:center; }
+  .srow .n { font-size:25px; font-weight:var(--fw-light); line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .srow .n small { display:block; font-size:16px; color:var(--dim); font-weight:600; margin-top:2px; }
+  .srow b { font-size:27px; font-weight:800; text-align:right; }
+  .pw { flex:1; display:flex; flex-direction:column; justify-content:space-around; font-size:24px; }
+  .pw .l { display:flex; justify-content:space-between; align-items:baseline; }
+  .pw .l span { font-weight:var(--fw-light); }
+  .pw .l b { font-weight:800; font-size:25px; }
+  .pw .tot { border-top:1px solid var(--line); padding-top:4px; }
+  .pw .tot b { color:var(--a1); font-size:30px; }
+  .net { flex:1; display:grid; grid-template-columns:auto 1fr; grid-template-rows:1fr 1fr; gap:0 24px; align-items:center; }
+  .net .tx { font-size:23px; line-height:1.18; }
+  .net .tx span { font-weight:var(--fw-light); }
+  .net .tx b { font-weight:800; }
+  .net .tx div { display:flex; gap:18px; justify-content:space-between; min-width:250px; }
+  .net .sp { height:78%; position:relative; display:flex; }
+
+  /* ================= GAMING HUD ================= */
+  #v-hud { grid-template-rows:640px 1fr; }
+  .h-top { display:grid; grid-template-columns:44% 1fr 1fr; gap:10px; min-height:0; }
+  .h-bot { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; min-height:0; }
+  .fps-card { align-items:stretch; }
+  .fps-big { display:flex; align-items:baseline; justify-content:center; gap:20px; line-height:.9; }
+  .fps-big b { font-size:230px; font-weight:800; letter-spacing:-.02em;
+    background:linear-gradient(180deg,var(--tx) 10%,var(--a2)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .fps-big small { font-size:50px; color:var(--a1); font-weight:700; }
+  .fps-meta { display:flex; justify-content:space-between; font-size:28px; color:var(--dim); font-weight:var(--fw-light); }
+  .fps-meta b { color:var(--tx); font-weight:800; }
+  .hud-tele { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:space-around; min-height:0; }
+  .hud-tele .dial { --dn:120px; width:350px; height:350px; }
+  .hud-tele .stats { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
+  .mini { flex:1; justify-content:space-between; }
+  .mini .big { font-size:78px; font-weight:800; line-height:1; }
+  .mini .big small { font-size:32px; font-weight:300; margin-left:8px; }
+  .mini .cap { font-size:23px; color:var(--dim); font-weight:var(--fw-light); display:flex; justify-content:space-between; }
+  .mini .cap b { color:var(--tx); font-weight:700; }
+
+  /* ================= PRO KOKPIT ================= */
+  #v-cockpit { grid-template-rows:300px 1fr 280px; }
+  .k-top { display:grid; grid-template-columns:30% 42% 1fr; gap:10px; min-height:0; }
+  .k-mid { display:grid; grid-template-columns:1fr 1.15fr 1fr; gap:10px; min-height:0; }
+  .k-bot { display:grid; grid-template-columns:1.2fr 1fr .8fr 1fr; gap:10px; min-height:0; }
+  .wx { display:flex; justify-content:space-between; align-items:center; flex:1; }
+  .wx .tm { font-size:92px; font-weight:300; line-height:1; }
+  .wx .dt { font-size:26px; color:var(--dim); margin-top:6px; }
+  .wx .tp { text-align:right; font-size:60px; font-weight:800; line-height:1; }
+  .wx .tp small { display:block; font-size:22px; font-weight:300; color:var(--dim); margin-top:8px; }
+  .prayers { flex:1; display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+  .slot { background:var(--tile); border:1px solid var(--line); border-radius:calc(var(--r) - 4px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+  .slot span { font-size:20px; color:var(--dim); font-weight:600; }
+  .slot b { font-size:36px; font-weight:800; }
+  .slot.next { border-color:var(--a1); background:color-mix(in srgb,var(--a1) 16%,var(--tile)); box-shadow:0 0 18px color-mix(in srgb,var(--a1) 30%,transparent); }
+  .slot.next span { color:var(--a2); }
+  .rem { color:var(--a1); font-weight:800; font-size:26px; }
+  .procs { flex:1; display:flex; flex-direction:column; justify-content:space-around; }
+  .proc { display:grid; grid-template-columns:200px 1fr 100px; gap:14px; align-items:center; font-size:22px; }
+  .proc span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:var(--fw-light); }
+  .proc b { text-align:right; font-weight:700; font-size:21px; }
+  .k-cpu { flex:1; display:grid; grid-template-columns:230px 1fr; gap:16px; min-height:0; }
+  .k-cpu .dial { --dn:62px; width:230px; height:230px; margin:auto; }
+  .k-cpu .stats { display:flex; flex-direction:column; justify-content:space-around; }
+  .coreload { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(4,1fr); gap:10px 24px; align-content:center; }
+  .cl { display:grid; grid-template-columns:62px 1fr 66px; gap:10px; align-items:center; font-size:20px; }
+  .cl span { color:var(--dim); font-weight:600; }
+  .cl b { text-align:right; font-weight:800; }
+  .cl .bar { height:18px; }
+  .fans { flex:1; display:flex; flex-direction:column; justify-content:space-around; }
+  .keyvals { flex:1; display:flex; flex-direction:column; justify-content:space-around; font-size:24px; }
+  .keyvals div { display:flex; justify-content:space-between; }
+  .keyvals span { font-weight:var(--fw-light); }
+  .keyvals b { font-weight:800; }
+
+  /* ================= EXTRA STYLE FAMILIES ================= */
+  body[data-bars="chunk"] .bar { height:22px; border-radius:0; border:2px solid var(--line); background:var(--track); }
+  body[data-bars="chunk"] .bar i { border-radius:0; box-shadow:none; }
+  body[data-style="blueprint"] .panel { background:color-mix(in srgb,var(--panel) 82%,transparent); border:1px dashed color-mix(in srgb,var(--tx) 60%,transparent); border-radius:2px; }
+  body[data-style="crt"] .panel { border:1px solid var(--a1); border-radius:6px;
+    box-shadow:0 0 14px color-mix(in srgb,var(--a1) 25%,transparent), inset 0 0 40px color-mix(in srgb,var(--a1) 8%,transparent); }
+  body[data-style="crt"]::after { content:""; position:fixed; inset:0; pointer-events:none; z-index:50;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.30) 0 1px,transparent 1px 3px), radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.55) 100%); }
+  body[data-style="brutal"] .panel { border:3px solid var(--line); border-radius:0; box-shadow:7px 7px 0 var(--a1); }
+  body[data-style="hud"] .panel { border:1px solid color-mix(in srgb,var(--a1) 38%,transparent); border-radius:2px;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--a1) 7%,var(--panel)),var(--panel) 40%); }
+  body[data-style="hud"] .panel::before { content:""; position:absolute; inset:5px; pointer-events:none; border:2px solid var(--a1); border-radius:1px;
+    -webkit-mask:linear-gradient(#000,#000) 0 0/22px 22px no-repeat,linear-gradient(#000,#000) 100% 0/22px 22px no-repeat,linear-gradient(#000,#000) 0 100%/22px 22px no-repeat,linear-gradient(#000,#000) 100% 100%/22px 22px no-repeat;
+    mask:linear-gradient(#000,#000) 0 0/22px 22px no-repeat,linear-gradient(#000,#000) 100% 0/22px 22px no-repeat,linear-gradient(#000,#000) 0 100%/22px 22px no-repeat,linear-gradient(#000,#000) 100% 100%/22px 22px no-repeat; }
+  body[data-style="blueprint"] .dial circle, body[data-style="crt"] .dial circle, body[data-style="brutal"] .dial circle, body[data-style="hud"] .dial circle { stroke-linecap:butt; }
+  body[data-style="brutal"] .dial circle { stroke-width:12; }
+  body[data-style="brutal"] .ph .t, body[data-style="brutal"] .sl b { letter-spacing:.02em; }
+  body[data-style="crt"] .bar i, body[data-style="crt"] .dial .da { filter:drop-shadow(0 0 4px var(--a1)); }
+
+  /* ================= RIBBON / DRAWER ================= */
+  .ribbon { position:fixed; top:0; left:0; right:0; height:46px; z-index:60; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:0 14px; background:color-mix(in srgb,var(--panel) 92%,#000); border-bottom:1px solid var(--line);
+    transform:translateY(-102%); transition:transform .25s ease; font-family:"Segoe UI",system-ui,sans-serif; }
+  body.show-ui .ribbon { transform:none; }
+  .rg { display:flex; align-items:center; gap:8px; }
+  .rbrand { font-weight:900; font-size:15px; letter-spacing:.08em; background:linear-gradient(90deg,var(--a1),var(--a2)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; white-space:nowrap; }
+  .badge { font-size:12.5px; color:var(--dim); background:var(--tile); border:1px solid var(--line); padding:4px 9px; border-radius:6px; white-space:nowrap; display:flex; gap:6px; align-items:center; }
+  .badge b { color:var(--tx); font-weight:700; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--good); box-shadow:0 0 7px var(--good); }
+  .seg { display:flex; gap:3px; background:var(--tile); border:1px solid var(--line); border-radius:7px; padding:2px; }
+  .seg button { background:none; border:none; color:var(--dim); font:700 12.5px "Segoe UI",system-ui,sans-serif; padding:5px 11px; border-radius:5px; cursor:pointer; }
+  .seg button:hover { color:var(--tx); }
+  .seg button.on { background:linear-gradient(90deg,var(--a1),var(--a2)); color:#fff; }
+  .btn { background:var(--tile); border:1px solid var(--line); color:var(--tx); font:700 12.5px "Segoe UI",system-ui,sans-serif; padding:5px 11px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+  .btn:hover { border-color:var(--a1); }
+
+  .toast { position:fixed; left:50%; bottom:34px; transform:translate(-50%,20px); opacity:0; z-index:70; pointer-events:none; transition:all .3s;
+    background:rgba(10,10,12,.92); color:#fff; border:1px solid var(--a1); padding:10px 22px; border-radius:999px; font:700 15px "Segoe UI",sans-serif; box-shadow:0 0 24px color-mix(in srgb,var(--a1) 40%,transparent); }
+  .toast.on { opacity:1; transform:translate(-50%,0); }
+
+  .drawer { position:fixed; top:0; right:0; width:400px; height:100vh; z-index:80; background:#0b0b0f; color:#eef; border-left:1px solid #2a2a33;
+    box-shadow:-18px 0 50px rgba(0,0,0,.8); transform:translateX(104%); transition:transform .25s; display:flex; flex-direction:column; font-family:"Segoe UI",system-ui,sans-serif; }
+  .drawer.open { transform:none; }
+  .dh { padding:14px 18px; border-bottom:1px solid #23232b; display:flex; justify-content:space-between; align-items:center; font-weight:900; letter-spacing:.05em; font-size:14px; }
+  .db { padding:16px 18px; overflow:auto; display:flex; flex-direction:column; gap:16px; }
+  .cfg { display:flex; flex-direction:column; gap:10px; }
+  .cfg h4 { font-size:11.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#8a8aa0; }
+  .tgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .tcard { border:1px solid #2a2a35; border-radius:9px; padding:8px; background:#12121a; cursor:pointer; text-align:left; color:#e8e8f2; font:600 12px "Segoe UI",sans-serif; display:flex; flex-direction:column; gap:7px; }
+  .tcard:hover { border-color:#6a6a85; }
+  .tcard.on { border-color:#fff; box-shadow:0 0 0 1px #fff; }
+  .tsw { height:34px; border-radius:6px; border:1px solid rgba(255,255,255,.12); position:relative; overflow:hidden; }
+  .tsw i { position:absolute; left:6px; right:6px; bottom:6px; height:6px; border-radius:3px; }
+  .tsw u { position:absolute; left:6px; top:6px; width:40%; height:6px; border-radius:3px; opacity:.5; }
+  .crow { display:flex; justify-content:space-between; align-items:center; font-size:13px; gap:10px; }
+  .crow select { background:#12121a; color:#fff; border:1px solid #333; border-radius:6px; padding:5px 8px; font-size:13px; }
+  .keys { font-size:12.5px; color:#9a9ab0; line-height:1.8; }
+  .keys b { color:#fff; display:inline-block; min-width:22px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gA" gradientUnits="userSpaceOnUse" x1="12" y1="88" x2="88" y2="12">
+      <stop offset="0" style="stop-color:var(--a1)"/>
+      <stop offset="1" style="stop-color:var(--a2)"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<header class="ribbon" id="ribbon">
+  <div class="rg">
+    <div class="rbrand" id="rBrand">ROG TELEMETRY</div>
+    <div class="badge"><span class="dot" id="rDot"></span><span id="rSrc">Bağlanıyor…</span></div>
+    <div class="badge">Ping <b id="rPing">--</b></div>
+    <div class="badge">💾 <b id="rDisk">--</b></div>
+    <div class="badge" id="rThrBox" style="display:none;color:var(--crit)">⚠ <b id="rThr"></b></div>
+    <div class="badge">🌤 <b id="rWx">--</b></div>
+    <div class="badge">🕌 <b id="rPrayer">--</b></div>
+  </div>
+  <div class="rg"><div class="seg" id="layoutSeg"></div></div>
+  <div class="rg">
+    <button class="btn" onclick="nextTheme()">🎨 <span id="rTheme">Tema</span></button>
+    <button class="btn" onclick="toggleDrawer()">⚙ Ayarlar</button>
+    <button class="btn" onclick="toggleFs()">⛶</button>
+  </div>
+</header>
+
+<div class="stage" id="stage"></div>
+<div class="toast" id="toast"></div>
+
+<aside class="drawer" id="drawer">
+  <div class="dh"><span>STUDIO KONTROL PANELİ</span><button class="btn" onclick="toggleDrawer()">✕</button></div>
+  <div class="db">
+    <div class="cfg"><h4>Temalar</h4><div class="tgrid" id="tgrid"></div></div>
+    <div class="cfg"><h4>Veri</h4>
+      <div class="crow"><span>Güncelleme hızı</span>
+        <select id="selInt" onchange="setInterval_(this.value)">
+          <option value="500">0.5 sn</option><option value="1000" selected>1 sn</option><option value="2000">2 sn</option><option value="5000">5 sn</option>
+        </select></div>
+      <div class="crow"><span>Kenar boşluğu (ekran kesiliyorsa artırın)</span>
+        <select id="selMargin" onchange="setMargin(this.value)">
+          <option value="0">0 px</option><option value="8">8 px</option><option value="16">16 px</option><option value="24">24 px</option><option value="32">32 px</option><option value="48">48 px</option>
+        </select></div>
+      <div class="crow"><span>Şehir (hava & namaz)</span>
+        <select id="selCity" onchange="changeCity(this.value)">
+          <option value="istanbul">İstanbul</option><option value="ankara">Ankara</option><option value="izmir">İzmir</option>
+          <option value="bursa">Bursa</option><option value="antalya">Antalya</option><option value="adana">Adana</option>
+          <option value="konya">Konya</option><option value="gaziantep">Gaziantep</option>
+        </select></div>
+    </div>
+    <div class="cfg"><h4>Kısayollar</h4>
+      <div class="keys"><b>1-3</b> Düzen değiştir<br><b>T</b> Sonraki tema<br><b>S</b> Ayarlar<br><b>F</b> Tam ekran<br>Fareyi hareket ettirince üst menü görünür, 4 sn sonra gizlenir.</div>
+    </div>
+  </div>
+</aside>
+
+<script>
+/* =====================================================================
+   THEMES
+   ===================================================================== */
+const THEMES = {
+  /* --- Klasikler --- */
+  rog:      { n:'ROG Orange',            style:'flat',  bars:'smooth', v:{bg:'#000',panel:'#040404',tile:'#0c0c0e',line:'#2c2c30',a1:'#ff4a00',a2:'#ffa21a',track:'#333336',tx:'#fff',dim:'#a9a9b0',r:'12px'} },
+  rogseg:   { n:'ROG Segment',           style:'flat',  bars:'seg',    v:{bg:'#000',panel:'#050506',tile:'#0d0d10',line:'#33261f',a1:'#ff3d00',a2:'#ff9a00',track:'#2a2a2e',tx:'#fff',dim:'#a9a9b0',r:'6px',glow:'0 0 10px rgba(255,80,0,.55)'} },
+  amber:    { n:'Amber Glass',           style:'glass', bars:'smooth', v:{bg:'#07090d',panel:'#141923',tile:'#1b2130',line:'#ffa000',a1:'#ff8a00',a2:'#ffc233',track:'#2a3042',tx:'#f8fafc',dim:'#97a1b4',r:'18px',bgfx:'radial-gradient(900px 600px at 12% 8%,rgba(255,140,0,.22),transparent 60%),radial-gradient(1100px 700px at 92% 100%,rgba(255,190,60,.14),transparent 60%)'} },
+  crimson:  { n:'Aorus Crimson',         style:'neon',  bars:'smooth', v:{bg:'#060305',panel:'#0e070a',tile:'#190d12',line:'#e60026',a1:'#e60026',a2:'#ff5470',track:'#2a1520',tx:'#fff',dim:'#ae98a1',r:'10px',glow:'0 0 10px rgba(230,0,38,.6)'} },
+  nzxt:     { n:'NZXT Violet',           style:'glass', bars:'thin',   v:{bg:'#07070f',panel:'#14162a',tile:'#1c1f38',line:'#8b5cf6',a1:'#8b5cf6',a2:'#d08bff',track:'#272a49',tx:'#fff',dim:'#a2a8cf',r:'22px',glow:'0 0 12px rgba(139,92,246,.6)',bgfx:'radial-gradient(1000px 650px at 8% 100%,rgba(139,92,246,.28),transparent 60%),radial-gradient(800px 500px at 100% 0%,rgba(208,139,255,.14),transparent 60%)'} },
+  icue:     { n:'Corsair iCUE',          style:'flat',  bars:'seg',    v:{bg:'#020605',panel:'#07110d',tile:'#0e1d17',line:'#143d2d',a1:'#10b981',a2:'#6ee7b7',track:'#15302a',tx:'#fff',dim:'#8fb3a5',r:'8px',glow:'0 0 10px rgba(16,185,129,.5)'} },
+  noctua:   { n:'Noctua',                style:'flat',  bars:'smooth', v:{bg:'#0b0806',panel:'#16100c',tile:'#221913',line:'#4a3a2c',a1:'#b5532a',a2:'#e6c99a',track:'#33261c',tx:'#f6eedd',dim:'#b9a797',r:'14px'} },
+  frost:    { n:'Frost Neon',            style:'neon',  bars:'thin',   v:{bg:'#02060a',panel:'#06101a',tile:'#0b1a29',line:'#00c8ff',a1:'#00c8ff',a2:'#7df9ff',track:'#10263a',tx:'#fff',dim:'#8fb2c8',r:'16px',glow:'0 0 12px rgba(0,200,255,.6)'} },
+  oled:     { n:'OLED Minimal',          style:'mono',  bars:'thin',   v:{bg:'#000',panel:'#000',tile:'#0a0a0a',line:'#26262b',a1:'#38bdf8',a2:'#a5f3fc',track:'#17171c',tx:'#fff',dim:'#8b8b95',r:'10px'} },
+  arctic:   { n:'Arctic (Açık)',         style:'flat',  bars:'smooth', v:{bg:'#c9d3df',panel:'#ffffff',tile:'#eef2f7',line:'#c2ccd9',a1:'#0369a1',a2:'#0ea5e9',track:'#d5dde8',tx:'#0f172a',dim:'#52627a',r:'14px',pfx:'0 6px 20px rgba(15,23,42,.10)',crit:'#d00000'} },
+  /* --- Yaratıcı temalar --- */
+  cyber:    { n:'Cyberpunk 2077',        style:'clip',  bars:'seg',    v:{bg:'#03050c',panel:'#0b1122',tile:'#121b34',line:'#143a55',a1:'#fcee0a',a2:'#00f0ff',track:'#1a2644',tx:'#fff',dim:'#8ea4c8',r:'0px',glow:'0 0 10px rgba(0,240,255,.45)',bgfx:'radial-gradient(900px 500px at 90% 0%,rgba(0,240,255,.12),transparent 60%)'} },
+  synth:    { n:'Synthwave Gece',        style:'neon',  bars:'seg',    v:{bg:'#12002b',panel:'#1a0536',tile:'#260a4a',line:'#ff2bd6',a1:'#ff2bd6',a2:'#00e5ff',track:'#34125f',tx:'#fff',dim:'#bba0e0',r:'14px',glow:'0 0 12px rgba(255,43,214,.6)',
+                  bgfx:'linear-gradient(180deg,transparent 55%,rgba(255,43,214,.24) 100%),repeating-linear-gradient(90deg,rgba(0,229,255,.07) 0 1px,transparent 1px 64px),repeating-linear-gradient(0deg,rgba(0,229,255,.07) 0 1px,transparent 1px 64px)'} },
+  blueprint:{ n:'Blueprint (Teknik Çizim)',style:'blueprint',bars:'thin', v:{bg:'#0a3d91',panel:'#0d4aa8',tile:'#0f56c2',line:'#8fb8ff',a1:'#ffffff',a2:'#9ecbff',track:'#1b62cc',tx:'#eaf3ff',dim:'#b4d0fa',r:'2px',font:'"Bahnschrift","Consolas",monospace',
+                  bgfx:'repeating-linear-gradient(0deg,rgba(255,255,255,.09) 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,rgba(255,255,255,.09) 0 1px,transparent 1px 40px)'} },
+  crt:      { n:'Retro CRT Amber',       style:'crt',   bars:'seg',    v:{bg:'#0a0600',panel:'#110a02',tile:'#1b1104',line:'#ff9d00',a1:'#ffb000',a2:'#ffd84d',track:'#2a1a05',tx:'#ffcf6b',dim:'#b8842a',r:'6px',glow:'0 0 8px rgba(255,176,0,.6)',font:'"Cascadia Mono","Consolas","Courier New",monospace'} },
+  matrix:   { n:'Matrix Terminal',       style:'crt',   bars:'seg',    v:{bg:'#000',panel:'#010a03',tile:'#03140a',line:'#0b4d1f',a1:'#00ff41',a2:'#9dff5a',track:'#0a2a12',tx:'#c9ffd6',dim:'#5fae78',r:'4px',glow:'0 0 9px rgba(0,255,65,.55)',font:'"Cascadia Mono","Consolas","Courier New",monospace'} },
+  brutal:   { n:'Brütalist (Açık)',      style:'brutal',bars:'chunk',  v:{bg:'#f4efe3',panel:'#fffaf0',tile:'#ece5d3',line:'#111111',a1:'#ff3b30',a2:'#ffb400',track:'#e0d7bf',tx:'#111111',dim:'#5c5648',r:'0px',crit:'#c00000'} },
+  aurora:   { n:'Aurora',                style:'glass', bars:'thin',   v:{bg:'#020b10',panel:'#0a1a22',tile:'#10262f',line:'#2dd4bf',a1:'#2dd4bf',a2:'#a78bfa',track:'#16323c',tx:'#ecfeff',dim:'#8fb7bf',r:'22px',glow:'0 0 12px rgba(45,212,191,.5)',
+                  bgfx:'radial-gradient(900px 600px at 15% 0%,rgba(45,212,191,.26),transparent 60%),radial-gradient(900px 600px at 90% 20%,rgba(167,139,250,.24),transparent 60%),radial-gradient(900px 500px at 50% 110%,rgba(244,114,182,.16),transparent 60%)'} },
+  carbon:   { n:'Karbon Yarış',          style:'clip',  bars:'smooth', v:{bg:'#0a0a0a',panel:'#101010',tile:'#191919',line:'#2a2a2a',a1:'#ff1e1e',a2:'#ff8a5c',track:'#262626',tx:'#fff',dim:'#a0a0a0',r:'0px',glow:'0 0 8px rgba(255,30,30,.5)',
+                  bgfx:'repeating-linear-gradient(45deg,rgba(255,255,255,.035) 0 2px,transparent 2px 7px),repeating-linear-gradient(-45deg,rgba(255,255,255,.035) 0 2px,transparent 2px 7px)'} },
+  ocean:    { n:'Derin Okyanus',         style:'glass', bars:'smooth', v:{bg:'#00060f',panel:'#04162a',tile:'#082340',line:'#1e6091',a1:'#00d4ff',a2:'#00ffa3',track:'#0b2c4d',tx:'#e6faff',dim:'#7fb0c9',r:'20px',glow:'0 0 10px rgba(0,212,255,.45)',
+                  bgfx:'linear-gradient(180deg,rgba(0,120,200,.20),transparent 50%),radial-gradient(1000px 600px at 50% 110%,rgba(0,255,163,.14),transparent 60%)'} },
+  military: { n:'Taktik HUD',            style:'hud',   bars:'seg',    v:{bg:'#070a06',panel:'#0d130a',tile:'#141d0f',line:'#6b8f3a',a1:'#9bd13d',a2:'#ffb400',track:'#1d2a14',tx:'#e8f5d0',dim:'#8fa575',r:'2px',glow:'0 0 8px rgba(155,209,61,.45)'} },
+  sakura:   { n:'Sakura (Pastel)',       style:'flat',  bars:'thin',   v:{bg:'#fde8ef',panel:'#fff7fa',tile:'#ffe9f0',line:'#f3b6c8',a1:'#ec4899',a2:'#fb923c',track:'#f6d3de',tx:'#4a1d33',dim:'#9a6a80',r:'26px',pfx:'0 8px 24px rgba(236,72,153,.14)',crit:'#d6001c'} },
+};
+const THEME_IDS = Object.keys(THEMES);
+const THEME_VARS = ['bg','panel','tile','line','a1','a2','track','tx','dim','r','glow','bgfx','pfx','font','crit'];
+let theme = 'rog';
+const COL = { a1:'#ff4a00', a2:'#ffa21a', dim:'#999', line:'#333', tx:'#fff' };
+
+function applyTheme(id, announce) {
+  if (!THEMES[id]) id = 'rog';
+  theme = id;
+  const t = THEMES[id], root = document.documentElement;
+  THEME_VARS.forEach(k => root.style.removeProperty('--' + k));
+  Object.entries(t.v).forEach(([k, val]) => root.style.setProperty('--' + k, val));
+  document.body.dataset.style = t.style;
+  document.body.dataset.bars = t.bars;
+  const cs = getComputedStyle(root);
+  ['a1','a2','dim','line','tx'].forEach(k => COL[k] = cs.getPropertyValue('--' + k).trim());
+  document.getElementById('rTheme').textContent = t.n;
+  document.querySelectorAll('.tcard').forEach(el => el.classList.toggle('on', el.dataset.id === id));
+  save('proTheme', id);
+  if (announce) toast('Tema: ' + t.n);
+  drawAllGraphs();
+}
+function nextTheme() { applyTheme(THEME_IDS[(THEME_IDS.indexOf(theme) + 1) % THEME_IDS.length], true); }
+
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
+function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+let toastT;
+function toast(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1600); }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const I = {
+  cpu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>',
+  gpu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="6" width="20" height="11" rx="2"/><circle cx="8.5" cy="11.5" r="2.7"/><circle cx="15.5" cy="11.5" r="2.7"/><path d="M5 17v2M19 17v2"/></svg>',
+  mem:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="9" rx="1.5"/><path d="M6 16v3M10 16v3M14 16v3M18 16v3M6 10.5h2M11 10.5h2M16 10.5h2"/></svg>',
+  mobo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="6" height="6"/><path d="M16 7h2M16 11h2M7 16h6M16 16h2"/></svg>',
+  disk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>',
+  bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M13 6l-4.5 7h3L11 18l4.5-7h-3z"/></svg>',
+  net:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></svg>',
+  fan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="2"/><path d="M12 10c-1-4 1-7 4-7 2 0 3 2 2 4-1 2-3 3-6 3zM14 12c4-1 7 1 7 4 0 2-2 3-4 2-2-1-3-3-3-6zM12 14c1 4-1 7-4 7-2 0-3-2-2-4 1-2 3-3 6-3zM10 12c-4 1-7-1-7-4 0-2 2-3 4-2 2 1 3 3 3 6z"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  game:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 10v5M4.5 12.5h5M15.5 11.5h.01M18 13.5h.01"/></svg>',
+};
+
+const head = (ic, t, s, x) => `<div class="ph">${I[ic]}<span class="t">${t}</span>${s ? `<span class="s" data-v="${s}"></span>` : ''}${x ? `<span class="x" data-v="${x}"></span>` : ''}</div>`;
+const bar = k => `<div class="bar"><i data-bar="${k}"></i></div>`;
+const stat = (label, k) => `<div class="stat">${bar(k)}<div class="sl"><span>${label}</span><b data-v="${k}">--</b></div></div>`;
+const dial = (k, label = 'Load', cls = '', unit = '%') => `<div class="dial ${cls}"><svg viewBox="0 0 100 100"><circle class="dt" cx="50" cy="50" r="40" transform="rotate(135 50 50)"/><circle class="da" data-arc="${k}" cx="50" cy="50" r="40" transform="rotate(135 50 50)"/></svg><div class="dc"><div class="dn"><b data-v="${k}">--</b>${unit ? `<small>${unit}</small>` : ''}</div></div><em>${label}</em></div>`;
+const graph = (k, o = {}) => `<div class="gbox"><canvas data-graph="${k}" data-floor="${o.floor || 1}" ${o.fixedMax ? `data-fixed="${o.fixedMax}"` : ''} ${o.labels === false ? 'data-nolabels="1"' : ''} ${o.nofill ? 'data-nofill="1"' : ''}></canvas>${o.wm ? `<div class="wm"><span>${o.wm}</span><span data-v="${k}"></span></div>` : ''}</div>`;
+
+/* =====================================================================
+   LAYOUTS (all live-bound via data-v / data-bar / data-arc / data-graph)
+   ===================================================================== */
+const LAYOUTS = {
+  classic: { name: '1 · Klasik (Fotoğraftaki)', html: () => `
+    <section class="view" id="v-classic">
+      <div class="c-top">
+        <div class="panel clock">
+          <div class="brand" data-v="brand">ASUS</div>
+          <div class="time" id="clkTime">--:--:--</div>
+          <div class="date" id="clkDate">--.--.----</div>
+          <div class="sub"><span>Up Time <b data-v="uptime">--</b></span><span>Sound <b data-v="sound">--</b></span></div>
+        </div>
+        <div class="panel">
+          ${head('mem', 'Memory')}
+          <div class="mem-body">
+            <div class="mrow"><span>Load</span>${bar('ramLoad')}<b data-v="ramLoad">--</b></div>
+            <div class="mrow"><span>Speed</span><div class="bar"><i style="width:100%"></i></div><b class="sm" data-v="ramSpeed">--</b></div>
+            <div class="mrow"><span>Usage</span>${bar('ramLoad')}<b data-v="ramUsed">--</b></div>
+            <div class="mrow"><span>Free</span>${bar('ramFreePct')}<b data-v="ramFree">--</b></div>
+          </div>
+        </div>
+        <div class="panel">
+          ${head('mobo', 'MOBO', 'moboModel')}
+          <div class="mobo-body">
+            <div class="mlines">
+              <div class="mline"><span>Chipset</span><b data-v="chipset">--</b></div>
+              <div class="mline"><span>BIOS Ver.</span><b data-v="bios">--</b></div>
+              <div class="mline"><span>Bus Type</span><b data-v="bus">--</b></div>
+              <div class="mline"><span>Processes</span><b data-v="procs">--</b></div>
+            </div>
+            <div class="mtemp">${bar('moboTemp')}<div class="row"><span>Temperature</span><b data-v="moboTemp">--</b></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-mid">
+        <div class="panel">
+          ${head('cpu', 'CPU', 'cpuModel')}
+          <div class="tele">
+            ${dial('cpuLoad')}
+            <div class="stats">
+              ${stat('CPU', 'cpuTemp')}${stat('Clock', 'cpuClock')}${stat('Fan', 'cpuFan')}${stat('AIO Pump', 'pump')}
+            </div>
+            <div class="gcard">
+              <div class="gcap"><span>Fan 1 Kasa <b data-v="cha1">--</b></span><span>Fan 2 Kasa <b data-v="cha2">--</b></span></div>
+              ${graph('cpuTemp', { floor: 60 })}
+            </div>
+            <div class="cores" id="coreMini"></div>
+          </div>
+        </div>
+        <div class="panel">
+          ${head('gpu', 'GPU', 'gpuModel')}
+          <div class="tele">
+            ${dial('gpuLoad')}
+            <div class="stats">
+              ${stat('Temp', 'gpuTemp')}${stat('Power', 'gpuW')}${stat('Clock', 'gpuClock')}${stat('VRAM', 'vram')}${stat('Fan', 'gpuFan')}
+            </div>
+            <div class="gpu-graphs">
+              <div class="gcard">${graph('fps', { floor: 60, wm: 'FPS' })}</div>
+              <div class="gcard"><div class="gcap"><span>GPU Yük Geçmişi</span><b data-v="gpuLoadPct">--</b></div>${graph('gpuLoad', { fixedMax: 100 })}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-bot">
+        <div class="panel">${head('disk', 'Storage', null, 'diskRW')}<div class="stor" id="storClassic"></div></div>
+        <div class="panel">
+          ${head('bolt', 'Power')}
+          <div class="pw">
+            <div class="l"><span>CPU</span><b data-v="cpuW">--</b></div>
+            <div class="l"><span>CPU Vcore</span><b data-v="cpuV">--</b></div>
+            <div class="l"><span>GPU</span><b data-v="gpuW">--</b></div>
+            <div class="l"><span>GPU Volt</span><b data-v="gpuV">--</b></div>
+            <div class="l tot"><span>Toplam</span><b data-v="totalW">--</b></div>
+          </div>
+        </div>
+        <div class="panel">
+          ${head('net', 'Network', null, 'ip')}
+          <div class="net">
+            <div class="tx"><div><span>Upload</span><b data-v="netUp">--</b></div><div><span>Total</span><b data-v="netUpTot">--</b></div></div>
+            <div class="sp">${graph('netUp', { floor: 50, labels: false })}</div>
+            <div class="tx"><div><span>Down.</span><b data-v="netDown">--</b></div><div><span>Total</span><b data-v="netDownTot">--</b></div></div>
+            <div class="sp">${graph('netDown', { floor: 200, labels: false })}</div>
+          </div>
+        </div>
+      </div>
+    </section>` },
+
+  hud: { name: '2 · Oyun HUD', html: () => `
+    <section class="view" id="v-hud">
+      <div class="h-top">
+        <div class="panel fps-card">
+          ${head('game', 'Oyun', 'game')}
+          <div class="hud-tele">
+            ${dial('fps', 'FPS', '', '')}
+            <div class="stats">${stat('Frame Time', 'frame')}${stat('1% Low', 'low1')}${stat('Ping', 'ping')}${stat('Ort. FPS', 'fpsAvg')}</div>
+          </div>
+        </div>
+        <div class="panel">
+          ${head('cpu', 'CPU', 'cpuModel')}
+          <div class="hud-tele">
+            ${dial('cpuLoad')}
+            <div class="stats">${stat('Sıcaklık', 'cpuTemp')}${stat('Güç', 'cpuW')}${stat('Saat', 'cpuClock')}${stat('Fan', 'cpuFan')}</div>
+          </div>
+        </div>
+        <div class="panel">
+          ${head('gpu', 'GPU', 'gpuModel')}
+          <div class="hud-tele">
+            ${dial('gpuLoad')}
+            <div class="stats">${stat('Sıcaklık', 'gpuTemp')}${stat('Güç', 'gpuW')}${stat('Saat', 'gpuClock')}${stat('VRAM', 'vram')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="h-bot">
+        <div class="panel mini">${head('net', 'Ping')}<div class="big" data-v="pingNum">--<small>ms</small></div>${graph('ping', { floor: 30, labels: false })}</div>
+        <div class="panel mini">${head('mem', 'RAM')}<div class="big" data-v="ramLoad">--</div>${bar('ramLoad')}<div class="cap"><span>Kullanılan</span><b data-v="ramUsed">--</b></div></div>
+        <div class="panel mini">${head('gpu', 'VRAM')}<div class="big" data-v="vramPct">--</div>${bar('vramPct')}<div class="cap"><span>Kullanılan</span><b data-v="vram">--</b></div></div>
+        <div class="panel mini">${head('bolt', 'Güç')}<div class="big" data-v="totalWNum">--<small>W</small></div>${graph('totalW', { floor: 100, labels: false })}</div>
+        <div class="panel mini">${head('net', 'Ağ')}<div class="cap"><span>İndirme</span><b data-v="netDown">--</b></div>${graph('netDown', { floor: 200, labels: false })}<div class="cap"><span>Yükleme</span><b data-v="netUp">--</b></div></div>
+      </div>
+    </section>` },
+
+  cockpit: { name: '3 · Pro Kokpit', html: () => `
+    <section class="view" id="v-cockpit">
+      <div class="k-top">
+        <div class="panel">
+          ${head('clock', 'Zaman')}
+          <div class="wx"><div><div class="tm" id="kTime">--:--</div><div class="dt" id="kDate">--</div></div>
+          <div class="tp"><span id="kWxT">--</span><small id="kWxD">--</small></div></div>
+        </div>
+        <div class="panel">
+          ${head('clock', 'Namaz Vakitleri', null, 'prayerRem')}
+          <div class="prayers" id="prayerGrid"></div>
+        </div>
+        <div class="panel">${head('mem', 'Bellek Tüketenler')}<div class="procs" id="procList"></div></div>
+      </div>
+      <div class="k-mid">
+        <div class="panel">
+          ${head('cpu', 'CPU', 'cpuModel')}
+          <div class="k-cpu">${dial('cpuLoad')}<div class="stats">${stat('Sıcaklık', 'cpuTemp')}${stat('Saat', 'cpuClock')}${stat('Güç', 'cpuW')}</div></div>
+        </div>
+        <div class="panel">
+          ${head('cpu', 'Çekirdekler')}
+          <div class="coreload" id="coreLoad"></div>
+        </div>
+        <div class="panel">
+          ${head('gpu', 'GPU', 'gpuModel')}
+          <div class="k-cpu">${dial('gpuLoad')}<div class="stats">${stat('Sıcaklık', 'gpuTemp')}${stat('Saat', 'gpuClock')}${stat('VRAM', 'vram')}</div></div>
+        </div>
+      </div>
+      <div class="k-bot">
+        <div class="panel">${head('disk', 'Depolama', null, 'diskRW')}<div class="stor" id="storCockpit"></div></div>
+        <div class="panel">
+          ${head('fan', 'Soğutma')}
+          <div class="fans">${stat('CPU Fan', 'cpuFan')}${stat('AIO Pompa', 'pump')}${stat('Kasa 1', 'cha1')}${stat('Kasa 2', 'cha2')}</div>
+        </div>
+        <div class="panel">
+          ${head('mobo', 'Sistem')}
+          <div class="keyvals">
+            <div><span>Anakart</span><b data-v="moboTemp">--</b></div>
+            <div><span>RAM</span><b data-v="ramUsed">--</b></div>
+            <div><span>Süreç</span><b data-v="procs">--</b></div>
+            <div><span>Toplam Güç</span><b data-v="totalW">--</b></div>
+          </div>
+        </div>
+        <div class="panel">
+          ${head('net', 'Ağ', null, 'ip')}
+          <div class="keyvals">
+            <div><span>İndirme</span><b data-v="netDown">--</b></div>
+            <div><span>Yükleme</span><b data-v="netUp">--</b></div>
+            <div><span>Toplam ↓</span><b data-v="netDownTot">--</b></div>
+            <div><span>Ping</span><b data-v="ping">--</b></div>
+          </div>
+        </div>
+      </div>
+    </section>` },
+};
+const LAYOUT_IDS = Object.keys(LAYOUTS);
+let layout = 'classic';
+
+function buildUI() {
+  document.getElementById('stage').innerHTML = LAYOUT_IDS.map(id => LAYOUTS[id].html()).join('');
+  document.getElementById('layoutSeg').innerHTML = LAYOUT_IDS.map((id, i) => `<button data-l="${id}" onclick="setLayout('${id}')">${LAYOUTS[id].name}</button>`).join('');
+  document.getElementById('tgrid').innerHTML = THEME_IDS.map(id => {
+    const t = THEMES[id];
+    return `<button class="tcard" data-id="${id}" onclick="applyTheme('${id}',true)">
+      <div class="tsw" style="background:${t.v.panel}"><u style="background:${t.v.tx}"></u><i style="background:linear-gradient(90deg,${t.v.a1},${t.v.a2})"></i></div>${esc(t.n)}</button>`;
+  }).join('');
+}
+function setLayout(id) {
+  if (!LAYOUTS[id]) id = 'classic';
+  layout = id; save('proLayout', id);
+  document.querySelectorAll('.view').forEach(el => el.classList.toggle('active', el.id === 'v-' + id));
+  document.querySelectorAll('#layoutSeg button').forEach(b => b.classList.toggle('on', b.dataset.l === id));
+  scaleStage(); drawAllGraphs();
+}
+
+/* ---------- scaling ---------- */
+let SC = 1;
+let MARGIN = +(load('proMargin') || 0) || 0;
+function setMargin(v) { MARGIN = +v || 0; save('proMargin', MARGIN); scaleStage(); }
+function scaleStage() {
+  const w = innerWidth - MARGIN * 2, h = innerHeight - MARGIN * 2;
+  SC = Math.min(w / 1920, h / 1080);
+  const st = document.getElementById('stage');
+  st.style.transform = `scale(${SC})`;
+  st.style.left = (MARGIN + Math.max(0, (w - 1920 * SC) / 2)) + 'px';
+  st.style.top = (MARGIN + Math.max(0, (h - 1080 * SC) / 2)) + 'px';
+  drawAllGraphs();
+}
+addEventListener('resize', scaleStage);
+
+/* =====================================================================
+   DATA MODEL
+   ===================================================================== */
+const num = v => (Number.isFinite(+v) ? +v : 0);
+const i0 = v => Math.round(v);
+const fmtSpeed = kb => kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB/s' : kb.toFixed(1) + ' KB/s';
+const fmtTot = mb => mb >= 1024 * 10 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(1) + ' MB';
+const U = (u) => v => `${v}<small> ${u}</small>`;
+const unit = (fmt, u) => v => `${fmt(v)}<small> ${u}</small>`;
+
+/* key -> {f: field in derived data, fmt, max (bars/arcs), alert (red threshold)} */
+const SPEC = {
+  cpuLoad:{f:'cpuLoadPct',fmt:i0,max:100}, gpuLoad:{f:'gpuLoadPct',fmt:i0,max:100}, gpuLoadPct:{f:'gpuLoadPct',fmt:v=>i0(v)+'%'},
+  cpuTemp:{f:'cpuTemp',fmt:v=>i0(v)+'°C',max:95,alert:88}, gpuTemp:{f:'gpuTemp',fmt:v=>i0(v)+'°C',max:90,alert:84},
+  cpuClock:{f:'cpuClockMhz',fmt:v=>i0(v)+' MHz',max:5500}, gpuClock:{f:'gpuClockMhz',fmt:v=>i0(v)+' MHz',max:3000},
+  cpuFan:{f:'cpuFanRpm',fmt:v=>i0(v)+' RPM',max:2200}, pump:{f:'aioPumpRpm',fmt:v=>i0(v)+' RPM',max:3000},
+  cha1:{f:'chaFan1Rpm',fmt:v=>i0(v)+' RPM',max:2200}, cha2:{f:'chaFan2Rpm',fmt:v=>i0(v)+' RPM',max:2200}, gpuFan:{f:'gpuFanRpm',fmt:v=>i0(v)+' RPM',max:3500},
+  cpuW:{f:'cpuPowerW',fmt:v=>v.toFixed(1)+' W',max:150}, gpuW:{f:'gpuPowerW',fmt:v=>v.toFixed(1)+' W',max:330},
+  cpuV:{f:'cpuVolt',fmt:v=>v.toFixed(3)+' V'}, gpuV:{f:'gpuVolt',fmt:v=>v.toFixed(3)+' V'},
+  totalW:{f:'totalW',fmt:v=>v.toFixed(1)+' W'}, totalWNum:{f:'totalW',fmt:v=>i0(v)+'<small> W</small>'},
+  vram:{f:'gpuVramUsedMb',fmt:v=>i0(v)+' MB',barF:'vramPct',max:100}, vramPct:{f:'vramPct',fmt:v=>i0(v)+'%',max:100},
+  fps:{f:'fps',fmt:i0,max:240}, low1:{f:'fpsLow1',fmt:i0,max:240}, diskRW:{f:'diskRW',fmt:v=>v}, frame:{f:'frameTimeMs',fmt:v=>v.toFixed(1)+' ms',max:33}, fpsAvg:{f:'fpsAvg',fmt:i0,max:240}, game:{f:'activeGame',fmt:v=>v||'Oyun algılanmadı'},
+  ramLoad:{f:'memLoadPct',fmt:v=>i0(v)+'%',max:100}, ramFreePct:{f:'ramFreePct',fmt:i0,max:100},
+  ramUsed:{f:'memUsedGb',fmt:v=>v.toFixed(1)+' GB'}, ramFree:{f:'memFreeGb',fmt:v=>v.toFixed(1)+' GB'}, ramSpeed:{f:'memSpeedText',fmt:v=>v||'--'},
+  moboTemp:{f:'moboTemp',fmt:v=>i0(v)+'°C',max:80,alert:70}, moboModel:{f:'moboModel',fmt:v=>v}, chipset:{f:'moboChipset',fmt:v=>v}, bios:{f:'moboBios',fmt:v=>v||'--'},
+  bus:{f:'gpuBusType',fmt:v=>v}, procs:{f:'processCount',fmt:i0},
+  ping:{f:'pingMs',fmt:v=>i0(v)+' ms'}, pingNum:{f:'pingMs',fmt:v=>i0(v)+'<small>ms</small>'},
+  uptime:{f:'uptime',fmt:v=>v}, sound:{f:'soundVolume',fmt:i0},
+  netUp:{f:'netUpKbs',fmt:fmtSpeed}, netDown:{f:'netDownKbs',fmt:fmtSpeed}, netUpTot:{f:'netUpTotalMb',fmt:fmtTot}, netDownTot:{f:'netDownTotalMb',fmt:fmtTot}, ip:{f:'ipAddress',fmt:v=>v},
+  cpuModel:{f:'cpuModel',fmt:v=>v}, gpuModel:{f:'gpuModel',fmt:v=>v}, brand:{f:'brandName',fmt:v=>v},
+};
+// graph keys -> source field
+const GFIELD = { frame:'frameTimeMs', cpuTemp:'cpuTemp', gpuLoad:'gpuLoadPct', fps:'fps', netUp:'netUpKbs', netDown:'netDownKbs', ping:'pingMs', totalW:'totalW' };
+const HN = 90;
+const HIST = {}; Object.keys(GFIELD).forEach(k => HIST[k] = new Array(HN).fill(0));
+
+function derive(d) {
+  const x = Object.assign({}, d);
+  ['cpuLoadPct','gpuLoadPct','cpuTemp','gpuTemp','cpuClockMhz','gpuClockMhz','cpuFanRpm','aioPumpRpm','chaFan1Rpm','chaFan2Rpm','gpuFanRpm','cpuPowerW','gpuPowerW','cpuVolt','gpuVolt',
+   'gpuVramUsedMb','gpuVramTotalMb','fps','fpsLow1','diskReadMBs','diskWriteMBs','frameTimeMs','memLoadPct','memUsedGb','memFreeGb','memTotalGb','moboTemp','processCount','pingMs','soundVolume','netUpKbs','netDownKbs','netUpTotalMb','netDownTotalMb']
+    .forEach(k => x[k] = (d[k] === null || d[k] === undefined) ? null : num(d[k]));   // null = sensör okunamadı
+  x.totalW = (x.cpuPowerW === null && x.gpuPowerW === null) ? null : (x.cpuPowerW || 0) + (x.gpuPowerW || 0);
+  x.diskRW = (x.diskReadMBs === null && x.diskWriteMBs === null) ? null : `R ${(x.diskReadMBs || 0).toFixed(1)} · W ${(x.diskWriteMBs || 0).toFixed(1)} MB/s`;
+  { const h = HIST.fps.filter(v => v > 0); x.fpsAvg = h.length ? h.reduce((a, b) => a + b, 0) / h.length : null; }
+  x.vramPct = x.gpuVramTotalMb > 0 ? (x.gpuVramUsedMb / x.gpuVramTotalMb) * 100 : null;
+  x.ramFreePct = x.memTotalGb > 0 ? (x.memFreeGb / x.memTotalGb) * 100 : null;
+  return x;
+}
+
+let LAST = null, LAST_SEEN = false;
+function render(d) {
+  const x = derive(d); LAST = x;
+  document.getElementById('rSrc').textContent = d.sensorSource || 'Sensör';
+  document.getElementById('rPing').textContent = x.pingMs === null ? '--' : i0(x.pingMs) + ' ms';
+  document.getElementById('rDisk').textContent = x.diskRW === null ? '--' : x.diskRW;
+  const thr = document.getElementById('rThrBox'); thr.style.display = d.throttle ? '' : 'none'; document.getElementById('rThr').textContent = d.throttle || '';
+  document.getElementById('rBrand').textContent = (d.brandName || 'ROG') + ' TELEMETRY';
+
+  document.querySelectorAll('.dial [data-v="fps"]').forEach(el => { const n = String(el.textContent).length; el.style.fontSize = n >= 4 ? '78px' : ''; });
+  document.querySelectorAll('[data-v]').forEach(el => {
+    const s = SPEC[el.dataset.v]; if (!s) return;
+    const v = x[s.f]; if (v === undefined) return;
+    const out = v === null ? '--' : s.fmt(v);
+    if (el.innerHTML !== String(out)) el.innerHTML = out;
+  });
+  document.querySelectorAll('[data-bar]').forEach(el => {
+    const s = SPEC[el.dataset.bar]; if (!s) return;
+    const v = x[s.barF || s.f] || 0; const p = Math.max(0, Math.min(100, (v / (s.max || 100)) * 100));
+    el.style.width = p.toFixed(1) + '%';
+    el.classList.toggle('hot', !!s.alert && v >= s.alert);
+  });
+  document.querySelectorAll('[data-arc]').forEach(el => {
+    const s = SPEC[el.dataset.arc]; const p = Math.max(0, Math.min(100, ((x[s.f] || 0) / (s.max || 100)) * 100));
+    el.style.strokeDashoffset = (188.5 * (1 - p / 100)).toFixed(1);
+  });
+
+  const first = !LAST_SEEN; LAST_SEEN = true;
+  Object.keys(GFIELD).forEach(k => { const a = HIST[k], v = x[GFIELD[k]] || 0; if (first) a.fill(v); a.push(v); if (a.length > HN) a.shift(); });
+
+  // dynamic blocks
+  renderCoresMini(d.cores, x);
+  renderCoreLoad(d.cores);
+  renderStorage(d.drives);
+  renderProcs(d.topProcs);
+  drawAllGraphs();
+}
+
+function renderCoresMini(cores, x) {
+  const el = document.getElementById('coreMini'); if (!el || !Array.isArray(cores)) return;
+  const n = cores.length, half = Math.ceil(n / 2);
+  const items = [];
+  for (let r = 0; r < half; r++) for (const i of [r, r + half]) {
+    const c = cores[i]; if (!c) { items.push('<div></div>'); continue; }
+    items.push(`<div class="core"><span>${c.index}. CPU</span><div class="bar"><i style="width:${Math.min(100, c.clockMhz / 55)}%"></i></div><b>${i0(c.clockMhz)}<small> MHz</small></b></div>`);
+  }
+  el.style.gridTemplateRows = `repeat(${half},1fr)`;
+  el.innerHTML = items.join('');
+}
+function renderCoreLoad(cores) {
+  const el = document.getElementById('coreLoad'); if (!el || !Array.isArray(cores)) return;
+  const half = Math.ceil(cores.length / 2);
+  el.style.gridTemplateRows = `repeat(${half},1fr)`;
+  const items = [];
+  for (let r = 0; r < half; r++) for (const i of [r, r + half]) {
+    const c = cores[i]; if (!c) { items.push('<div></div>'); continue; }
+    items.push(`<div class="cl"><span>C${c.index}</span><div class="bar"><i style="width:${c.loadPct}%"></i></div><b>${i0(c.loadPct)}%</b></div>`);
+  }
+  el.innerHTML = items.join('');
+}
+function renderStorage(drives) {
+  if (!Array.isArray(drives)) return;
+  const html = drives.map(d => {
+    const mount = (d.mount || '').replace(/^([A-Z]:)\s+\1$/i, '$1');
+    const tot = d.totalGb || 0, used = tot * (d.usedPct || 0) / 100;
+    const cap = tot ? (tot >= 1000 ? `${(used / 1024).toFixed(1)} / ${(tot / 1024).toFixed(1)} TB` : `${i0(used)} / ${i0(tot)} GB`) : '';
+    return `<div class="srow"><div class="n">${esc(d.name)}${mount || cap ? `<small>${esc(mount)}${mount && cap ? ' • ' : ''}${cap}</small>` : ''}</div>
+      <div class="bar"><i style="width:${Math.min(100, d.usedPct || 0)}%"></i></div><b>${d.tempC === null || d.tempC === undefined ? '--' : i0(d.tempC) + '°C'}</b></div>`;
+  }).join('');
+  ['storClassic', 'storCockpit'].forEach(id => { const el = document.getElementById(id); if (el && el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; } });
+}
+function renderProcs(list) {
+  const el = document.getElementById('procList'); if (!el || !Array.isArray(list)) return;
+  const mx = Math.max(1, ...list.map(p => p.memMb));
+  el.innerHTML = list.map(p => `<div class="proc"><span>${esc(p.name)}</span><div class="bar"><i style="width:${(p.memMb / mx) * 100}%"></i></div><b>${p.memMb >= 1024 ? (p.memMb / 1024).toFixed(1) + ' GB' : i0(p.memMb) + ' MB'}</b></div>`).join('');
+}
+
+/* =====================================================================
+   GRAPHS (stepped area, like the reference)
+   ===================================================================== */
+function drawGraph(cv) {
+  const k = cv.dataset.graph, arr = HIST[k]; if (!arr) return;
+  const box = cv.parentElement, w = box.clientWidth, h = box.clientHeight;
+  if (!w || !h) return;
+  const px = SC * (window.devicePixelRatio || 1);
+  const W = Math.round(w * px), H = Math.round(h * px);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const c = cv.getContext('2d'); c.setTransform(px, 0, 0, px, 0, 0); c.clearRect(0, 0, w, h);
+
+  const floor = +cv.dataset.floor || 1;
+  let mx = Math.max(floor, ...arr), mn = Math.min(...arr);
+  if (cv.dataset.fixed) mx = +cv.dataset.fixed; else mx *= 1.06;
+  const pad = 3, step = w / (arr.length - 1);
+  const Y = v => h - pad - Math.min(1, v / mx) * (h - pad * 2);
+
+  c.strokeStyle = COL.line; c.globalAlpha = .55; c.lineWidth = 1; c.setLineDash([2, 5]);
+  c.beginPath(); for (let i = 1; i < 4; i++) { const y = Math.round(h / 4 * i) + .5; c.moveTo(0, y); c.lineTo(w, y); } c.stroke();
+  c.setLineDash([]); c.globalAlpha = 1;
+
+  c.beginPath();
+  arr.forEach((v, i) => { const x = i * step, y = Y(v); if (i === 0) c.moveTo(x, y); else { c.lineTo(x, Y(arr[i - 1])); c.lineTo(x, y); } });
+  c.strokeStyle = COL.a1; c.lineWidth = 2; c.lineJoin = 'round'; c.stroke();
+  if (!cv.dataset.nofill) {
+    c.lineTo(w, h); c.lineTo(0, h); c.closePath();
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, COL.a1 + '99'); g.addColorStop(1, COL.a1 + '18');
+    c.fillStyle = g; c.fill();
+  }
+  if (!cv.dataset.nolabels) {
+    c.font = '600 17px Bahnschrift,"Segoe UI",sans-serif'; c.fillStyle = COL.tx; c.globalAlpha = .9; c.textBaseline = 'top';
+    c.fillText(String(i0(mx / 1.06 > floor ? Math.max(...arr) : Math.max(...arr))), 6, 4);
+    c.textBaseline = 'bottom'; c.fillText(String(i0(mn)), 6, h - 3); c.globalAlpha = 1;
+  }
+}
+let raf = 0;
+function drawAllGraphs() {
+  if (raf) return;
+  raf = requestAnimationFrame(() => { raf = 0; document.querySelectorAll('.view.active canvas[data-graph]').forEach(drawGraph); });
+}
+
+/* =====================================================================
+   CLOCK / WEATHER / PRAYER
+   ===================================================================== */
+let city = 'istanbul';
+let prayer = { imsak:'05:48', gunes:'07:14', ogle:'12:57', ikindi:'15:58', aksam:'18:29', yatsi:'19:49' };
+const PNAMES = [['imsak','İmsak'],['gunes','Güneş'],['ogle','Öğle'],['ikindi','İkindi'],['aksam','Akşam'],['yatsi','Yatsı']];
+const toSec = s => { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 3600 + (m || 0) * 60; };
+
+function tick() {
+  const now = new Date();
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  set('clkTime', now.toLocaleTimeString('tr-TR', { hour12: false }));
+  set('clkDate', now.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric' }));
+  set('kTime', now.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit', hour12:false }));
+  set('kDate', now.toLocaleDateString('tr-TR', { weekday:'long', day:'numeric', month:'long' }));
+
+  const t = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  let ni = PNAMES.findIndex(([k]) => toSec(prayer[k]) > t), diff;
+  if (ni < 0) { ni = 0; diff = 86400 - t + toSec(prayer[PNAMES[0][0]]); } else diff = toSec(prayer[PNAMES[ni][0]]) - t;
+  const p2 = n => String(n).padStart(2, '0');
+  const rem = `${p2(Math.floor(diff / 3600))}:${p2(Math.floor(diff % 3600 / 60))}:${p2(diff % 60)}`;
+  set('rPrayer', `${PNAMES[ni][1]} ${prayer[PNAMES[ni][0]]} · -${rem}`);
+  document.querySelectorAll('[data-v="prayerRem"]').forEach(e => e.textContent = `${PNAMES[ni][1]} -${rem}`);
+  const g = document.getElementById('prayerGrid');
+  if (g) {
+    const key = PNAMES.map(([k]) => prayer[k]).join() + ni;
+    if (g.dataset.k !== key) { g.dataset.k = key; g.innerHTML = PNAMES.map(([k, n], i) => `<div class="slot ${i === ni ? 'next' : ''}"><span>${n}</span><b>${prayer[k]}</b></div>`).join(''); }
+  }
+}
+async function loadWeatherAndPrayer() {
+  try {
+    const r = await fetch(`https://wttr.in/${city}?format=j1`);
+    if (r.ok) {
+      const j = await r.json(), c = j.current_condition[0];
+      const desc = (c.lang_tr && c.lang_tr[0] && c.lang_tr[0].value) || (c.weatherDesc && c.weatherDesc[0].value) || '';
+      const name = city.charAt(0).toUpperCase() + city.slice(1);
+      document.getElementById('rWx').textContent = `${name} ${c.temp_C}°C ${desc}`;
+      const a = document.getElementById('kWxT'), b = document.getElementById('kWxD');
+      if (a) a.textContent = `${c.temp_C}°C`; if (b) b.textContent = `${name} · ${desc}`;
+    }
+  } catch (e) {}
+  try {
+    const r = await fetch(`https://api.aladhan.com/v1/timingsByCity?city=${city}&country=Turkey&method=13`);
+    if (r.ok) { const t = (await r.json()).data.timings; prayer = { imsak:t.Fajr, gunes:t.Sunrise, ogle:t.Dhuhr, ikindi:t.Asr, aksam:t.Maghrib, yatsi:t.Isha }; }
+  } catch (e) {}
+}
+function changeCity(c) { city = c; save('proCity', c); loadWeatherAndPrayer(); }
+function setInterval_(ms) { fetch('/api/config?interval=' + ms).catch(() => {}); save('proInt', ms); }
+
+/* =====================================================================
+   UI behaviour
+   ===================================================================== */
+function toggleDrawer() { document.getElementById('drawer').classList.toggle('open'); showUI(); }
+function toggleFs() { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else document.exitFullscreen().catch(() => {}); }
+let uiT;
+function showUI() {
+  document.body.classList.add('show-ui'); document.body.classList.remove('idle');
+  clearTimeout(uiT);
+  uiT = setTimeout(() => {
+    if (document.getElementById('drawer').classList.contains('open') || document.getElementById('ribbon').matches(':hover')) return showUI();
+    document.body.classList.remove('show-ui'); document.body.classList.add('idle');
+  }, 4000);
+}
+addEventListener('mousemove', e => { if (e.clientY < 90 || document.body.classList.contains('idle') || document.body.classList.contains('show-ui')) showUI(); });
+addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (k >= '1' && k <= String(LAYOUT_IDS.length)) setLayout(LAYOUT_IDS[+k - 1]);
+  else if (k === 't') nextTheme();
+  else if (k === 's') toggleDrawer();
+  else if (k === 'f') toggleFs();
+});
+
+function connect() {
+  const dot = document.getElementById('rDot');
+  const es = new EventSource('/api/stream');
+  es.onmessage = ev => { try { dot.style.background = ''; render(JSON.parse(ev.data)); } catch (e) { console.error(e); } };
+  es.onerror = () => { dot.style.background = 'var(--crit)'; es.close(); setTimeout(connect, 2000); };
+}
+
+(function init() {
+  buildUI();
+  city = load('proCity') || 'istanbul'; document.getElementById('selCity').value = city;
+  document.getElementById('selMargin').value = String(MARGIN);
+  const iv = load('proInt'); if (iv) document.getElementById('selInt').value = iv;
+  applyTheme(load('proTheme') || 'rog');
+  setLayout(load('proLayout') || 'classic');
+  tick(); setInterval(tick, 1000);
+  loadWeatherAndPrayer(); setInterval(loadWeatherAndPrayer, 900000);
+  showUI(); connect();
+  if (iv) setInterval_(iv);   // kayıtlı yenileme aralığını sunucuya uygula
+  setTimeout(scaleStage, 60);
+})();
+</script>
+</body>
+</html>

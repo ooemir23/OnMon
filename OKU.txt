@@ -1,0 +1,29 @@
+ROG Pro System Monitor
+======================
+AIDA64, RivaTuner (RTSS), HWiNFO vb. HICBIR harici programa ihtiyac duymaz.
+ - Sicaklik / fan / voltaj / guc : LibreHardwareMonitorLib.dll (klasorde hazir)
+ - NVIDIA GPU                    : surucuyle gelen nvml.dll
+ - FPS / kare suresi             : Windows ETW (PresentMon yontemi), RTSS gerekmez
+ - Disk, RAM, ag, CPU yuku       : Windows API / PDH
+
+Kurulum
+1) Zip'i bir klasore cikarin.
+2) Eski surum aciksa tray simgesi > sag tik > Cikis.
+3) ProSystemMonitor.exe veya Baslat.bat'a cift tiklayin. Uygulama yonetici izni ister
+   (sensor surucusu ve FPS olcumu icin gerekli; "Evet" deyin).
+4) Pano 2. monitorde tam ekran acilir. Tarayicida: http://127.0.0.1:17500
+
+Pano kisayollari: 1/2/3 duzen, T tema, S ayarlar, F tam ekran. Fareyi oynatinca ust menu gorunur.
+
+FPS notlari
+ - Oyun acikken (DX9/10/11/12 veya Vulkan/OpenGL) on plandaki oyunun FPS'i gosterilir.
+ - Tarayici, Discord, Steam arayuzu gibi uygulamalar oyun sayilmaz.
+ - Yonetici izni verilmezse FPS 0 gorunur, diger degerler calisir.
+
+Derleme
+ Derle.bat'a cift tiklayin (Windows'un kendi derleyicisiyle Kaynak\Program.cs'ten 64-bit exe uretir).
+ Not: exe MUTLAKA 64-bit olmalidir (NVML ve ETW icin). Derle.bat bunu otomatik ayarlar.
+ Eski surumler: Eski_Surum klasorunde.
+
+Okunamayan sensor "--" gosterilir (uydurma deger yazilmaz). Bazi kartlarda DIMM sicakligi
+LibreHardwareMonitor tarafindan desteklenmez; bu normaldir.
