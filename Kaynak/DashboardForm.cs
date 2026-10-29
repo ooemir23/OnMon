@@ -625,7 +625,14 @@ namespace ProSystemMonitor
         }
 
         // ---------------- ana çizim ----------------
+        private bool _loggedPaint;
         protected override void OnPaint(PaintEventArgs e)
+        {
+            try { PaintAll(e); }
+            catch (Exception ex) { if (!_loggedPaint) { _loggedPaint = true; Program.Log("paint", ex); } }
+        }
+
+        private void PaintAll(PaintEventArgs e)
         {
             G = e.Graphics;
             G.SmoothingMode = SmoothingMode.AntiAlias;

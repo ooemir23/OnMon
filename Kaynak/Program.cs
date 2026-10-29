@@ -44,6 +44,8 @@ namespace ProSystemMonitor
                     return;
                 }
 
+                Application.ThreadException += (o, e) => Log("ui-thread", e.Exception);
+                AppDomain.CurrentDomain.UnhandledException += (o, e) => Log("unhandled", e.ExceptionObject as Exception);
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
@@ -400,6 +402,16 @@ namespace ProSystemMonitor
             catch { }
         }
 
+        public static void Log(string where, Exception ex)
+        {
+            try
+            {
+                string f = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hata.log");
+                File.AppendAllText(f, DateTime.Now.ToString("s") + " [" + where + "] " + ex + "\r\n");
+            }
+            catch { }
+        }
+
         // ---------- Yerel pano ----------
         public static volatile DashboardForm Dash;
         public static volatile Snap LastSnap;
@@ -420,14 +432,19 @@ namespace ProSystemMonitor
             {
                 _ui.BeginInvoke((MethodInvoker)delegate
                 {
-                    if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); return; }
-                    var f = new DashboardForm();
-                    Dash = f;
-                    f.PlaceOnSecondMonitor();
-                    f.Show();
+                    try
+                    {
+                        if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); return; }
+                        var f = new DashboardForm();
+                        Dash = f;
+                        f.PlaceOnSecondMonitor();
+                        f.Show();
+                        Log("pano", new Exception("pano açıldı " + f.Bounds));
+                    }
+                    catch (Exception ex) { Log("pano", ex); Dash = null; }
                 });
             }
-            catch { }
+            catch (Exception ex) { Log("pano-invoke", ex); }
         }
 
         private static void SignalFirstInstance()
