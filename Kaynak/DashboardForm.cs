@@ -36,7 +36,9 @@ namespace ProSystemMonitor
         private string _fontMain = "Segoe UI", _fontLight = "Segoe UI", _fontMono = "Consolas";
         private bool _curHidden;
         private const float MicW = 440f;
-        internal bool _audioBar = true, _micBar = true;
+        internal bool _audioBar = true, _micBar = true, _volBar = true;
+        private const float VolW = 300f;
+        private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
         private float _lastMic = -1; private bool _lastMuted;
         internal readonly HashSet<string> _favs = new HashSet<string>();
         private readonly List<KeyValuePair<RectangleF, string>> _hits = new List<KeyValuePair<RectangleF, string>>();
@@ -58,9 +60,10 @@ namespace ProSystemMonitor
                     int i = line.IndexOf('=');
                     if (i < 0) continue;
                     string k = line.Substring(0, i).Trim(), v = line.Substring(i + 1).Trim();
-                    if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida")) _layout = v;
+                    if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida" || v == "studio")) _layout = v;
                     else if (k == "audiobar") _audioBar = v != "0";
                     else if (k == "micbar") _micBar = v != "0";
+                    else if (k == "volbar") _volBar = v != "0";
                     else if (k == "fanmap")
                     {
                         string[] fp = v.Split(new[] { ',' });
@@ -83,7 +86,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs) });
             }
             catch { }
         }
@@ -133,6 +136,12 @@ namespace ProSystemMonitor
                     float lv = AudioSwitch.MicLevel; bool mu = AudioSwitch.MicMuted;
                     if (mu != _lastMuted || Math.Abs(lv - _lastMic) > 0.04f) { _lastMic = lv; _lastMuted = mu; _dirty = true; }
                 }
+                if (_volBar || _layout == "studio")
+                {
+                    AudioSwitch.PollVolume();
+                    float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
+                    if (vm != _lastVolMuted || Math.Abs(vl - _lastVol) > 0.004f) { _lastVol = vl; _lastVolMuted = vm; _dirty = true; }
+                }
                 int sec = DateTime.Now.Second;
                 if (_dirty || sec != _lastSecond) { _dirty = false; _lastSecond = sec; Invalidate(); }
                 if (!_curHidden && (DateTime.UtcNow - _lastMouse).TotalSeconds > 3 && ContextMenuStrip != null && !ContextMenuStrip.Visible && (_settings == null || _settings.IsDisposed)) { _curHidden = true; Cursor.Hide(); }
@@ -160,6 +169,7 @@ namespace ProSystemMonitor
         {
             base.OnMouseMove(e);
             _lastMouse = DateTime.UtcNow;
+            if (_volDrag && _sc > 0 && _volRect.Width > 0 && e.Button == MouseButtons.Left) SetVolumeTo(((e.X - _ox) / _sc - _volRect.X) / _volRect.Width);
             if (_curHidden) { _curHidden = false; Cursor.Show(); }
         }
 
@@ -170,6 +180,10 @@ namespace ProSystemMonitor
             else if (e.KeyCode == Keys.D2) SetLayout("hud");
             else if (e.KeyCode == Keys.D3) SetLayout("cockpit");
             else if (e.KeyCode == Keys.D4) SetLayout("aida");
+            else if (e.KeyCode == Keys.D5) SetLayout("studio");
+            else if (e.KeyCode == Keys.Up) ChangeVolume(0.05f);
+            else if (e.KeyCode == Keys.Down) ChangeVolume(-0.05f);
+            else if (e.KeyCode == Keys.V) ToggleVolMute();
             else if (e.KeyCode == Keys.T) NextTheme();
             else if (e.KeyCode == Keys.S) NextAudio();
             else if (e.KeyCode == Keys.M) ToggleMic();
@@ -378,6 +392,38 @@ namespace ProSystemMonitor
             SwitchAudio(list[(i + 1) % list.Count].Id);
         }
 
+        internal void ChangeVolume(float d)
+        {
+            float target = Math.Max(0f, Math.Min(1f, AudioSwitch.VolLevel + d));
+            AudioSwitch.VolLevel = target; _dirty = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.SetVolume(target); });
+        }
+
+        internal void SetVolumeTo(float v)
+        {
+            v = Math.Max(0f, Math.Min(1f, v));
+            AudioSwitch.VolLevel = v; AudioSwitch.VolMuted = false; _dirty = true; Invalidate();
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.SetVolume(v); });
+        }
+
+        internal void ToggleVolMute()
+        {
+            AudioSwitch.VolMuted = !AudioSwitch.VolMuted; _dirty = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.ToggleVolMute(); AudioSwitch.PollVolume(); _dirty = true; });
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            ChangeVolume(e.Delta > 0 ? 0.02f : -0.02f);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            _volDrag = false;
+        }
+
         internal void ToggleMic()
         {
             System.Threading.ThreadPool.QueueUserWorkItem(delegate { AudioSwitch.ToggleMicMute(); AudioSwitch.PollMic(); _dirty = true; });
@@ -406,7 +452,14 @@ namespace ProSystemMonitor
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
             float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
             foreach (var h in _hits)
-                if (h.Key.Contains(cx, cy)) { if (h.Value == "mic:toggle") ToggleMic(); else SwitchAudio(h.Value); return; }
+                if (h.Key.Contains(cx, cy))
+                {
+                    if (h.Value == "mic:toggle") ToggleMic();
+                    else if (h.Value == "vol:mute") ToggleVolMute();
+                    else if (h.Value == "vol:bar") { _volRect = h.Key; _volDrag = true; SetVolumeTo((cx - h.Key.X) / h.Key.Width); }
+                    else SwitchAudio(h.Value);
+                    return;
+                }
         }
 
         internal void SetLayout(string id) { _layout = id; SaveSettings(); _dirty = true; Invalidate(); }
@@ -770,7 +823,7 @@ namespace ProSystemMonitor
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
-            bool strip = _audioBar || _micBar;
+            bool strip = _audioBar || _micBar || _volBar;
             float chh = strip ? 1112f : 1080f;
             float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
@@ -786,7 +839,8 @@ namespace ProSystemMonitor
             }
             else
             {
-                if (_layout == "aida") DrawAida(s);
+                if (_layout == "studio") DrawStudio(s);
+                else if (_layout == "aida") DrawAida(s);
                 else if (_layout == "hud") DrawHud(s);
                 else if (_layout == "cockpit") DrawCockpit(s);
                 else DrawClassic(s);
@@ -796,7 +850,7 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 14 - (_micBar ? MicW + 12 : 0), (_audioBar || _micBar) ? 1084 : 1054, w, 26);
+                    var r = new RectangleF(1920 - w - 14 - RightW(), (_audioBar || _micBar || _volBar) ? 1084 : 1054, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
@@ -1112,13 +1166,14 @@ namespace ProSystemMonitor
             _hits.Clear();
             Theme t = _th;
             if (_micBar) DrawMic();
+            if (_volBar) DrawVol();
             if (!_audioBar) return;
             AudioDevice[] all = AudioSwitch.Devices;
             if (all == null || all.Length == 0) return;
             var show = new List<AudioDevice>();
             foreach (AudioDevice d in all) if (_favs.Count == 0 || _favs.Contains(d.Id) || d.IsDefault) show.Add(d);
             Font f = F(18, true, false);
-            float x = 10, y = 1084, h = 26, maxX = 1920 - 340 - (_micBar ? MicW + 12 : 0);
+            float x = 10, y = 1084, h = 26, maxX = 1920 - 340 - RightW();
             Txt("♪", F(20, true, false), t.A1, x, y, 20, h, 1);
             x += 24;
             foreach (AudioDevice d in show)
@@ -1136,6 +1191,48 @@ namespace ProSystemMonitor
                 _hits.Add(new KeyValuePair<RectangleF, string>(r, d.Id));
                 x += w + 8;
             }
+        }
+
+        private float RightW() { return (_micBar ? MicW + 12 : 0) + (_volBar ? VolW + 12 : 0); }
+
+        private void SpeakerIcon(float x, float y, Color ic, bool muted, float lvl)
+        {
+            G.FillPolygon(Br(ic), new[] { new PointF(x, y + 8), new PointF(x + 5, y + 8), new PointF(x + 11, y + 3), new PointF(x + 11, y + 19), new PointF(x + 5, y + 14), new PointF(x, y + 14) });
+            if (muted) { G.DrawLine(Pn(ic, 2.2f), x + 14, y + 7, x + 22, y + 15); G.DrawLine(Pn(ic, 2.2f), x + 22, y + 7, x + 14, y + 15); return; }
+            if (lvl > 0.01f) G.DrawArc(Pn(ic, 1.8f), x + 7, y + 6, 10, 10, -50, 100);
+            if (lvl > 0.40f) G.DrawArc(Pn(ic, 1.8f), x + 5, y + 3, 16, 16, -55, 110);
+            if (lvl > 0.75f) G.DrawArc(Pn(ic, 1.8f), x + 3, y + 0, 22, 22, -55, 110);
+        }
+
+        private void DrawVol()
+        {
+            Theme t = _th;
+            float w = VolW, h = 26, x = 1920 - 14 - (_micBar ? MicW + 12 : 0) - w, y = 1084;
+            var r = new RectangleF(x, y, w, h);
+            bool avail = AudioSwitch.VolAvailable, muted = AudioSwitch.VolMuted;
+            float lv = Math.Max(0f, Math.Min(1f, AudioSwitch.VolLevel));
+            using (GraphicsPath p = RR(r, h / 2f))
+            {
+                if (muted) G.FillPath(Br(t.Crit), p);
+                else { G.FillPath(Br(t.Tile), p); G.DrawPath(Pn(avail ? t.A1 : t.Line, 1.5f), p); }
+            }
+            Color ic = muted ? Color.White : (avail ? t.A1 : t.Dim);
+            SpeakerIcon(x + 9, y + 2, ic, muted, lv);
+            if (!avail) { Txt("Ses yok", F(16, true, false), t.Dim, x + 40, y, w - 50, h, 0); return; }
+            float bx = x + 40, bw = w - 40 - 58;
+            var track = new RectangleF(bx, y + h / 2f - 4, bw, 8);
+            using (GraphicsPath tp = RR(track, 4)) G.FillPath(Br(muted ? Al(Color.White, 70) : t.Track), tp);
+            if (lv > 0.005f && !muted)
+            {
+                var fillr = new RectangleF(track.X, track.Y, Math.Max(8, bw * lv), 8);
+                using (GraphicsPath fp = RR(fillr, 4))
+                using (var lb = new LinearGradientBrush(new RectangleF(track.X - 1, track.Y - 1, bw + 2, 10), t.A1, t.A2, 0f)) G.FillPath(lb, fp);
+            }
+            float kx = bx + bw * (muted ? 0 : lv);
+            G.FillEllipse(Br(muted ? Color.White : t.Tx), kx - 6, y + h / 2f - 6, 12, 12);
+            Txt(muted ? "KAPALI" : I0(lv * 100) + "%", F(16, true, false), muted ? Color.White : t.Tx, x + w - 58, y, 50, h, 2);
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(x, y, 36, h), "vol:mute"));
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(bx - 6, y, bw + 12, h), "vol:bar"));
         }
 
         private void DrawMic()
@@ -1340,6 +1437,86 @@ namespace ProSystemMonitor
             PACpu(b[0], s); PAGpu(b[1], s);
             RectangleF[] c = Row(825, 245, 940, 310, 630);
             PAStorage(c[0], s); PAPower(c[1], s); PANet(c[2], s);
+        }
+
+        // ---------------- Komuta Merkezi düzeni ----------------
+        private void PSound(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            bool vm = AudioSwitch.VolMuted, mm = AudioSwitch.MicMuted;
+            RectangleF c = Card(r, "SES", Shorten(AudioSwitch.DefaultName, 28), AudioSwitch.VolAvailable ? (vm ? "KAPALI" : I0(AudioSwitch.VolLevel * 100) + "%") : null);
+            float rowH = Math.Min(60, c.Height / 3f);
+            Font f = F(22, true, false);
+            // çıkış
+            float y = c.Y + 2;
+            SpeakerIcon(c.X + 2, y + rowH / 2f - 11, vm ? t.Crit : t.A1, vm, AudioSwitch.VolLevel);
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(c.X, y, 40, rowH), "vol:mute"));
+            var track = new RectangleF(c.X + 46, y + rowH / 2f - 6, c.Width - 46, 12);
+            using (GraphicsPath tp = RR(track, 6)) G.FillPath(Br(t.Track), tp);
+            float lv = Math.Max(0f, Math.Min(1f, AudioSwitch.VolLevel));
+            if (lv > 0.005f && !vm)
+            {
+                var fr = new RectangleF(track.X, track.Y, Math.Max(12, track.Width * lv), 12);
+                using (GraphicsPath fp = RR(fr, 6))
+                using (var lb = new LinearGradientBrush(new RectangleF(track.X - 1, track.Y - 1, track.Width + 2, 14), t.A1, t.A2, 0f)) G.FillPath(lb, fp);
+            }
+            G.FillEllipse(Br(t.Tx), track.X + track.Width * (vm ? 0 : lv) - 9, track.Y + 6 - 9, 18, 18);
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(track.X - 8, y, track.Width + 16, rowH), "vol:bar"));
+            // mikrofon
+            y += rowH + 4;
+            var mr = new RectangleF(c.X, y, c.Width, rowH - 6);
+            using (GraphicsPath mp = RR(mr, 10))
+            {
+                if (mm) G.FillPath(Br(t.Crit), mp); else { G.FillPath(Br(t.Tile), mp); G.DrawPath(Pn(t.Line, 1), mp); }
+            }
+            Color tc = mm ? Color.White : t.Tx;
+            Txt(AudioSwitch.MicAvailable ? Fit(AudioSwitch.MicName, f, mr.Width * 0.5f) : "Mikrofon yok", f, tc, mr.X + 14, mr.Y, mr.Width * 0.5f, mr.Height, 0);
+            if (AudioSwitch.MicAvailable)
+            {
+                if (!mm)
+                {
+                    float lvm = (float)Math.Sqrt(Math.Max(0, Math.Min(1, AudioSwitch.MicLevel)));
+                    BarAt(mr.X + mr.Width * 0.5f + 20, mr.Y + mr.Height / 2f - 4, mr.Width * 0.5f - 110, lvm * 100, lvm > 0.92f, 8);
+                }
+                Txt(mm ? "KAPALI" : "AÇIK", f, tc, mr.Right - 90, mr.Y, 80, mr.Height, 2);
+                _hits.Add(new KeyValuePair<RectangleF, string>(mr, "mic:toggle"));
+            }
+            // çıkış cihazı çipleri
+            y += rowH;
+            float cx = c.X, ch = Math.Max(20, Math.Min(34, c.Bottom - y - 4));
+            if (c.Bottom - y >= 24)
+            {
+                Font fc = F(16, true, false);
+                AudioDevice[] all = AudioSwitch.Devices;
+                if (all != null)
+                    foreach (AudioDevice d in all)
+                    {
+                        if (_favs.Count > 0 && !_favs.Contains(d.Id) && !d.IsDefault) continue;
+                        string nm = Fit(d.Name, fc, 200);
+                        float w = TW(nm, fc) + 22;
+                        if (cx + w > c.Right) break;
+                        var cr = new RectangleF(cx, y, w, ch);
+                        using (GraphicsPath cp = RR(cr, ch / 2f))
+                        {
+                            if (d.IsDefault) G.FillPath(Br(t.A1), cp); else { G.FillPath(Br(t.Tile), cp); G.DrawPath(Pn(t.Line, 1), cp); }
+                        }
+                        Txt(nm, fc, d.IsDefault ? t.Bg : t.Tx, cr.X, cr.Y, cr.Width, cr.Height, 1);
+                        _hits.Add(new KeyValuePair<RectangleF, string>(cr, d.Id));
+                        cx += w + 6;
+                    }
+            }
+        }
+
+        private void DrawStudio(Snap s)
+        {
+            RectangleF[] a = Row(10, 300, 560, 770, 560);
+            PCpu(a[0], s, true); PFps(a[1], s, true); PGpu(a[2], s);
+            RectangleF[] b = Row(320, 250, 650, 420, 420, 380);
+            PCores(b[0], s); PTemps(b[1], s); PGpuGraph(b[2], s); PPower(b[3], s);
+            RectangleF[] c = Row(580, 250, 450, 450, 500, 250, 200);
+            PMem(c[0], s); PNet(c[1], s); PDisks(c[2], s); PFans(c[3], s); PVolts(c[4], s);
+            RectangleF[] d = Row(840, 234, 540, 380, 530, 420);
+            PSound(d[0], s); PProcs(d[1], s); PSys(d[2], s); PClock(d[3], s);
         }
 
         // ---------------- düzenler ----------------

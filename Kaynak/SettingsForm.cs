@@ -150,9 +150,9 @@ namespace ProSystemMonitor
             p.Controls.Add(H("Görünüm", 0));
 
             p.Controls.Add(Sub("DÜZEN", 0, 44, 200));
-            _layoutList = new ListBox { Left = 0, Top = 68, Width = 260, Height = 150, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 34 };
-            string[] names = { "Klasik", "Oyun HUD", "Pro Kokpit", "Sensör Paneli" };
-            string[] ids = { "classic", "hud", "cockpit", "aida" };
+            _layoutList = new ListBox { Left = 0, Top = 68, Width = 260, Height = 176, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 34 };
+            string[] names = { "Klasik", "Oyun HUD", "Pro Kokpit", "Sensör Paneli", "Komuta Merkezi" };
+            string[] ids = { "classic", "hud", "cockpit", "aida", "studio" };
             foreach (string n in names) _layoutList.Items.Add(n);
             _layoutList.DrawItem += delegate (object s, DrawItemEventArgs e)
             {
@@ -165,9 +165,9 @@ namespace ProSystemMonitor
             _layoutList.SelectedIndexChanged += delegate { if (!_loading && _layoutList.SelectedIndex >= 0) _d.SetLayout(ids[_layoutList.SelectedIndex]); };
             p.Controls.Add(_layoutList);
 
-            p.Controls.Add(Sub("KENAR BOŞLUĞU", 0, 232, 200));
-            var tb = new TrackBar { Left = 0, Top = 254, Width = 260, Minimum = 0, Maximum = 48, TickFrequency = 8, SmallChange = 4, LargeChange = 8, Value = Math.Max(0, Math.Min(48, _d._margin)) };
-            var tl = new Label { Left = 270, Top = 262, Width = 80, ForeColor = Tx, Text = _d._margin + " px" };
+            p.Controls.Add(Sub("KENAR BOŞLUĞU", 0, 252, 200));
+            var tb = new TrackBar { Left = 0, Top = 274, Width = 260, Minimum = 0, Maximum = 48, TickFrequency = 8, SmallChange = 4, LargeChange = 8, Value = Math.Max(0, Math.Min(48, _d._margin)) };
+            var tl = new Label { Left = 270, Top = 282, Width = 80, ForeColor = Tx, Text = _d._margin + " px" };
             tb.Scroll += delegate { tl.Text = tb.Value + " px"; if (!_loading) { _d._margin = tb.Value; _d.SaveSettings(); _d.Invalidate(); } };
             p.Controls.Add(tb); p.Controls.Add(tl);
 
@@ -231,6 +231,7 @@ namespace ProSystemMonitor
             _micMute = Ck("Mikrofonu sustur", 170, 432, 200, false, v => { if (v != AudioSwitch.MicMuted) _d.ToggleMic(); });
             p.Controls.Add(_micMute);
             p.Controls.Add(Ck("Alt çubukta mikrofon göstergesi", 380, 432, 300, _d._micBar, v => { _d._micBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            p.Controls.Add(Ck("Alt çubukta ses seviyesi kaydırıcısı", 380, 462, 320, _d._volBar, v => { _d._volBar = v; _d.SaveSettings(); _d.Invalidate(); }));
             p.Controls.Add(Sub("Anlık seviye", 0, 478, 100));
             _micBarCtl = new ProgressBar { Left = 100, Top = 480, Width = 400, Height = 14, Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
             p.Controls.Add(_micBarCtl);

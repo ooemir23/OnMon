@@ -19,6 +19,8 @@ namespace ProSystemMonitor
         public static volatile string MicName = "";
         public static volatile bool MicAvailable, MicMuted;
         public static volatile float MicLevel;
+        public static volatile bool VolAvailable, VolMuted;
+        public static volatile float VolLevel;
         private static readonly object _lock = new object();
         private static string _micId = "";
 
@@ -238,6 +240,80 @@ namespace ProSystemMonitor
                 return ok;
             }
             catch { return false; }
+        }
+
+        private static IEpVol OutVol(out IDev dev, out IEnum en)
+        {
+            en = (IEnum)(new MMDeviceEnumeratorCom());
+            dev = null;
+            if (en.GetDefaultAudioEndpoint(0, 0, out dev) != 0 || dev == null) return null;
+            object o; Guid gv = typeof(IEpVol).GUID;
+            if (dev.Activate(ref gv, 23, IntPtr.Zero, out o) == 0 && o != null) return (IEpVol)o;
+            return null;
+        }
+
+        /// <summary>Varsayılan çıkış cihazının ses seviyesini ve sessiz durumunu okur.</summary>
+        public static void PollVolume()
+        {
+            try
+            {
+                IDev d; IEnum en;
+                IEpVol v = OutVol(out d, out en);
+                if (v == null) { VolAvailable = false; }
+                else
+                {
+                    float lv; bool mu;
+                    v.GetMasterVolumeLevelScalar(out lv); v.GetMute(out mu);
+                    VolLevel = lv; VolMuted = mu; VolAvailable = true;
+                    Marshal.ReleaseComObject(v);
+                }
+                if (d != null) Marshal.ReleaseComObject(d);
+                Marshal.ReleaseComObject(en);
+            }
+            catch { VolAvailable = false; }
+        }
+
+        /// <summary>Çıkış ses seviyesini ayarlar (0..1).</summary>
+        public static void SetVolume(float level)
+        {
+            try
+            {
+                level = Math.Max(0f, Math.Min(1f, level));
+                IDev d; IEnum en;
+                IEpVol v = OutVol(out d, out en);
+                if (v != null)
+                {
+                    Guid ctx = Guid.Empty;
+                    v.SetMasterVolumeLevelScalar(level, ref ctx);
+                    if (level > 0) v.SetMute(false, ref ctx);
+                    VolLevel = level;
+                    Marshal.ReleaseComObject(v);
+                }
+                if (d != null) Marshal.ReleaseComObject(d);
+                Marshal.ReleaseComObject(en);
+            }
+            catch { }
+        }
+
+        /// <summary>Çıkışı sessize alır / açar.</summary>
+        public static void ToggleVolMute()
+        {
+            try
+            {
+                IDev d; IEnum en;
+                IEpVol v = OutVol(out d, out en);
+                if (v != null)
+                {
+                    bool m; v.GetMute(out m);
+                    Guid ctx = Guid.Empty;
+                    v.SetMute(!m, ref ctx);
+                    VolMuted = !m;
+                    Marshal.ReleaseComObject(v);
+                }
+                if (d != null) Marshal.ReleaseComObject(d);
+                Marshal.ReleaseComObject(en);
+            }
+            catch { }
         }
 
         /// <summary>Varsayılan ses çıkışını değiştirir (oyun, iletişim ve çoklu ortam rolleri).</summary>

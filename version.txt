@@ -1,4 +1,4 @@
-version=11
+version=12
 file=ProSystemMonitor.exe
-sha256=03ead9b5850ad00ba49fa860f9e0814942247dd366e93279ea673072cc9ec68d
-notes=Güncelleme özelliği eklendi.\nFan eşleme ayarı.
+sha256=0082f5ed803aa8ec6c8d9d21431a65412ea87a2376df0fa85ecdfb60af8654aa
+notes=Yeni Komuta Merkezi düzeni (5).\nAlt çubukta ses seviyesi kaydırıcısı (tekerlek, ↑/↓, V ile sessiz).
