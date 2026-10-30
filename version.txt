@@ -1,4 +1,4 @@
-version=31
+version=32
 file=ProSystemMonitor.exe
-sha256=3a78d4843811238747c45282b117f0b7ee81314320b9625a5cb2ac77e487a654
-notes=Cetra kulaklık: kutudaki kulaklıkta şarj simgesi.
+sha256=88c16083889ac67713944fbcaae5592fd10dc3c2da41e97a4c10298332b53836
+notes=Cetra rozetleri bağlı değilken soluk, bağlanınca renkli.

@@ -197,11 +197,12 @@ namespace ProSystemMonitor
 
         private static KeyValuePair<string, int>[] _pnp = new KeyValuePair<string, int>[0];
         private static KeyValuePair<string, int>[] _rog = new KeyValuePair<string, int>[0];
+        public static volatile bool RogOffline;
         private static volatile int _rl = -1, _rr = -1, _rc = -1, _inMask = -1;
         // CC-12-08 bayt5: bit0 = sol kulaklık kutuda, bit4 = sağ kulaklık kutuda (kutudaki kulaklık şarj olur)
         private static void RogPublish()
         {
-            bool known = _inMask >= 0;
+            bool known = _inMask >= 0 && !RogOffline;
             string sl = "Cetra Sol" + ((known && (_inMask & 0x01) != 0) ? " \u26A1" : "");
             string sr = "Cetra Sağ" + ((known && (_inMask & 0x10) != 0) ? " \u26A1" : "");
             _rog = new[] {
@@ -245,6 +246,8 @@ namespace ProSystemMonitor
                                     if (buf[2] == 0x09 && (buf[5] + buf[6] + buf[7]) > 0 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
                                     { _rl = buf[5]; _rr = buf[6]; _rc = buf[7]; }
                                     else if (buf[2] == 0x08) _inMask = buf[5];
+                                    if (buf[2] == 0x01) RogOffline = (buf[5] == 0);
+                                    else if (buf[2] == 0x09) RogOffline = false;
                                     if (_rl >= 0) RogPublish();
                                 }
                             }

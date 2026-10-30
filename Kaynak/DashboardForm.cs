@@ -1233,8 +1233,10 @@ namespace ProSystemMonitor
                     float bw = TW(txt, fbat) + 22;
                     if (bx + bw > 1100) break;
                     var br = new RectangleF(bx, y + 2, bw, h - 4);
-                    using (GraphicsPath bp = RR(br, (h - 4) / 2f)) { G.FillPath(Br(kv.Value <= 15 ? Al(t.Crit, 90) : t.Tile), bp); G.DrawPath(Pn(kv.Value <= 15 ? t.Crit : t.Line, 1.2f), bp); }
-                    Txt(txt, fbat, kv.Value <= 15 ? Color.White : t.Tx, br.X, br.Y, br.Width, br.Height, 1);
+                    bool off = Peripherals.RogOffline && kv.Key.StartsWith("Cetra");
+                    bool low = !off && kv.Value <= 15;
+                    using (GraphicsPath bp = RR(br, (h - 4) / 2f)) { G.FillPath(Br(low ? Al(t.Crit, 90) : t.Tile), bp); G.DrawPath(Pn(low ? t.Crit : t.Line, 1.2f), bp); }
+                    Txt(txt, fbat, low ? Color.White : (off ? Al(t.Dim, 140) : t.Tx), br.X, br.Y, br.Width, br.Height, 1);
                     bx += bw + 8;
                 }
             }
