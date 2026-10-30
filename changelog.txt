@@ -1,3 +1,4 @@
+v49 - Otomatik başlatma görevi, exe dosyası değişse/silinse bile açılışta güncel yola onarılır.
 v48 - Görev yöneticisinde ve pencerelerde ad "OnMon"; zamanlayıcıda saat/dakika/saniye açılır listeleri.
 v47 - Çıkışta onay; kapatma/yeniden başlatma zamanlayıcısı (Ayarlar > Zamanlayıcı) ve saatin yanında geri sayım.
 v46 - Win+D titremesini azaltmak için küçült/aç animasyonu kapatıldı.

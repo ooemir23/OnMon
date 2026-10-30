@@ -77,6 +77,7 @@ namespace ProSystemMonitor
                 }) { IsBackground = true, Priority = ThreadPriority.BelowNormal };
                 pollThread.Start();
                 Updater.Cleanup();
+                new Thread(() => { Thread.Sleep(20000); RepairAutostart(); }) { IsBackground = true, Priority = ThreadPriority.BelowNormal }.Start();
                 Updater.StartBackground();
 
                 if (args == null || !args.Contains("--silent"))
@@ -173,6 +174,26 @@ namespace ProSystemMonitor
                 }
             }
             catch { return -1; }
+        }
+
+        /// <summary>Otomatik başlatma görevi başka/silinmiş bir exe yolunu gösteriyorsa (sürüm dosyası değişince) şu anki exe'ye günceller.</summary>
+        public static void RepairAutostart()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("schtasks.exe", "/Query /TN " + AutostartTask + " /XML") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.Unicode };
+                string xml;
+                using (Process p = Process.Start(psi)) { xml = p.StandardOutput.ReadToEnd(); if (!p.WaitForExit(15000)) { try { p.Kill(); } catch { } return; } if (p.ExitCode != 0) return; }
+                int a = xml.IndexOf("<Command>"), b = xml.IndexOf("</Command>");
+                if (a < 0 || b < a) return;
+                string cur = System.Net.WebUtility.HtmlDecode(xml.Substring(a + 9, b - a - 9)).Trim().Trim('"');
+                if (!string.Equals(cur, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log("otomatik-baslat", new Exception("görev yolu güncellendi: " + cur + " -> " + Application.ExecutablePath));
+                    SetAutostart(true);
+                }
+            }
+            catch { }
         }
 
         public static bool IsAutostartEnabled()
