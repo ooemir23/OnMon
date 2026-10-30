@@ -1,3 +1,4 @@
+v47 - Çıkışta onay; kapatma/yeniden başlatma zamanlayıcısı (Ayarlar > Zamanlayıcı) ve saatin yanında geri sayım.
 v46 - Win+D titremesini azaltmak için küçült/aç animasyonu kapatıldı.
 v45 - Win+D: masaüstü odaktayken pano geçici olarak en üste çıkar, uygulama öne gelince arkaya iner.
 v44 - İmsaktan sonra "Güneşe" geri sayımı; Win+D için daha hızlı geri getirme (0.25 sn) ve hata.log kaydı.

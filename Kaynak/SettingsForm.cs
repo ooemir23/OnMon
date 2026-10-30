@@ -64,6 +64,7 @@ namespace ProSystemMonitor
             AddPage(side, "Cihaz pilleri", BuildDevices());
             AddPage(side, "Güncelleme", BuildUpdate());
             AddPage(side, "Tanılama", BuildDiag());
+            AddPage(side, "Zamanlayıcı", BuildTimer());
             ShowPage(0);
 
             _t.Interval = 400;
@@ -112,6 +113,8 @@ namespace ProSystemMonitor
             if (i == 7) RefreshDevices();
             if (i == 8) RefreshUpdate();
             if (i == 9) RefreshDiag();
+            if (_tmrTick != null) _tmrTick.Enabled = i == 10;
+            if (i == 10) RefreshTimer();
         }
 
         private Label H(string text, int top)
@@ -353,7 +356,7 @@ namespace ProSystemMonitor
             p.Controls.Add(Bt("Tarayıcıda aç", 0, 434, 160, delegate { Program.LaunchBrowserDashboard(); }));
             p.Controls.Add(Bt("Edge uygulaması olarak aç", 170, 434, 220, delegate { Program.LaunchEdgeDashboard(); }));
 
-            p.Controls.Add(Bt("Uygulamadan çık", 0, 500, 180, delegate { Program.ExitApp(); }));
+            p.Controls.Add(Bt("Uygulamadan çık", 0, 500, 180, delegate { Program.ExitAppAsk(); }));
             return p;
         }
 
@@ -479,6 +482,74 @@ namespace ProSystemMonitor
             }
             _hkStatus = new Label { Text = Hotkeys.Status, ForeColor = Color.FromArgb(255, 140, 120), Left = 0, Top = y0 + 54 + Hotkeys.Ids.Length * 38, Width = 690, Height = 24, Font = new Font("Segoe UI", 9.5f) };
             p.Controls.Add(_hkStatus);
+        }
+
+        private System.Windows.Forms.Timer _tmrTick;
+        private Label _tmrStatus;
+        private RadioButton _rbAt, _rbAfter;
+        private DateTimePicker _tmrAt;
+        private NumericUpDown _tmrH, _tmrM;
+        private ComboBox _tmrAct;
+        private CheckBox _tmrForce;
+
+        private Panel BuildTimer()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Kapatma / yeniden başlatma zamanlayıcısı", 0));
+            { var n = Sub("Bilgisayarı belirlediğin saatte ya da belirlediğin süre sonra kapatır veya yeniden başlatır. Kalan süre alt bilgi çubuğunda saatin yanında görünür. Zamanlayıcıyı Windows tutar, OnMon kapansa bile çalışır.", 0, 40, 720); n.Height = 40; p.Controls.Add(n); }
+
+            p.Controls.Add(Sub("NE ZAMAN", 0, 96, 300));
+            _rbAt = new RadioButton { Text = "Şu saatte:", Left = 0, Top = 122, Width = 140, Height = 28, ForeColor = Tx, Checked = true };
+            _tmrAt = new DateTimePicker { Left = 150, Top = 122, Width = 90, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddHours(DateTime.Now.Hour + 1) };
+            _rbAfter = new RadioButton { Text = "Şu kadar süre sonra:", Left = 0, Top = 160, Width = 170, Height = 28, ForeColor = Tx };
+            _tmrH = new NumericUpDown { Left = 180, Top = 160, Width = 60, Minimum = 0, Maximum = 72, Value = 1, BackColor = Card, ForeColor = Tx };
+            var lh = new Label { Text = "saat", Left = 246, Top = 164, Width = 40, ForeColor = Tx };
+            _tmrM = new NumericUpDown { Left = 290, Top = 160, Width = 60, Minimum = 0, Maximum = 59, Value = 0, BackColor = Card, ForeColor = Tx };
+            var lm = new Label { Text = "dakika", Left = 356, Top = 164, Width = 60, ForeColor = Tx };
+            p.Controls.Add(_rbAt); p.Controls.Add(_tmrAt); p.Controls.Add(_rbAfter); p.Controls.Add(_tmrH); p.Controls.Add(lh); p.Controls.Add(_tmrM); p.Controls.Add(lm);
+
+            p.Controls.Add(Sub("NE YAPSIN", 0, 214, 300));
+            _tmrAct = new ComboBox { Left = 0, Top = 240, Width = 240, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Card, ForeColor = Tx, FlatStyle = FlatStyle.Flat };
+            _tmrAct.Items.Add("Bilgisayarı kapat"); _tmrAct.Items.Add("Bilgisayarı yeniden başlat");
+            _tmrAct.SelectedIndex = 0;
+            p.Controls.Add(_tmrAct);
+            _tmrForce = new CheckBox { Text = "Açık uygulamaları zorla kapat (kaydedilmemiş işler kaybolabilir)", Left = 0, Top = 280, Width = 600, Height = 28, ForeColor = Tx, Checked = ShutdownTimer.Force };
+            p.Controls.Add(_tmrForce);
+
+            p.Controls.Add(Bt("Zamanlayıcıyı başlat", 0, 330, 200, delegate
+            {
+                DateTime target;
+                if (_rbAt.Checked)
+                {
+                    target = DateTime.Today.AddHours(_tmrAt.Value.Hour).AddMinutes(_tmrAt.Value.Minute);
+                    if (target <= DateTime.Now.AddSeconds(20)) target = target.AddDays(1);   // saat geçtiyse yarın
+                }
+                else target = DateTime.Now.AddHours((double)_tmrH.Value).AddMinutes((double)_tmrM.Value);
+                int act = _tmrAct.SelectedIndex == 1 ? 2 : 1;
+                if (!ShutdownTimer.Start(act, target, _tmrForce.Checked)) { _tmrStatus.Text = ShutdownTimer.Error; _tmrStatus.ForeColor = Color.FromArgb(255, 140, 120); return; }
+                _d.Invalidate();
+                RefreshTimer();
+            }));
+            p.Controls.Add(Bt("İptal et", 210, 330, 130, delegate { ShutdownTimer.Cancel(); _d.Invalidate(); RefreshTimer(); }));
+            _tmrStatus = new Label { Left = 0, Top = 384, Width = 720, Height = 50, ForeColor = Tx, Font = new Font("Segoe UI", 11f) };
+            p.Controls.Add(_tmrStatus);
+
+            _tmrTick = new System.Windows.Forms.Timer { Interval = 1000 };
+            _tmrTick.Tick += delegate { RefreshTimer(); };
+            return p;
+        }
+
+        private void RefreshTimer()
+        {
+            if (_tmrStatus == null) return;
+            if (ShutdownTimer.Active)
+            {
+                TimeSpan r = ShutdownTimer.Remaining;
+                _tmrStatus.ForeColor = _acc;
+                _tmrStatus.Text = (ShutdownTimer.Action == 2 ? "Yeniden başlatma" : "Kapanış") + " kuruldu: " + ShutdownTimer.Target.ToString("dd.MM HH:mm") +
+                    "   —   kalan " + ((int)r.TotalHours) + " sa " + r.Minutes + " dk " + r.Seconds + " sn";
+            }
+            else { _tmrStatus.ForeColor = Dim; _tmrStatus.Text = "Kurulu zamanlayıcı yok."; }
         }
 
         private Panel BuildProfiles()

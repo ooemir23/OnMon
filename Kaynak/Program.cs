@@ -473,6 +473,13 @@ namespace ProSystemMonitor
 
         public static void RequestSensorDump() { if (_collector != null) _collector.RequestSensorDump(); }
 
+        /// <summary>Kullanıcı çıkış isterse önce onay sorar.</summary>
+        public static void ExitAppAsk()
+        {
+            var r = MessageBox.Show("OnMon'dan çıkılsın mı?\n\nPano ve tepsi simgesi kapanır.", "Çıkış", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2, MessageBoxOptions.DefaultDesktopOnly);
+            if (r == DialogResult.Yes) ExitApp();
+        }
+
         public static void ExitApp()
         {
             try { _running = false; if (_trayIcon != null) { _trayIcon.Visible = false; } } catch { }
@@ -596,11 +603,7 @@ namespace ProSystemMonitor
             }
 
             var exitItem = new ToolStripMenuItem("Çıkış");
-            exitItem.Click += (s, e) =>
-            {
-                _trayIcon.Visible = false;
-                Application.Exit();
-            };
+            exitItem.Click += (s, e) => ExitAppAsk();
 
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(exitItem);

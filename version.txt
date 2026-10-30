@@ -1,4 +1,4 @@
-version=46
+version=47
 file=ProSystemMonitor.exe
-sha256=4d63cc8f93427eefe82bcc58594f3f69ac085ae95ee41e775020db06bf3afcf1
-notes=Win+D titremesi azaltıldı.
+sha256=175bfcc0340c86736aed2517f18b9537e5c950f6816bafe950c3379c1b1922c3
+notes=Çıkış onayı ve kapatma zamanlayıcısı.

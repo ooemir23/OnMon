@@ -327,7 +327,7 @@ namespace ProSystemMonitor
                 _sf[i] = f;
             }
 
-            GameSession.LoadHistory(); AudioProfiles.Load(); Peripherals.StartBackground();
+            ShutdownTimer.Load(); GameSession.LoadHistory(); AudioProfiles.Load(); Peripherals.StartBackground();
             BuildMenu();
             _timer.Interval = 500;
             _timer.Tick += delegate
@@ -599,7 +599,7 @@ namespace ProSystemMonitor
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add(Mi("Küçült", null, false, delegate { UserMinimize(); }));
             m.Items.Add(Mi("Panoyu kapat", "", false, delegate { Close(); }));
-            m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitApp(); }));
+            m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitAppAsk(); }));
         }
 
         internal void MoveToScreen(Screen sc)
@@ -1480,6 +1480,17 @@ namespace ProSystemMonitor
                 var pr2 = new RectangleF(x - pw, y + 1, pw, h - 2);
                 using (GraphicsPath pp = RR(pr2, (h - 2) / 2f)) { G.FillPath(Br(Al(t.A1, 40)), pp); G.DrawPath(Pn(t.A1, 1.5f), pp); }
                 Txt(pr, fb, t.Tx, pr2.X, pr2.Y, pr2.Width, pr2.Height, 1);
+                x -= pw + 12;
+            }
+            if (ShutdownTimer.Active)
+            {
+                TimeSpan rem = ShutdownTimer.Remaining;
+                string sp2 = (ShutdownTimer.Action == 2 ? "Yeniden başlatma " : "Kapanış ") + ShutdownTimer.Format(rem);
+                bool soon = rem.TotalMinutes <= 10;
+                float sw2 = TW(sp2, fb) + 28;
+                var sr = new RectangleF(x - sw2, y + 1, sw2, h - 2);
+                using (GraphicsPath spp = RR(sr, (h - 2) / 2f)) { G.FillPath(Br(Al(soon ? t.Crit : t.A1, soon ? 120 : 40)), spp); G.DrawPath(Pn(soon ? t.Crit : t.A1, 1.5f), spp); }
+                Txt(sp2, fb, soon ? Color.White : t.Tx, sr.X, sr.Y, sr.Width, sr.Height, 1);
             }
         }
 
