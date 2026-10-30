@@ -1,3 +1,4 @@
+v43 - Win+D: pano masaüstünün hemen üstünde durur, masaüstü öne çıkınca yeniden yukarı çıkar.
 v42 - Win+D / masaüstünü göster panoyu küçültmesin (küçültme engeli + otomatik geri getirme).
 v41 - Parlaklık düğmesi en başa; ASUS yazısına tıklayınca sistem bilgisi (BIOS, anakart, RAM, Windows, açık kalma).
 v40 - Alt çubukta ASUS yanında parlaklık düğmesi (L tuşu da): %100/80/60/40/25.

@@ -119,10 +119,51 @@ namespace ProSystemMonitor
         internal bool _desk = true;          // arka planda kal: diğer pencereler üstüne gelebilir, Win+D küçültmez
         private bool _userMin;
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr h, uint cmd);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern IntPtr FindWindow(string cls, string title);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr h, int idx);
+
+        // Masaüstü pencereleri (Progman + WorkerW). "Masaüstünü göster" bunları öne çıkarır; pano onların hemen üstünde durarak görünür kalır.
+        private static List<IntPtr> DeskWins()
+        {
+            var l = new List<IntPtr>();
+            IntPtr pm = FindWindow("Progman", null); if (pm != IntPtr.Zero) l.Add(pm);
+            IntPtr w = IntPtr.Zero;
+            for (int i = 0; i < 8; i++) { w = FindWindowEx(IntPtr.Zero, w, "WorkerW", null); if (w == IntPtr.Zero) break; l.Add(w); }
+            return l;
+        }
+
+        private bool DeskAboveMe()
+        {
+            List<IntPtr> d = DeskWins(); if (d.Count == 0) return false;
+            IntPtr cur = GetWindow(Handle, 3);   // GW_HWNDPREV: üstümdeki pencereler
+            int guard = 0;
+            while (cur != IntPtr.Zero && guard++ < 4000) { if (d.Contains(cur)) return true; cur = GetWindow(cur, 3); }
+            return false;
+        }
+
+        // Panoyu masaüstünün hemen üstüne, diğer tüm pencerelerin altına yerleştirir.
         internal void SendToBottom()
         {
-            try { if (_desk && IsHandleCreated && !TopMost) SetWindowPos(Handle, new IntPtr(1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); } catch { }
+            try
+            {
+                if (!_desk || !IsHandleCreated || TopMost) return;
+                List<IntPtr> d = DeskWins();
+                IntPtr highest = IntPtr.Zero, h = GetWindow(Handle, 5);   // GW_HWNDLAST: en alttaki
+                int guard = 0;
+                while (h != IntPtr.Zero && guard++ < 4000) { if (d.Contains(h)) highest = h; h = GetWindow(h, 3); }
+                IntPtr after = highest == IntPtr.Zero ? new IntPtr(1) : GetWindow(highest, 3);
+                if (after == Handle) return;
+                IntPtr ins;
+                if (highest == IntPtr.Zero) ins = new IntPtr(1);                                  // masaüstü bulunamadı: en alta
+                else if (after == IntPtr.Zero || (GetWindowLong(after, -20) & 0x8) != 0) ins = new IntPtr(-2);   // üstte yalnız topmost'lar var
+                else ins = after;
+                SetWindowPos(Handle, ins, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+            }
+            catch { }
         }
+
         internal void UserMinimize() { _userMin = true; WindowState = FormWindowState.Minimized; }
         protected override CreateParams CreateParams
         {
@@ -243,6 +284,7 @@ namespace ProSystemMonitor
             _timer.Tick += delegate
             {
                 if (_desk && !_userMin && WindowState == FormWindowState.Minimized) { WindowState = FormWindowState.Normal; SendToBottom(); }   // Win+D sonrası geri getir
+                else if (_desk && !TopMost && WindowState != FormWindowState.Minimized && DeskAboveMe()) SendToBottom();   // masaüstü öne çıktıysa (Win+D) yine üstüne çık
                 if (WindowState == FormWindowState.Minimized || !Visible) return;
                 _tickN++;
                 if (_micBar || _layout == "studio" || _layout == "hud")

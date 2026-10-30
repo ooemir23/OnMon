@@ -1,4 +1,4 @@
-version=42
+version=43
 file=ProSystemMonitor.exe
-sha256=6a1e6998c273c73dbc9d0cd1b3384fef921fdf50977c1dcaac3f72f5a13c700c
-notes=Win+D panoyu küçültmez.
+sha256=7d60016e974fcd2599f7907e729a07d8fbe4141e848c4ce9d86b36347bfc9012
+notes=Win+D sonrası pano görünür kalır.
