@@ -1,3 +1,4 @@
+v40 - Alt çubukta ASUS yanında parlaklık düğmesi (L tuşu da): %100/80/60/40/25.
 v39 - v38 değişikliği geri alındı (pano yine tam ekran).
 v37 - Kısayollar Ses ve mikrofon sayfasına taşındı; ayarlar sayfalarında yerleşim hataları düzeltildi.
 v36 - Pano görev çubuğunda görünmez; "Arka planda kal" modu (üstüne pencere getirilebilir, Win+D küçültmez).

@@ -1,4 +1,4 @@
-version=39
+version=40
 file=ProSystemMonitor.exe
-sha256=a09823563c28fa385494d446b5965a4c7b64c7ac243a8e9487990beb3bbeac12
-notes=v38 değişikliği geri alındı.
+sha256=702d234a4d9480a4db96966a07344eb02e13d8c4e6e2947dd635b137cde35955
+notes=Parlaklık düğmesi eklendi.

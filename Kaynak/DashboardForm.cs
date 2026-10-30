@@ -43,6 +43,30 @@ namespace ProSystemMonitor
         private const float VolW = 300f;
         private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
         private float _lastMic = -1; private bool _lastMuted;
+        internal int _bright = 100;          // uygulama parlaklığı %
+        private RectangleF _brRect;
+        private static readonly int[] BrLevels = { 100, 80, 60, 40, 25 };
+        internal void NextBright()
+        {
+            int i = Array.IndexOf(BrLevels, _bright);
+            _bright = BrLevels[(i + 1) % BrLevels.Length];
+            SaveSettings(); _dirty = true; Invalidate();
+        }
+        private void DrawBrightBtn()
+        {
+            if (_brRect.Width <= 0) return;
+            Theme t = _th; RectangleF r = _brRect;
+            using (GraphicsPath bp = RR(r, r.Height / 2f)) { G.FillPath(Br(Color.FromArgb(255, 24, 26, 32)), bp); G.DrawPath(Pn(_bright < 100 ? t.A1 : Color.FromArgb(255, 120, 124, 134), 1.4f), bp); }
+            float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f;
+            Color c = _bright < 100 ? t.A1 : Color.FromArgb(255, 200, 204, 214);
+            G.FillEllipse(Br(c), cx - 4.5f, cy - 4.5f, 9, 9);
+            for (int k = 0; k < 8; k++)
+            {
+                double a = k * Math.PI / 4;
+                G.DrawLine(Pn(c, 1.6f), cx + (float)Math.Cos(a) * 7f, cy + (float)Math.Sin(a) * 7f, cx + (float)Math.Cos(a) * 10f, cy + (float)Math.Sin(a) * 10f);
+            }
+            if (_bright < 100) Txt(_bright + "%", F(14, true, false), t.A1, r.Right + 4, r.Y, 44, r.Height, 0);
+        }
         internal bool _desk = true;          // arka planda kal: diğer pencereler üstüne gelebilir, Win+D küçültmez
         private bool _userMin;
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
@@ -98,6 +122,7 @@ namespace ProSystemMonitor
                         TelemetryCollector.FanMap = fm;
                     }
                     else if (k == "topmost") TopMost = v == "1";
+                    else if (k == "bright") { int bv; if (int.TryParse(v, out bv) && bv >= 20 && bv <= 100) _bright = bv; }
                     else if (k == "desk") { hasDesk = true; _desk = v == "1"; }
                     else if (k == "micfav") { _micFavs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _micFavs.Add(x); }
                     else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _favs.Add(x); }
@@ -116,7 +141,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs) });
             }
             catch { }
         }
@@ -225,6 +250,7 @@ namespace ProSystemMonitor
             else if (e.KeyCode == Keys.M) ToggleMic();
             else if (e.KeyCode == Keys.F1 || e.KeyCode == Keys.F2) OpenSettings();
             else if (e.KeyCode == Keys.B) ToggleStrip();
+            else if (e.KeyCode == Keys.L) NextBright();
         }
 
         protected override void OnResize(EventArgs e)
@@ -529,6 +555,7 @@ namespace ProSystemMonitor
                     if (h.Value == "mic:toggle") ToggleMic();
                     else if (h.Value == "vol:mute") ToggleVolMute();
                     else if (h.Value == "out:next") NextAudio();
+                    else if (h.Value == "bright:next") NextBright();
                     else if (h.Value.StartsWith("prof:")) { int pi; if (int.TryParse(h.Value.Substring(5), out pi) && pi >= 0 && pi < AudioProfiles.All.Count) { _profIdx = pi; ApplyProfile(AudioProfiles.All[pi]); } }
                     else if (h.Value == "vol:bar") { _volRect = h.Key; _volDrag = true; SetVolumeTo((cx - h.Key.X) / h.Key.Width); }
                     else SwitchAudio(h.Value);
@@ -1002,7 +1029,15 @@ namespace ProSystemMonitor
             }
 
             DrawAudioBar();
+            _brRect = RectangleF.Empty;
             if (_topBar) DrawInfoBar(_snap, StripOn ? 1112f : 1080f);
+            if (_bright < 100)
+            {
+                G.ResetTransform();
+                G.FillRectangle(Br(Color.FromArgb((int)(255 * (100 - _bright) / 100f), 0, 0, 0)), 0, 0, W, Hh);
+                G.TranslateTransform(_ox, _oy); G.ScaleTransform(sc, sc);
+            }
+            DrawBrightBtn();
 
             if (t.Style == "crt")
             {
@@ -1247,11 +1282,14 @@ namespace ProSystemMonitor
             string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(tr);
             G.FillRectangle(Br(t.A1), 14, y + 4, 4, h - 8);
             Txt(brand, fb, t.Tx, 26, y, 300, h, 0);
-            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 26 + TW(brand, fb) + 18, y, 500, h, 0);
+            _brRect = new RectangleF(26 + TW(brand, fb) + 12, y + 1, 30, 30);
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(_brRect.X - 4, _brRect.Y - 4, 38 + (_bright < 100 ? 44 : 0), 38), "bright:next"));
+            float boff = 52 + (_bright < 100 ? 40 : 0);
+            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 26 + TW(brand, fb) + 18 + boff, y, 500, h, 0);
             KeyValuePair<string, int>[] bat = Peripherals.Items;
             if (bat.Length > 0)
             {
-                float bx = 26 + TW(brand, fb) + 18 + (Extras.WxTemp != "--" ? TW(Extras.WxTemp + "  " + Extras.WxDesc, fd) + 24 : 0);
+                float bx = 26 + TW(brand, fb) + 18 + boff + (Extras.WxTemp != "--" ? TW(Extras.WxTemp + "  " + Extras.WxDesc, fd) + 24 : 0);
                 Font fbat = F(18, true, false);
                 foreach (var kv in bat)
                 {
