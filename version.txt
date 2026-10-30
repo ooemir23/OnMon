@@ -1,4 +1,4 @@
-version=29
+version=30
 file=ProSystemMonitor.exe
-sha256=19849a100f43232867473a7fc32b87643773e2f136ec6ce93e703307badbebdb
-notes=ROG Cetra kulaklık sol/sağ/kutu pil yüzdeleri alt çubukta.
+sha256=3b42a8a0fd192467d78d9597c86d2b80e47c6fb07bba9be5cf195b0d15fd8505
+notes=Cetra pil okuması düzeltildi, ham rapor günlüğü eklendi.

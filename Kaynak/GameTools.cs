@@ -220,7 +220,14 @@ namespace ProSystemMonitor
                             {
                                 int c;
                                 try { c = st.Read(buf); } catch (TimeoutException) { continue; }
-                                if (c >= 8 && buf[0] == 0xCC && buf[1] == 0x12 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
+                                try
+                                {
+                                    string lp = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hid_log.txt");
+                                    if (!File.Exists(lp) || new FileInfo(lp).Length < 60000)
+                                        File.AppendAllText(lp, DateTime.Now.ToString("HH:mm:ss") + "  " + BitConverter.ToString(buf, 0, Math.Min(c, 24)) + "\r\n");
+                                }
+                                catch { }
+                                if (c >= 8 && buf[0] == 0xCC && buf[1] == 0x12 && buf[2] == 0x09 && (buf[5] + buf[6] + buf[7]) > 0 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
                                 {
                                     _rog = new[] {
                                         new KeyValuePair<string, int>("Cetra Sol", buf[5]),
