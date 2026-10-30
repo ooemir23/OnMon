@@ -52,6 +52,7 @@ namespace ProSystemMonitor
                 Application.SetCompatibleTextRenderingDefault(false);
 
                 LowerOwnPriority();
+                try { Log("baslangic", new Exception("açıldı; args=" + string.Join(" ", args ?? new string[0]) + "; bilgisayar açık kalma=" + (Environment.TickCount / 60000) + " dk")); } catch { }
                 _ui = new Control(); _ui.CreateControl(); var hnd = _ui.Handle;
                 Hotkeys.Init();
                 _showEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\ProSystemMonitor_ShowDash");
@@ -184,6 +185,18 @@ namespace ProSystemMonitor
                 var psi = new ProcessStartInfo("schtasks.exe", "/Query /TN " + AutostartTask + " /XML") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.Unicode };
                 string xml;
                 using (Process p = Process.Start(psi)) { xml = p.StandardOutput.ReadToEnd(); if (!p.WaitForExit(15000)) { try { p.Kill(); } catch { } return; } if (p.ExitCode != 0) return; }
+                SetRunKey(true);
+                try
+                {   // tanılama: görevin son çalışma bilgisini hata.log'a yaz
+                    var qi = new ProcessStartInfo("schtasks.exe", "/Query /TN " + AutostartTask + " /V /FO LIST") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.Default };
+                    using (Process q = Process.Start(qi))
+                    {
+                        string o = q.StandardOutput.ReadToEnd(); q.WaitForExit(10000);
+                        var keep = o.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && (l.IndexOf("Result", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Sonuç", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Run Time", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Çalıştırma", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Status", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Durum", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Task To Run", StringComparison.OrdinalIgnoreCase) >= 0));
+                        Log("otomatik-baslat", new Exception("görev bilgisi: " + string.Join(" | ", keep.ToArray())));
+                    }
+                }
+                catch { }
                 int a = xml.IndexOf("<Command>"), b = xml.IndexOf("</Command>");
                 if (a < 0 || b < a) return;
                 string cur = System.Net.WebUtility.HtmlDecode(xml.Substring(a + 9, b - a - 9)).Trim().Trim('"');
@@ -201,8 +214,23 @@ namespace ProSystemMonitor
             return RunSchtasks("/Query /TN " + AutostartTask) == 0;
         }
 
+        private static void SetRunKey(bool on)
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (k == null) return;
+                    if (on) k.SetValue("OnMon", "\"" + Application.ExecutablePath + "\"");
+                    else k.DeleteValue("OnMon", false);
+                }
+            }
+            catch { }
+        }
+
         public static bool SetAutostart(bool on)
         {
+            SetRunKey(on);   // yedek yöntem: Görev Zamanlayıcı çalışmazsa Windows'un Run anahtarı başlatır
             if (!on) return RunSchtasks("/Delete /TN " + AutostartTask + " /F") == 0;
 
             string exe = System.Security.SecurityElement.Escape(Application.ExecutablePath);

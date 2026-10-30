@@ -1,4 +1,4 @@
-version=49
+version=50
 file=ProSystemMonitor.exe
-sha256=1a40f62c5368f8c96f3358bd63ff16b5ddfadf0c04a9ec034648cbdc88c5f1e1
-notes=Otomatik başlatma yolu onarımı.
+sha256=e6014fb0bf7accd7d3c0c28472623b3cec09e10c2374b527719565d865e7d0bb
+notes=Otomatik başlatma yedek yöntemi ve tanılama.
