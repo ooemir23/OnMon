@@ -1,4 +1,4 @@
-version=41
+version=42
 file=ProSystemMonitor.exe
-sha256=9a670c373d178f6ccd76f71bb752774f89de654067452957bfe4d566a32605fa
-notes=Sistem bilgisi paneli ve düğme konumu.
+sha256=6a1e6998c273c73dbc9d0cd1b3384fef921fdf50977c1dcaac3f72f5a13c700c
+notes=Win+D panoyu küçültmez.

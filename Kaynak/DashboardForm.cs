@@ -128,6 +128,13 @@ namespace ProSystemMonitor
         {
             get { CreateParams cp = base.CreateParams; if (_desk) cp.ExStyle |= 0x80; return cp; }  // WS_EX_TOOLWINDOW: Alt+Tab'ta görünmez
         }
+        protected override void WndProc(ref Message m)
+        {
+            // WM_SYSCOMMAND / SC_MINIMIZE: Win+D ve "tümünü küçült" panoyu küçültemesin (kullanıcı menüden küçültürse izin ver)
+            if (m.Msg == 0x0112 && (m.WParam.ToInt64() & 0xFFF0) == 0xF020 && _desk && !_userMin) return;
+            base.WndProc(ref m);
+        }
+        internal void ApplyDeskMode() { MinimizeBox = !_desk; }
         protected override void OnDeactivate(EventArgs e)
         {
             base.OnDeactivate(e);
@@ -204,7 +211,7 @@ namespace ProSystemMonitor
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
-            MinimizeBox = true;
+            MinimizeBox = !_desk;   // küçültme düğmesi yoksa "masaüstünü göster" panoyu küçültmez
             MaximizeBox = false;
             try { Icon = Program.TrayIcon(); } catch { }
             KeyPreview = true;
@@ -235,6 +242,7 @@ namespace ProSystemMonitor
             _timer.Interval = 500;
             _timer.Tick += delegate
             {
+                if (_desk && !_userMin && WindowState == FormWindowState.Minimized) { WindowState = FormWindowState.Normal; SendToBottom(); }   // Win+D sonrası geri getir
                 if (WindowState == FormWindowState.Minimized || !Visible) return;
                 _tickN++;
                 if (_micBar || _layout == "studio" || _layout == "hud")
