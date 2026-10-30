@@ -195,9 +195,52 @@ namespace ProSystemMonitor
         private static int _started;
         private static volatile bool _busy;
 
+        private static KeyValuePair<string, int>[] _pnp = new KeyValuePair<string, int>[0];
+        private static KeyValuePair<string, int>[] _rog = new KeyValuePair<string, int>[0];
+        private static void Combine() { Items = _rog.Concat(_pnp).ToArray(); }
+
+        /// <summary>ROG Cetra alıcısının vendor raporunu (0xCC: bayt5=sol, 6=sağ, 7=kutu) sürekli dinler.</summary>
+        private static void RogListen()
+        {
+            while (true)
+            {
+                try
+                {
+                    HidSharp.HidDevice dev = null;
+                    foreach (HidSharp.HidDevice d in HidSharp.DeviceList.Local.GetHidDevices(0x0B05, 0x1AD3))
+                        if (d.DevicePath.ToLowerInvariant().Contains("col04")) { dev = d; break; }
+                    HidSharp.HidStream st;
+                    if (dev != null && dev.TryOpen(out st))
+                    {
+                        using (st)
+                        {
+                            st.ReadTimeout = 60000;
+                            byte[] buf = new byte[Math.Max(8, dev.GetMaxInputReportLength())];
+                            while (true)
+                            {
+                                int c;
+                                try { c = st.Read(buf); } catch (TimeoutException) { continue; }
+                                if (c >= 8 && buf[0] == 0xCC && buf[1] == 0x12 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
+                                {
+                                    _rog = new[] {
+                                        new KeyValuePair<string, int>("Cetra Sol", buf[5]),
+                                        new KeyValuePair<string, int>("Cetra Sağ", buf[6]),
+                                        new KeyValuePair<string, int>("Cetra Kutu", buf[7]) };
+                                    Combine();
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+                Thread.Sleep(30000);
+            }
+        }
+
         public static void StartBackground()
         {
             if (Interlocked.Exchange(ref _started, 1) == 1) return;
+            new Thread(RogListen) { IsBackground = true, Priority = ThreadPriority.BelowNormal }.Start();
             var t = new Thread(delegate ()
             {
                 Thread.Sleep(30000);
@@ -333,7 +376,7 @@ namespace ProSystemMonitor
                         if (name.Length > 0 && !list.Any(x => x.Key == name)) list.Add(new KeyValuePair<string, int>(name, v));
                     }
                 }
-                Items = list.ToArray();
+                _pnp = list.ToArray(); Combine();
                 Status = list.Count > 0 ? list.Count + " cihaz" : "Pil bilgisi veren cihaz bulunamadı";
             }
             catch (Exception ex) { Status = "Okunamadı: " + ex.Message; }

@@ -1,3 +1,4 @@
+v29 - ROG Cetra kulaklık (sol/sağ/kutu) pil yüzdeleri HID üzerinden okunuyor.
 v28 - ROG Cetra kulaklık HID dökümü (hid.txt) tanılama düğmesi.
 v27 - Alt bilgi çubuğunda cihaz pilleri, piller.txt tanılama dosyası.
 v26 - Hava durumu açıklaması Türkçe.
