@@ -168,7 +168,25 @@ namespace ProSystemMonitor
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
         private readonly System.Windows.Forms.Timer _deskTimer = new System.Windows.Forms.Timer { Interval = 250 };
-        private bool _deskLogged;
+        private bool _deskLogged, _deskTop;
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetClassName(IntPtr h, System.Text.StringBuilder sb, int max);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+        private static string ClsOf(IntPtr h) { var sb = new System.Text.StringBuilder(64); GetClassName(h, sb, 64); return sb.ToString(); }
+        // Masaüstü odaktayken (Win+D) pano geçici olarak en üste çıkar; başka bir uygulama öne gelince yeniden arkaya iner.
+        private void DeskFocusCheck()
+        {
+            IntPtr fg = GetForegroundWindow(); if (fg == IntPtr.Zero) return;
+            string c = ClsOf(fg);
+            bool desk = c == "Progman" || c == "WorkerW";
+            if (desk && !_deskTop) { SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); _deskTop = true; }
+            else if (_deskTop && !desk && fg != Handle && c != "Shell_TrayWnd" && c != "Shell_SecondaryTrayWnd" && c != "TopLevelWindowForOverflowXamlIsland" && c != "XamlExplorerHostIslandWindow")
+            {
+                uint pid; GetWindowThreadProcessId(fg, out pid);
+                if (pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id) return;   // ayarlar penceresi vb.
+                SetWindowPos(Handle, new IntPtr(-2), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); _deskTop = false; SendToBottom();
+            }
+        }
         private void StartDeskWatch()
         {
             _deskTimer.Tick += delegate
@@ -176,6 +194,7 @@ namespace ProSystemMonitor
                 if (!_desk || _userMin || !IsHandleCreated || IsDisposed) return;
                 try
                 {
+                    DeskFocusCheck();
                     if (IsIconic(Handle) || !IsWindowVisible(Handle))
                     {
                         if (!_deskLogged) { _deskLogged = true; Program.Log("pano", new Exception("pano sistem tarafından küçültüldü/gizlendi, geri getiriliyor")); }
