@@ -1,4 +1,4 @@
-version=26
+version=27
 file=ProSystemMonitor.exe
-sha256=766b4bbf33bc72d41710a7a044ac584480fa25e83589bb9b86829eb143a1ea0c
-notes=Hava durumu açıklaması Türkçe.
+sha256=b3d71024aa842d5b490ed0644f468d3f708c58490adb33ae70206050dc26c216
+notes=Cihaz pilleri alt bilgi çubuğunda görünür; kulaklık pil bilgisi için tanılama dosyası eklendi.

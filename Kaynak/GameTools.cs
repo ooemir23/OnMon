@@ -210,6 +210,31 @@ namespace ProSystemMonitor
             t.Start();
         }
 
+        /// <summary>Kulaklık gibi cihazların Windows'ta hangi özellikleri bildirdiğini piller.txt dosyasına yazar (pil verisini bulmak için).</summary>
+        public static void DumpAsync()
+        {
+            var t = new Thread(delegate ()
+            {
+                try
+                {
+                    string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "piller.txt");
+                    string ps = "$ErrorActionPreference='SilentlyContinue';" +
+                        "$o = @();" +
+                        "Get-PnpDevice -PresentOnly | Where-Object { $_.FriendlyName -match 'CETRA|SpeedNova|ROG|Bluetooth|Headset|Headphone|Kulakl|Earbud|Xbox|Controller' } | ForEach-Object { " +
+                        "$o += '=== ' + $_.FriendlyName + ' | ' + $_.Class + ' | ' + $_.InstanceId; " +
+                        "Get-PnpDeviceProperty -InstanceId $_.InstanceId | ForEach-Object { $v = $_.Data; if ($v -is [array]) { $v = ($v | Select-Object -First 6) -join ',' }; $o += '   ' + $_.KeyName + ' = ' + $v } }; " +
+                        "$o | Out-File -Encoding UTF8 -FilePath '" + path.Replace("'", "''") + "'";
+                    string enc = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
+                    var psi = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + enc)
+                    { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
+                    using (Process p = Process.Start(psi)) { if (!p.WaitForExit(90000)) { try { p.Kill(); } catch { } } }
+                    Status = "piller.txt yazıldı";
+                }
+                catch (Exception ex) { Status = "Yazılamadı: " + ex.Message; }
+            }) { IsBackground = true };
+            t.Start();
+        }
+
         public static void RefreshAsync()
         {
             var t = new Thread(delegate () { try { Refresh(); } catch { } }) { IsBackground = true };

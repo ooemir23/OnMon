@@ -1220,6 +1220,24 @@ namespace ProSystemMonitor
             G.FillRectangle(Br(t.A1), 14, y + 4, 4, h - 8);
             Txt(brand, fb, t.Tx, 26, y, 300, h, 0);
             if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 26 + TW(brand, fb) + 18, y, 500, h, 0);
+            KeyValuePair<string, int>[] bat = Peripherals.Items;
+            if (bat.Length > 0)
+            {
+                float bx = 26 + TW(brand, fb) + 18 + (Extras.WxTemp != "--" ? TW(Extras.WxTemp + "  " + Extras.WxDesc, fd) + 24 : 0);
+                Font fbat = F(18, true, false);
+                foreach (var kv in bat)
+                {
+                    string nm = kv.Key; int sp = nm.IndexOf('(');
+                    if (sp > 3) nm = nm.Substring(0, sp).Trim();
+                    string txt = Shorten(nm, 16) + " " + kv.Value + "%";
+                    float bw = TW(txt, fbat) + 22;
+                    if (bx + bw > 1100) break;
+                    var br = new RectangleF(bx, y + 2, bw, h - 4);
+                    using (GraphicsPath bp = RR(br, (h - 4) / 2f)) { G.FillPath(Br(kv.Value <= 15 ? Al(t.Crit, 90) : t.Tile), bp); G.DrawPath(Pn(kv.Value <= 15 ? t.Crit : t.Line, 1.2f), bp); }
+                    Txt(txt, fbat, kv.Value <= 15 ? Color.White : t.Tx, br.X, br.Y, br.Width, br.Height, 1);
+                    bx += bw + 8;
+                }
+            }
             string clock = now.ToString("HH:mm", tr);
             string date = now.ToString("d MMMM dddd", tr);
             string pr = PrayerLeft(now);

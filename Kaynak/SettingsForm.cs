@@ -499,6 +499,7 @@ namespace ProSystemMonitor
             _perList.Columns.Add("Cihaz", 480); _perList.Columns.Add("Pil", 100);
             p.Controls.Add(_perList);
             p.Controls.Add(Bt("Şimdi oku", 0, 342, 130, delegate { Peripherals.RefreshAsync(); }));
+            p.Controls.Add(Bt("Kulaklık/cihaz bilgisini dosyaya yaz (piller.txt)", 140, 342, 360, delegate { Peripherals.DumpAsync(); }));
             p.Controls.Add(Sub("Yalnızca Windows'un pil bilgisi verdiği (çoğunlukla Bluetooth) cihazlar görünür. USB alıcılı (Logitech/Razer) cihazlar çıkmayabilir.", 0, 388, 760));
             return p;
         }

@@ -1,3 +1,4 @@
+v27 - Alt bilgi çubuğunda cihaz pilleri, piller.txt tanılama dosyası.
 v26 - Hava durumu açıklaması Türkçe.
 v25 - Güncelleme sayfası: son değişiklikler listesi ve net sonuç mesajı.
 v24 - SES panelinde yalnızca işaretli çıkış/giriş cihazları görünür.

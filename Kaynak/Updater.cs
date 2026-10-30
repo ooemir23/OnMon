@@ -12,7 +12,7 @@ namespace ProSystemMonitor
     /// <summary>GitHub'daki en son sürümü denetler, exe'yi indirip kendini değiştirir ve yeniden başlar.</summary>
     internal static class Updater
     {
-        public const int AppVersion = 26;
+        public const int AppVersion = 27;
         private const string RawBase = "https://raw.githubusercontent.com/ooemir23/OnMon/main/";
 
         public static volatile int LatestVersion;
