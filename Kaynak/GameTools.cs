@@ -235,6 +235,74 @@ namespace ProSystemMonitor
             t.Start();
         }
 
+        /// <summary>ROG Cetra dongle'ının HID arayüzlerini (rapor tanımları + ham giriş raporları) hid.txt dosyasına yazar.</summary>
+        public static void HidDumpAsync()
+        {
+            var t = new Thread(delegate ()
+            {
+                var sb = new StringBuilder();
+                try
+                {
+                    sb.AppendLine("ROG Cetra HID dökümü - " + DateTime.Now);
+                    foreach (HidSharp.HidDevice d in HidSharp.DeviceList.Local.GetHidDevices(0x0B05, 0x1AD3))
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("=== " + d.DevicePath);
+                        try { sb.AppendLine("Ürün: " + d.GetProductName() + " | IN=" + d.GetMaxInputReportLength() + " OUT=" + d.GetMaxOutputReportLength() + " FEAT=" + d.GetMaxFeatureReportLength()); } catch (Exception ex) { sb.AppendLine("Ürün okunamadı: " + ex.Message); }
+                        try
+                        {
+                            HidSharp.Reports.ReportDescriptor rd = d.GetReportDescriptor();
+                            foreach (HidSharp.Reports.DeviceItem di in rd.DeviceItems)
+                            {
+                                sb.AppendLine("  Cihaz öğesi usages: " + string.Join(",", di.Usages.GetAllValues().Select(u => "0x" + u.ToString("X8")).ToArray()));
+                                foreach (HidSharp.Reports.Report r in di.Reports)
+                                {
+                                    sb.AppendLine("  Rapor " + r.ReportType + " id=" + r.ReportID + " uzunluk=" + r.Length);
+                                    foreach (HidSharp.Reports.DataItem it in r.DataItems)
+                                        sb.AppendLine("     öğe usages=" + string.Join(",", it.Usages.GetAllValues().Select(u => "0x" + u.ToString("X8")).ToArray()) + " bit=" + it.ElementBits + " adet=" + it.ElementCount + " aralık=" + it.LogicalMinimum + ".." + it.LogicalMaximum);
+                                }
+                            }
+                        }
+                        catch (Exception ex) { sb.AppendLine("  Rapor tanımı okunamadı: " + ex.Message); }
+                        HidSharp.HidStream st;
+                        if (!d.TryOpen(out st)) { sb.AppendLine("  Açılamadı (başka uygulama kullanıyor olabilir)"); continue; }
+                        using (st)
+                        {
+                            st.ReadTimeout = 700;
+                            var end = DateTime.UtcNow.AddSeconds(6);
+                            int n = 0;
+                            while (DateTime.UtcNow < end && n < 40)
+                            {
+                                try
+                                {
+                                    byte[] buf = new byte[Math.Max(8, d.GetMaxInputReportLength())];
+                                    int c = st.Read(buf);
+                                    sb.AppendLine("  GİRİŞ: " + BitConverter.ToString(buf, 0, c)); n++;
+                                }
+                                catch (TimeoutException) { }
+                                catch (Exception ex) { sb.AppendLine("  okuma hatası: " + ex.Message); break; }
+                            }
+                            for (int id = 0; id < 256 && d.GetMaxFeatureReportLength() > 0; id += 1)
+                            {
+                                if (id > 8 && id != 0x5A && id != 0xFF) continue;
+                                try
+                                {
+                                    byte[] fb = new byte[d.GetMaxFeatureReportLength()]; fb[0] = (byte)id;
+                                    st.GetFeature(fb);
+                                    sb.AppendLine("  ÖZELLİK id=" + id + ": " + BitConverter.ToString(fb));
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    Status = "hid.txt yazıldı";
+                }
+                catch (Exception ex) { sb.AppendLine("HATA: " + ex); Status = "HID hatası: " + ex.Message; }
+                try { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hid.txt"), sb.ToString(), Encoding.UTF8); } catch { }
+            }) { IsBackground = true };
+            t.Start();
+        }
+
         public static void RefreshAsync()
         {
             var t = new Thread(delegate () { try { Refresh(); } catch { } }) { IsBackground = true };

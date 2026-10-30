@@ -1,4 +1,4 @@
-version=27
+version=28
 file=ProSystemMonitor.exe
-sha256=b3d71024aa842d5b490ed0644f468d3f708c58490adb33ae70206050dc26c216
-notes=Cihaz pilleri alt bilgi çubuğunda görünür; kulaklık pil bilgisi için tanılama dosyası eklendi.
+sha256=b1bdc1f5fbf76984e17078001ac021a98d0672f48962754bf3074fcacbfeda3e
+notes=ROG Cetra kulaklık pil bilgisi için HID tanılama dökümü eklendi.
