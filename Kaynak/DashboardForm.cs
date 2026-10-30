@@ -43,6 +43,56 @@ namespace ProSystemMonitor
         private const float VolW = 300f;
         private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
         private float _lastMic = -1; private bool _lastMuted;
+        private RectangleF _infoBtn, _infoPanel; private bool _infoOpen;
+        private void ToggleInfo()
+        {
+            _infoOpen = !_infoOpen;
+            if (_infoOpen) SysInfo.LoadAsync(delegate { _dirty = true; try { Invalidate(); } catch { } });
+            _dirty = true; Invalidate();
+        }
+        private void DrawInfoPanel(Snap s, float barTop)
+        {
+            if (!_infoOpen) return;
+            Theme t = _th;
+            var rows = new List<KeyValuePair<string, string>>();
+            if (s != null)
+            {
+                rows.Add(new KeyValuePair<string, string>("Sistem", s.Brand + " " + s.MoboModel));
+                if (s.Bios.Length > 0 && SysInfo.Rows.Count == 0) rows.Add(new KeyValuePair<string, string>("BIOS", s.Bios));
+            }
+            foreach (var kv in SysInfo.Rows) rows.Add(kv);
+            if (s != null)
+            {
+                if (s.Chipset.Length > 0) rows.Add(new KeyValuePair<string, string>("Yonga seti", s.Chipset));
+                if (s.CpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>("İşlemci", s.CpuModel));
+                if (s.GpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>("Ekran kartı", s.GpuModel + (s.GpuBus.Length > 0 ? "  (" + s.GpuBus + ")" : "")));
+                if (s.MemSpeed.Length > 0) rows.Add(new KeyValuePair<string, string>("Bellek hızı", s.MemSpeed));
+            }
+            if (SysInfo.Boot != DateTime.MinValue)
+            {
+                TimeSpan up = DateTime.Now - SysInfo.Boot;
+                rows.Add(new KeyValuePair<string, string>("Açık kalma", (up.Days > 0 ? up.Days + " g " : "") + up.Hours + " sa " + up.Minutes + " dk"));
+            }
+            rows.Add(new KeyValuePair<string, string>("OnMon", "v" + Updater.AppVersion));
+            float rh = 30, w = 760, h = 64 + rows.Count * rh + (SysInfo.Loading ? 30 : 0);
+            _infoPanel = new RectangleF(14, barTop - h - 8, w, h);
+            using (GraphicsPath gp = RR(_infoPanel, 14))
+            {
+                G.FillPath(Br(Color.FromArgb(252, 16, 18, 24)), gp);
+                G.DrawPath(Pn(t.A1, 1.6f), gp);
+            }
+            Txt("SİSTEM BİLGİSİ", F(18, true, false), t.A1, _infoPanel.X + 20, _infoPanel.Y + 10, 400, 30, 0);
+            Txt("kapatmak için tıkla", F(14, false, true), t.Dim, _infoPanel.Right - 220, _infoPanel.Y + 12, 200, 26, 2);
+            float yy = _infoPanel.Y + 50;
+            Font fk = F(17, false, false), fv = F(17, true, false);
+            foreach (var kv in rows)
+            {
+                Txt(kv.Key, fk, t.Dim, _infoPanel.X + 20, yy, 170, rh, 0);
+                Txt(Fit(kv.Value, fv, w - 230), fv, t.Tx, _infoPanel.X + 200, yy, w - 220, rh, 0);
+                yy += rh;
+            }
+            if (SysInfo.Loading) Txt("okunuyor…", fk, t.Dim, _infoPanel.X + 20, yy, 300, rh, 0);
+        }
         internal int _bright = 100;          // uygulama parlaklığı %
         private RectangleF _brRect;
         private static readonly int[] BrLevels = { 100, 80, 60, 40, 25 };
@@ -65,7 +115,6 @@ namespace ProSystemMonitor
                 double a = k * Math.PI / 4;
                 G.DrawLine(Pn(c, 1.6f), cx + (float)Math.Cos(a) * 7f, cy + (float)Math.Sin(a) * 7f, cx + (float)Math.Cos(a) * 10f, cy + (float)Math.Sin(a) * 10f);
             }
-            if (_bright < 100) Txt(_bright + "%", F(14, true, false), t.A1, r.Right + 4, r.Y, 44, r.Height, 0);
         }
         internal bool _desk = true;          // arka planda kal: diğer pencereler üstüne gelebilir, Win+D küçültmez
         private bool _userMin;
@@ -549,10 +598,16 @@ namespace ProSystemMonitor
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
             float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
+            if (_infoOpen)
+            {
+                if (_infoBtn.Contains(cx, cy) || _infoPanel.Contains(cx, cy)) { ToggleInfo(); return; }
+                _infoOpen = false; _dirty = true; Invalidate(); return;
+            }
             foreach (var h in _hits)
                 if (h.Key.Contains(cx, cy))
                 {
-                    if (h.Value == "mic:toggle") ToggleMic();
+                    if (h.Value == "info:toggle") ToggleInfo();
+                    else if (h.Value == "mic:toggle") ToggleMic();
                     else if (h.Value == "vol:mute") ToggleVolMute();
                     else if (h.Value == "out:next") NextAudio();
                     else if (h.Value == "bright:next") NextBright();
@@ -1031,6 +1086,7 @@ namespace ProSystemMonitor
             DrawAudioBar();
             _brRect = RectangleF.Empty;
             if (_topBar) DrawInfoBar(_snap, StripOn ? 1112f : 1080f);
+            if (_topBar) DrawInfoPanel(_snap, StripOn ? 1112f : 1080f);
             if (_bright < 100)
             {
                 G.ResetTransform();
@@ -1280,16 +1336,18 @@ namespace ProSystemMonitor
             float y = top + 2, h = 30;
             Font fb = F(20, true, false), fd = F(20, false, true);
             string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(tr);
-            G.FillRectangle(Br(t.A1), 14, y + 4, 4, h - 8);
-            Txt(brand, fb, t.Tx, 26, y, 300, h, 0);
-            _brRect = new RectangleF(26 + TW(brand, fb) + 12, y + 1, 30, 30);
-            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(_brRect.X - 4, _brRect.Y - 4, 38 + (_bright < 100 ? 44 : 0), 38), "bright:next"));
-            float boff = 52 + (_bright < 100 ? 40 : 0);
-            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 26 + TW(brand, fb) + 18 + boff, y, 500, h, 0);
+            _brRect = new RectangleF(10, y, 30, 30);
+            _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(6, y - 4, 38, 38), "bright:next"));
+            G.FillRectangle(Br(t.A1), 52, y + 4, 4, h - 8);
+            Txt(brand, fb, t.Tx, 64, y, 300, h, 0);
+            _infoBtn = new RectangleF(50, y - 2, TW(brand, fb) + 26, h + 4);
+            _hits.Add(new KeyValuePair<RectangleF, string>(_infoBtn, "info:toggle"));
+            float boff = 0;
+            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 64 + TW(brand, fb) + 18, y, 500, h, 0);
             KeyValuePair<string, int>[] bat = Peripherals.Items;
             if (bat.Length > 0)
             {
-                float bx = 26 + TW(brand, fb) + 18 + boff + (Extras.WxTemp != "--" ? TW(Extras.WxTemp + "  " + Extras.WxDesc, fd) + 24 : 0);
+                float bx = 64 + TW(brand, fb) + 18 + boff + (Extras.WxTemp != "--" ? TW(Extras.WxTemp + "  " + Extras.WxDesc, fd) + 24 : 0);
                 Font fbat = F(18, true, false);
                 foreach (var kv in bat)
                 {

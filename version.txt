@@ -1,4 +1,4 @@
-version=40
+version=41
 file=ProSystemMonitor.exe
-sha256=702d234a4d9480a4db96966a07344eb02e13d8c4e6e2947dd635b137cde35955
-notes=Parlaklık düğmesi eklendi.
+sha256=9a670c373d178f6ccd76f71bb752774f89de654067452957bfe4d566a32605fa
+notes=Sistem bilgisi paneli ve düğme konumu.
