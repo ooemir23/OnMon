@@ -269,7 +269,7 @@ namespace ProSystemMonitor
                 while (true)
                 {
                     try { if (Program.Dash != null) Refresh(); } catch { }
-                    Thread.Sleep(10 * 60 * 1000);
+                    Thread.Sleep(3 * 60 * 1000);
                 }
             }) { IsBackground = true, Priority = ThreadPriority.BelowNormal };
             t.Start();
@@ -381,7 +381,8 @@ namespace ProSystemMonitor
             {
                 string ps = "$ErrorActionPreference='SilentlyContinue';" +
                     "Get-PnpDevice -PresentOnly | ForEach-Object { $p = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2'; " +
-                    "if ($p -and $p.Data -ne $null -and $p.Data -is [byte]) { $_.FriendlyName + '|' + $p.Data } }";
+                    "$c = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName '{83DA6326-97A6-4088-9453-A1923F573B29} 15'; " +
+                    "if ($p -and $p.Data -ne $null -and $p.Data -is [byte] -and -not ($c -and $c.Data -eq $false)) { $_.FriendlyName + '|' + $p.Data } }";
                 string enc = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
                 var psi = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + enc)
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, WindowStyle = ProcessWindowStyle.Hidden };

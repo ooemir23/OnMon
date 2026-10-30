@@ -1,3 +1,4 @@
+v33 - Bağlı olmayan Bluetooth cihazların (kapalı kol vb.) pili gösterilmiyor; yenileme 3 dk.
 v32 - Cetra: kutu kapalı/bağlı değilken rozetler soluk, bağlanınca renkli.
 v31 - Cetra: kutudaki kulaklıkta şarj simgesi.
 v30 - Cetra pil okuması sıkılaştırıldı; hid_log.txt ham rapor günlüğü.

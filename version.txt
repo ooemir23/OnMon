@@ -1,4 +1,4 @@
-version=32
+version=33
 file=ProSystemMonitor.exe
-sha256=88c16083889ac67713944fbcaae5592fd10dc3c2da41e97a4c10298332b53836
-notes=Cetra rozetleri bağlı değilken soluk, bağlanınca renkli.
+sha256=86167b34b953e9ac7b025d79f3bf0a4b1500ac69d51680e94632d7c9f3c7cad9
+notes=Kapalı Bluetooth cihazların eski pil değeri gizlendi.
