@@ -218,6 +218,12 @@ namespace ProSystemMonitor
             if (m.Msg == 0x0112 && (m.WParam.ToInt64() & 0xFFF0) == 0xF020 && _desk && !_userMin) return;
             base.WndProc(ref m);
         }
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try { int on = 1; DwmSetWindowAttribute(Handle, 3, ref on, 4); } catch { }   // DWMWA_TRANSITIONS_FORCEDISABLED: küçült/aç animasyonu yok, Win+D'de titreme azalır
+        }
         internal void ApplyDeskMode() { MinimizeBox = !_desk; }
         protected override void OnDeactivate(EventArgs e)
         {

@@ -1,4 +1,4 @@
-version=45
+version=46
 file=ProSystemMonitor.exe
-sha256=d433226099238f73c90ce9fff0fb800d70ffd02e8d80c098526c22143327d41a
-notes=Win+D sonrası pano görünür.
+sha256=4d63cc8f93427eefe82bcc58594f3f69ac085ae95ee41e775020db06bf3afcf1
+notes=Win+D titremesi azaltıldı.
