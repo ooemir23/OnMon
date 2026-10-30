@@ -1,3 +1,4 @@
+v51 - Otomatik başlatma görev yolu onarımı düzeltildi (görev eski v9.exe dosyasını gösteriyordu).
 v50 - Otomatik başlatma: Windows Run anahtarı yedeği, görev tanılaması ve açılış kaydı (hata.log).
 v49 - Otomatik başlatma görevi, exe dosyası değişse/silinse bile açılışta güncel yola onarılır.
 v48 - Görev yöneticisinde ve pencerelerde ad "OnMon"; zamanlayıcıda saat/dakika/saniye açılır listeleri.

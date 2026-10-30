@@ -182,31 +182,21 @@ namespace ProSystemMonitor
         {
             try
             {
-                var psi = new ProcessStartInfo("schtasks.exe", "/Query /TN " + AutostartTask + " /XML") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.Unicode };
-                string xml;
-                using (Process p = Process.Start(psi)) { xml = p.StandardOutput.ReadToEnd(); if (!p.WaitForExit(15000)) { try { p.Kill(); } catch { } return; } if (p.ExitCode != 0) return; }
                 SetRunKey(true);
-                try
-                {   // tanılama: görevin son çalışma bilgisini hata.log'a yaz
-                    var qi = new ProcessStartInfo("schtasks.exe", "/Query /TN " + AutostartTask + " /V /FO LIST") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.Default };
-                    using (Process q = Process.Start(qi))
-                    {
-                        string o = q.StandardOutput.ReadToEnd(); q.WaitForExit(10000);
-                        var keep = o.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && (l.IndexOf("Result", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Sonuç", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Run Time", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Çalıştırma", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Status", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Durum", StringComparison.OrdinalIgnoreCase) >= 0 || l.IndexOf("Task To Run", StringComparison.OrdinalIgnoreCase) >= 0));
-                        Log("otomatik-baslat", new Exception("görev bilgisi: " + string.Join(" | ", keep.ToArray())));
-                    }
-                }
-                catch { }
-                int a = xml.IndexOf("<Command>"), b = xml.IndexOf("</Command>");
-                if (a < 0 || b < a) return;
-                string cur = System.Net.WebUtility.HtmlDecode(xml.Substring(a + 9, b - a - 9)).Trim().Trim('"');
-                if (!string.Equals(cur, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase))
+                var qi = new ProcessStartInfo("schtasks.exe", "/Query /TN " + AutostartTask + " /V /FO LIST") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.Default };
+                string o; int rc;
+                using (Process q = Process.Start(qi)) { o = q.StandardOutput.ReadToEnd(); if (!q.WaitForExit(15000)) { try { q.Kill(); } catch { } return; } rc = q.ExitCode; }
+                if (rc != 0) return;   // görev yok (kullanıcı kapatmış)
+                string exe = Application.ExecutablePath;
+                bool ok = o.IndexOf(exe, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!ok)
                 {
-                    Log("otomatik-baslat", new Exception("görev yolu güncellendi: " + cur + " -> " + Application.ExecutablePath));
-                    SetAutostart(true);
+                    Log("otomatik-baslat", new Exception("görev yolu eski, güncelleniyor -> " + exe));
+                    bool done = SetAutostart(true);
+                    Log("otomatik-baslat", new Exception("güncelleme " + (done ? "başarılı" : "BAŞARISIZ")));
                 }
             }
-            catch { }
+            catch (Exception ex) { Log("otomatik-baslat", ex); }
         }
 
         public static bool IsAutostartEnabled()
