@@ -164,6 +164,30 @@ namespace ProSystemMonitor
             catch { }
         }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsIconic(IntPtr h);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
+        private readonly System.Windows.Forms.Timer _deskTimer = new System.Windows.Forms.Timer { Interval = 250 };
+        private bool _deskLogged;
+        private void StartDeskWatch()
+        {
+            _deskTimer.Tick += delegate
+            {
+                if (!_desk || _userMin || !IsHandleCreated || IsDisposed) return;
+                try
+                {
+                    if (IsIconic(Handle) || !IsWindowVisible(Handle))
+                    {
+                        if (!_deskLogged) { _deskLogged = true; Program.Log("pano", new Exception("pano sistem tarafından küçültüldü/gizlendi, geri getiriliyor")); }
+                        ShowWindow(Handle, 4);   // SW_SHOWNOACTIVATE
+                        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+                        SendToBottom(); Invalidate();
+                    }
+                }
+                catch { }
+            };
+            _deskTimer.Start();
+        }
         internal void UserMinimize() { _userMin = true; WindowState = FormWindowState.Minimized; }
         protected override CreateParams CreateParams
         {
@@ -305,6 +329,7 @@ namespace ProSystemMonitor
                 if (_dirty) { _dirty = false; Invalidate(); }
             };
             _timer.Start();
+            StartDeskWatch();
             Extras.Start(_city);
         }
 
@@ -1433,11 +1458,11 @@ namespace ProSystemMonitor
             }
         }
 
-        // Sonraki vakit (Güneş hariç): "İkindiye 1sa 23dk"
+        // Sonraki vakit (Güneş dahil): "İkindiye 1sa 23dk"
         private static string PrayerLeft(DateTime now)
         {
-            int[] idx = { 0, 2, 3, 4, 5 };
-            string[] nm = { "Sabaha", "Öğleye", "İkindiye", "Akşama", "Yatsıya" };
+            int[] idx = { 0, 1, 2, 3, 4, 5 };
+            string[] nm = { "Sabaha", "Güneşe", "Öğleye", "İkindiye", "Akşama", "Yatsıya" };
             for (int day = 0; day < 2; day++)
                 for (int k = 0; k < idx.Length; k++)
                 {

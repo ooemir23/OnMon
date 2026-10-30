@@ -1,3 +1,4 @@
+v44 - İmsaktan sonra "Güneşe" geri sayımı; Win+D için daha hızlı geri getirme (0.25 sn) ve hata.log kaydı.
 v43 - Win+D: pano masaüstünün hemen üstünde durur, masaüstü öne çıkınca yeniden yukarı çıkar.
 v42 - Win+D / masaüstünü göster panoyu küçültmesin (küçültme engeli + otomatik geri getirme).
 v41 - Parlaklık düğmesi en başa; ASUS yazısına tıklayınca sistem bilgisi (BIOS, anakart, RAM, Windows, açık kalma).
