@@ -1,4 +1,4 @@
-version=33
+version=34
 file=ProSystemMonitor.exe
-sha256=86167b34b953e9ac7b025d79f3bf0a4b1500ac69d51680e94632d7c9f3c7cad9
-notes=Kapalı Bluetooth cihazların eski pil değeri gizlendi.
+sha256=5f68fffecbc7658a605e216dfa262fdaff19e17ccb687cd0ea7a2d41c5d9d727
+notes=Cetra rozetleri bağlıyken renkli.
