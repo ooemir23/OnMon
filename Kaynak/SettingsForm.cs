@@ -35,7 +35,7 @@ namespace ProSystemMonitor
         {
             _d = d;
             _acc = d._th.A1;
-            Text = "Ayarlar — ROG Pro System Monitor";
+            Text = "Ayarlar — OnMon";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1000, 640);
             MinimumSize = new Size(960, 600);
@@ -487,8 +487,13 @@ namespace ProSystemMonitor
         private System.Windows.Forms.Timer _tmrTick;
         private Label _tmrStatus;
         private RadioButton _rbAt, _rbAfter;
-        private DateTimePicker _tmrAt;
-        private NumericUpDown _tmrH, _tmrM;
+        private ComboBox _atH, _atM, _atS, _afH, _afM, _afS;
+        private ComboBox TimeCombo(int left, int top, int count)
+        {
+            var c = new ComboBox { Left = left, Top = top, Width = 66, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Card, ForeColor = Tx, FlatStyle = FlatStyle.Flat, MaxDropDownItems = 10, IntegralHeight = false, DropDownHeight = 240 };
+            for (int i = 0; i < count; i++) c.Items.Add(i.ToString("00"));
+            return c;
+        }
         private ComboBox _tmrAct;
         private CheckBox _tmrForce;
 
@@ -498,17 +503,21 @@ namespace ProSystemMonitor
             p.Controls.Add(H("Kapatma / yeniden başlatma zamanlayıcısı", 0));
             { var n = Sub("Bilgisayarı belirlediğin saatte ya da belirlediğin süre sonra kapatır veya yeniden başlatır. Kalan süre alt bilgi çubuğunda saatin yanında görünür. Zamanlayıcıyı Windows tutar, OnMon kapansa bile çalışır.", 0, 40, 720); n.Height = 40; p.Controls.Add(n); }
 
-            p.Controls.Add(Sub("NE ZAMAN", 0, 96, 300));
-            _rbAt = new RadioButton { Text = "Şu saatte:", Left = 0, Top = 122, Width = 140, Height = 28, ForeColor = Tx, Checked = true };
-            _tmrAt = new DateTimePicker { Left = 150, Top = 122, Width = 90, Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Value = DateTime.Today.AddHours(DateTime.Now.Hour + 1) };
-            _rbAfter = new RadioButton { Text = "Şu kadar süre sonra:", Left = 0, Top = 160, Width = 170, Height = 28, ForeColor = Tx };
-            _tmrH = new NumericUpDown { Left = 180, Top = 160, Width = 60, Minimum = 0, Maximum = 72, Value = 1, BackColor = Card, ForeColor = Tx };
-            var lh = new Label { Text = "saat", Left = 246, Top = 164, Width = 40, ForeColor = Tx };
-            _tmrM = new NumericUpDown { Left = 290, Top = 160, Width = 60, Minimum = 0, Maximum = 59, Value = 0, BackColor = Card, ForeColor = Tx };
-            var lm = new Label { Text = "dakika", Left = 356, Top = 164, Width = 60, ForeColor = Tx };
-            p.Controls.Add(_rbAt); p.Controls.Add(_tmrAt); p.Controls.Add(_rbAfter); p.Controls.Add(_tmrH); p.Controls.Add(lh); p.Controls.Add(_tmrM); p.Controls.Add(lm);
+            p.Controls.Add(Sub("NE ZAMAN", 0, 96, 150));
+            _rbAt = new RadioButton { Text = "Şu saatte:", Left = 0, Top = 122, Width = 150, Height = 28, ForeColor = Tx, Checked = true };
+            _atH = TimeCombo(160, 120, 24); _atM = TimeCombo(236, 120, 60); _atS = TimeCombo(312, 120, 60);
+            DateTime nx = DateTime.Now.AddHours(1);
+            _atH.SelectedIndex = nx.Hour; _atM.SelectedIndex = 0; _atS.SelectedIndex = 0;
+            _rbAfter = new RadioButton { Text = "Şu kadar süre sonra:", Left = 0, Top = 168, Width = 160, Height = 28, ForeColor = Tx };
+            _afH = TimeCombo(160, 166, 25); _afM = TimeCombo(236, 166, 60); _afS = TimeCombo(312, 166, 60);
+            _afH.SelectedIndex = 1; _afM.SelectedIndex = 0; _afS.SelectedIndex = 0;
+            p.Controls.Add(_rbAt); p.Controls.Add(_rbAfter);
+            p.Controls.Add(Sub("saat      dakika    saniye", 164, 98, 260));
+            foreach (ComboBox c in new[] { _atH, _atM, _atS, _afH, _afM, _afS }) p.Controls.Add(c);
+            _atH.DropDown += delegate { _rbAt.Checked = true; }; _atM.DropDown += delegate { _rbAt.Checked = true; }; _atS.DropDown += delegate { _rbAt.Checked = true; };
+            _afH.DropDown += delegate { _rbAfter.Checked = true; }; _afM.DropDown += delegate { _rbAfter.Checked = true; }; _afS.DropDown += delegate { _rbAfter.Checked = true; };
 
-            p.Controls.Add(Sub("NE YAPSIN", 0, 214, 300));
+            p.Controls.Add(Sub("NE YAPSIN", 0, 218, 300));
             _tmrAct = new ComboBox { Left = 0, Top = 240, Width = 240, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Card, ForeColor = Tx, FlatStyle = FlatStyle.Flat };
             _tmrAct.Items.Add("Bilgisayarı kapat"); _tmrAct.Items.Add("Bilgisayarı yeniden başlat");
             _tmrAct.SelectedIndex = 0;
@@ -521,10 +530,10 @@ namespace ProSystemMonitor
                 DateTime target;
                 if (_rbAt.Checked)
                 {
-                    target = DateTime.Today.AddHours(_tmrAt.Value.Hour).AddMinutes(_tmrAt.Value.Minute);
+                    target = DateTime.Today.AddHours(_atH.SelectedIndex).AddMinutes(_atM.SelectedIndex).AddSeconds(_atS.SelectedIndex);
                     if (target <= DateTime.Now.AddSeconds(20)) target = target.AddDays(1);   // saat geçtiyse yarın
                 }
-                else target = DateTime.Now.AddHours((double)_tmrH.Value).AddMinutes((double)_tmrM.Value);
+                else target = DateTime.Now.AddHours(_afH.SelectedIndex).AddMinutes(_afM.SelectedIndex).AddSeconds(_afS.SelectedIndex);
                 int act = _tmrAct.SelectedIndex == 1 ? 2 : 1;
                 if (!ShutdownTimer.Start(act, target, _tmrForce.Checked)) { _tmrStatus.Text = ShutdownTimer.Error; _tmrStatus.ForeColor = Color.FromArgb(255, 140, 120); return; }
                 _d.Invalidate();

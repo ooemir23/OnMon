@@ -1,4 +1,4 @@
-version=47
+version=48
 file=ProSystemMonitor.exe
-sha256=175bfcc0340c86736aed2517f18b9537e5c950f6816bafe950c3379c1b1922c3
-notes=Çıkış onayı ve kapatma zamanlayıcısı.
+sha256=7ce4b701e81707992b361b20e44572e8f0789c60bd8cdb9d043a078a92250ab5
+notes=Uygulama adı OnMon; zamanlayıcıda açılır listeler.

@@ -297,7 +297,7 @@ namespace ProSystemMonitor
         {
             LoadSettings();
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            Text = "ROG Pro System Monitor";
+            Text = "OnMon";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;

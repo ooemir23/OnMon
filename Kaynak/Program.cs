@@ -111,7 +111,7 @@ namespace ProSystemMonitor
 
         public static void ShowBalloon(string text)
         {
-            try { if (_trayIcon != null) _trayIcon.ShowBalloonTip(4000, "ROG Pro System Monitor", text, ToolTipIcon.Info); } catch { }
+            try { if (_trayIcon != null) _trayIcon.ShowBalloonTip(4000, "OnMon", text, ToolTipIcon.Info); } catch { }
         }
 
         // ---------- Uyarılar ----------
@@ -133,7 +133,7 @@ namespace ProSystemMonitor
                     if (_alertLast.TryGetValue(key, out last) && (DateTime.UtcNow - last).TotalMinutes < 5) return;
                     _alertLast[key] = DateTime.UtcNow;
                 }
-                if (_trayIcon != null) _trayIcon.ShowBalloonTip(6000, "ROG Pro System Monitor - Uyarı", text, ToolTipIcon.Warning);
+                if (_trayIcon != null) _trayIcon.ShowBalloonTip(6000, "OnMon - Uyarı", text, ToolTipIcon.Warning);
             }
             catch { }
         }
@@ -305,7 +305,7 @@ namespace ProSystemMonitor
                 try
                 {
                     if (_trayIcon != null)
-                        _trayIcon.ShowBalloonTip(5000, "ROG Pro System Monitor",
+                        _trayIcon.ShowBalloonTip(5000, "OnMon",
                             "Port " + Port + " açılamadı. Başka bir kopya çalışıyor olabilir.", ToolTipIcon.Warning);
                 }
                 catch { }
@@ -461,12 +461,12 @@ namespace ProSystemMonitor
 
         private static void TrayUpdateCheck()
         {
-            if (!Updater.Check()) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status, "ROG Pro System Monitor", MessageBoxButtons.OK, MessageBoxIcon.Warning); }); return; }
-            if (!Updater.UpdateAvailable) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status + "\r\n\r\nSon değişiklikler:\r\n" + Updater.Changelog, "ROG Pro System Monitor", MessageBoxButtons.OK, MessageBoxIcon.Information); }); return; }
+            if (!Updater.Check()) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Warning); }); return; }
+            if (!Updater.UpdateAvailable) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status + "\r\n\r\nSon değişiklikler:\r\n" + Updater.Changelog, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information); }); return; }
             _ui.BeginInvoke((MethodInvoker)delegate
             {
                 string msg = "Yeni sürüm: v" + Updater.LatestVersion + " (şu an v" + Updater.AppVersion + ")\r\n\r\n" + Updater.LatestNotes + "\r\n\r\nŞimdi güncellenip yeniden başlatılsın mı?";
-                if (MessageBox.Show(msg, "ROG Pro System Monitor", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                if (MessageBox.Show(msg, "OnMon", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                     ThreadPool.QueueUserWorkItem(_ => { string err = Updater.ApplyUpdate(); if (err != null) ShowBalloon("Güncelleme başarısız: " + err); });
             });
         }
@@ -534,7 +534,7 @@ namespace ProSystemMonitor
         {
             _trayIcon = new NotifyIcon
             {
-                Text = "ROG Pro System Monitor",
+                Text = "OnMon",
                 Icon = CreateRogTrayIcon(),
                 Visible = true
             };

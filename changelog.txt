@@ -1,3 +1,4 @@
+v48 - Görev yöneticisinde ve pencerelerde ad "OnMon"; zamanlayıcıda saat/dakika/saniye açılır listeleri.
 v47 - Çıkışta onay; kapatma/yeniden başlatma zamanlayıcısı (Ayarlar > Zamanlayıcı) ve saatin yanında geri sayım.
 v46 - Win+D titremesini azaltmak için küçült/aç animasyonu kapatıldı.
 v45 - Win+D: masaüstü odaktayken pano geçici olarak en üste çıkar, uygulama öne gelince arkaya iner.
