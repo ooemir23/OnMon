@@ -197,6 +197,19 @@ namespace ProSystemMonitor
 
         private static KeyValuePair<string, int>[] _pnp = new KeyValuePair<string, int>[0];
         private static KeyValuePair<string, int>[] _rog = new KeyValuePair<string, int>[0];
+        private static volatile int _rl = -1, _rr = -1, _rc = -1, _inMask = -1;
+        // CC-12-08 bayt5: bit0 = sol kulaklık kutuda, bit4 = sağ kulaklık kutuda (kutudaki kulaklık şarj olur)
+        private static void RogPublish()
+        {
+            bool known = _inMask >= 0;
+            string sl = "Cetra Sol" + ((known && (_inMask & 0x01) != 0) ? " \u26A1" : "");
+            string sr = "Cetra Sağ" + ((known && (_inMask & 0x10) != 0) ? " \u26A1" : "");
+            _rog = new[] {
+                new KeyValuePair<string, int>(sl, _rl),
+                new KeyValuePair<string, int>(sr, _rr),
+                new KeyValuePair<string, int>("Cetra Kutu", _rc) };
+            Combine();
+        }
         private static void Combine() { Items = _rog.Concat(_pnp).ToArray(); }
 
         /// <summary>ROG Cetra alıcısının vendor raporunu (0xCC: bayt5=sol, 6=sağ, 7=kutu) sürekli dinler.</summary>
@@ -227,13 +240,12 @@ namespace ProSystemMonitor
                                         File.AppendAllText(lp, DateTime.Now.ToString("HH:mm:ss") + "  " + BitConverter.ToString(buf, 0, Math.Min(c, 24)) + "\r\n");
                                 }
                                 catch { }
-                                if (c >= 8 && buf[0] == 0xCC && buf[1] == 0x12 && buf[2] == 0x09 && (buf[5] + buf[6] + buf[7]) > 0 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
+                                if (c >= 8 && buf[0] == 0xCC && buf[1] == 0x12)
                                 {
-                                    _rog = new[] {
-                                        new KeyValuePair<string, int>("Cetra Sol", buf[5]),
-                                        new KeyValuePair<string, int>("Cetra Sağ", buf[6]),
-                                        new KeyValuePair<string, int>("Cetra Kutu", buf[7]) };
-                                    Combine();
+                                    if (buf[2] == 0x09 && (buf[5] + buf[6] + buf[7]) > 0 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
+                                    { _rl = buf[5]; _rr = buf[6]; _rc = buf[7]; }
+                                    else if (buf[2] == 0x08) _inMask = buf[5];
+                                    if (_rl >= 0) RogPublish();
                                 }
                             }
                         }

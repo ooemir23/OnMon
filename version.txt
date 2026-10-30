@@ -1,4 +1,4 @@
-version=30
+version=31
 file=ProSystemMonitor.exe
-sha256=3b42a8a0fd192467d78d9597c86d2b80e47c6fb07bba9be5cf195b0d15fd8505
-notes=Cetra pil okuması düzeltildi, ham rapor günlüğü eklendi.
+sha256=3a78d4843811238747c45282b117f0b7ee81314320b9625a5cb2ac77e487a654
+notes=Cetra kulaklık: kutudaki kulaklıkta şarj simgesi.
