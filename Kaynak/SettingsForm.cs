@@ -64,6 +64,7 @@ namespace ProSystemMonitor
             AddPage(side, "Cihaz pilleri", BuildDevices());
             AddPage(side, "Güncelleme", BuildUpdate());
             AddPage(side, "Tanılama", BuildDiag());
+            AddPage(side, "Kısayollar", BuildHotkeys());
             ShowPage(0);
 
             _t.Interval = 400;
@@ -441,6 +442,42 @@ namespace ProSystemMonitor
         }
 
         // ---------------- Ses profilleri ----------------
+        private readonly Dictionary<string, TextBox> _hkBoxes = new Dictionary<string, TextBox>();
+        private Label _hkStatus;
+
+        private Panel BuildHotkeys()
+        {
+            var p = new Panel();
+            p.Controls.Add(H("Kısayol tuşları", 0));
+            p.Controls.Add(Sub("Kutuya tıkla, sonra istediğin tuş kombinasyonuna bas (ör. Alt + NumPad0). Her uygulamada ve oyunda çalışır. Temizle ile kaldır.", 0, 40, 760));
+            p.Controls.Add(Sub("Cihaz değiştirme, Ses ve mikrofon sayfasında işaretli (seçili) cihazlar arasında döner; hiçbiri işaretli değilse hepsi arasında.", 0, 62, 760));
+            for (int i = 0; i < Hotkeys.Ids.Length; i++)
+            {
+                string id = Hotkeys.Ids[i]; int top = 110 + i * 62;
+                p.Controls.Add(new Label { Text = Hotkeys.Names[i], ForeColor = Tx, Left = 0, Top = top, Width = 600, Height = 22, Font = new Font("Segoe UI", 10f) });
+                var tb = new TextBox { Left = 0, Top = top + 26, Width = 300, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.FixedSingle, ShortcutsEnabled = false, Font = new Font("Segoe UI", 11f) };
+                int[] cur; if (Hotkeys.Map.TryGetValue(id, out cur)) tb.Text = Hotkeys.Describe(cur);
+                string cid = id;
+                tb.KeyDown += delegate (object s, KeyEventArgs e)
+                {
+                    e.SuppressKeyPress = true; e.Handled = true;
+                    Keys k = e.KeyCode;
+                    if (k == Keys.ControlKey || k == Keys.ShiftKey || k == Keys.Menu || k == Keys.LWin || k == Keys.RWin) return;
+                    int mod = (e.Alt ? 1 : 0) | (e.Control ? 2 : 0) | (e.Shift ? 4 : 0);
+                    Hotkeys.Set(cid, mod, (int)k);
+                    int[] now; tb.Text = Hotkeys.Map.TryGetValue(cid, out now) ? Hotkeys.Describe(now) : "";
+                    foreach (var kv in _hkBoxes) { int[] o; kv.Value.Text = Hotkeys.Map.TryGetValue(kv.Key, out o) ? Hotkeys.Describe(o) : ""; }
+                    _hkStatus.Text = Hotkeys.Status;
+                };
+                _hkBoxes[id] = tb;
+                p.Controls.Add(tb);
+                p.Controls.Add(Bt("Temizle", 310, top + 24, 90, delegate { Hotkeys.Set(cid, 0, 0); tb.Text = ""; _hkStatus.Text = Hotkeys.Status; }));
+            }
+            _hkStatus = new Label { Text = Hotkeys.Status, ForeColor = Color.FromArgb(255, 140, 120), Left = 0, Top = 110 + Hotkeys.Ids.Length * 62, Width = 740, Height = 24, Font = new Font("Segoe UI", 9.5f) };
+            p.Controls.Add(_hkStatus);
+            return p;
+        }
+
         private Panel BuildProfiles()
         {
             var p = new Panel();

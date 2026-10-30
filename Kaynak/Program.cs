@@ -53,6 +53,7 @@ namespace ProSystemMonitor
 
                 LowerOwnPriority();
                 _ui = new Control(); _ui.CreateControl(); var hnd = _ui.Handle;
+                Hotkeys.Init();
                 _showEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\ProSystemMonitor_ShowDash");
                 new Thread(() => { while (_running) { try { if (_showEvt.WaitOne(1000)) LaunchDashboardOnSecondMonitor(); } catch { } } }) { IsBackground = true }.Start();
                 _collector = new TelemetryCollector();

@@ -1,4 +1,4 @@
-version=34
+version=35
 file=ProSystemMonitor.exe
-sha256=5f68fffecbc7658a605e216dfa262fdaff19e17ccb687cd0ea7a2d41c5d9d727
-notes=Cetra rozetleri bağlıyken renkli.
+sha256=9e5218d3ce8488105a6b7b2fb0c58ae84424b51be023f2044fa29d524cb3b177
+notes=Genel kısayol tuşları eklendi (Ayarlar > Kısayollar).
