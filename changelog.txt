@@ -1,3 +1,4 @@
+v39 - v38 değişikliği geri alındı (pano yine tam ekran).
 v37 - Kısayollar Ses ve mikrofon sayfasına taşındı; ayarlar sayfalarında yerleşim hataları düzeltildi.
 v36 - Pano görev çubuğunda görünmez; "Arka planda kal" modu (üstüne pencere getirilebilir, Win+D küçültmez).
 v35 - Genel kısayol tuşları: çıkış/giriş cihazı değiştirme, mikrofon ve hoparlör sessize alma, profil (Ayarlar > Kısayollar).

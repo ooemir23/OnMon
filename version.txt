@@ -1,4 +1,4 @@
-version=37
+version=39
 file=ProSystemMonitor.exe
-sha256=fab0e2411f57a68a7b7a9fbdd0fd4b6e82296a60f0ac6e424538a528433f75ee
-notes=Kısayollar ses sayfasında; ayarlar yerleşimi düzeltildi.
+sha256=a09823563c28fa385494d446b5965a4c7b64c7ac243a8e9487990beb3bbeac12
+notes=v38 değişikliği geri alındı.
