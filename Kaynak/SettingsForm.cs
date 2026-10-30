@@ -64,7 +64,6 @@ namespace ProSystemMonitor
             AddPage(side, "Cihaz pilleri", BuildDevices());
             AddPage(side, "Güncelleme", BuildUpdate());
             AddPage(side, "Tanılama", BuildDiag());
-            AddPage(side, "Kısayollar", BuildHotkeys());
             ShowPage(0);
 
             _t.Interval = 400;
@@ -174,11 +173,11 @@ namespace ProSystemMonitor
             p.Controls.Add(_layoutList);
 
             p.Controls.Add(Sub("KENAR BOŞLUĞU", 0, 252, 200));
-            var tb = new TrackBar { Left = 0, Top = 274, Width = 260, Minimum = 0, Maximum = 48, TickFrequency = 8, SmallChange = 4, LargeChange = 8, Value = Math.Max(0, Math.Min(48, _d._margin)) };
-            var tl = new Label { Left = 270, Top = 282, Width = 80, ForeColor = Tx, Text = _d._margin + " px" };
+            var tb = new TrackBar { Left = 0, Top = 274, Width = 220, Minimum = 0, Maximum = 48, TickFrequency = 8, SmallChange = 4, LargeChange = 8, Value = Math.Max(0, Math.Min(48, _d._margin)) };
+            var tl = new Label { Left = 226, Top = 282, Width = 60, ForeColor = Tx, Text = _d._margin + " px" };
             tb.Scroll += delegate { tl.Text = tb.Value + " px"; if (!_loading) { _d._margin = tb.Value; _d.SaveSettings(); _d.Invalidate(); } };
             p.Controls.Add(tb); p.Controls.Add(tl);
-            p.Controls.Add(Ck("Alt bilgi çubuğu: saat, tarih, sıradaki vakte kalan süre", 0, 330, 560, _d._topBar, v => { _d._topBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            { var ckb = Ck("Alt bilgi çubuğu: saat, tarih, sıradaki vakte kalan süre", 0, 330, 280, _d._topBar, v => { _d._topBar = v; _d.SaveSettings(); _d.Invalidate(); }); ckb.Height = 48; p.Controls.Add(ckb); }
 
             p.Controls.Add(Sub("TEMA (21 seçenek, listeyi kaydır)", 300, 44, 400));
             _themeList = new ListBox { Left = 300, Top = 68, Width = 440, Height = 480, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 40 };
@@ -212,12 +211,12 @@ namespace ProSystemMonitor
         // ---------------- Ses ----------------
         private Panel BuildAudio()
         {
-            var p = new Panel();
+            var p = new Panel { AutoScroll = true };
             p.Controls.Add(H("Ses ve mikrofon", 0));
 
-            p.Controls.Add(Sub("ÇIKIŞ CİHAZLARI — kutuyu işaretlediklerin alt çubukta ve SES panelinde görünür", 0, 44, 740));
-            _outList = LV(0, 68, 740, 150, true);
-            _outList.Columns.Add("", 40); _outList.Columns.Add("Cihaz", 560); _outList.Columns.Add("Durum", 130);
+            p.Controls.Add(Sub("ÇIKIŞ CİHAZLARI — işaretlediklerin alt çubukta, SES panelinde ve kısayolla değiştirmede kullanılır", 0, 40, 700));
+            _outList = LV(0, 64, 700, 108, true);
+            _outList.Columns.Add("", 40); _outList.Columns.Add("Cihaz", 520); _outList.Columns.Add("Durum", 120);
             _outList.ItemChecked += delegate (object s, ItemCheckedEventArgs e)
             {
                 if (_loading) return;
@@ -227,13 +226,12 @@ namespace ProSystemMonitor
             };
             _outList.DoubleClick += delegate { SetDefaultFrom(_outList, true); };
             p.Controls.Add(_outList);
-            p.Controls.Add(Bt("Varsayılan yap", 0, 226, 150, delegate { SetDefaultFrom(_outList, true); }));
-            p.Controls.Add(Bt("Test sesi çal", 160, 226, 150, delegate { try { System.Media.SystemSounds.Asterisk.Play(); } catch { } }));
-            p.Controls.Add(Ck("Alt çubukta ses cihazlarını göster", 330, 230, 330, _d._audioBar, v => { _d._audioBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            p.Controls.Add(Bt("Varsayılan yap", 0, 180, 150, delegate { SetDefaultFrom(_outList, true); }));
+            p.Controls.Add(Bt("Test sesi çal", 160, 180, 150, delegate { try { System.Media.SystemSounds.Asterisk.Play(); } catch { } }));
 
-            p.Controls.Add(Sub("MİKROFON — kutuyu işaretlediklerin SES panelinde görünür", 0, 286, 500));
-            _micList = LV(0, 310, 740, 110, true);
-            _micList.Columns.Add("", 40); _micList.Columns.Add("Cihaz", 560); _micList.Columns.Add("Durum", 130);
+            p.Controls.Add(Sub("MİKROFON / GİRİŞ CİHAZLARI — işaretlediklerin SES panelinde ve kısayolla değiştirmede kullanılır", 0, 226, 700));
+            _micList = LV(0, 250, 700, 92, true);
+            _micList.Columns.Add("", 40); _micList.Columns.Add("Cihaz", 520); _micList.Columns.Add("Durum", 120);
             _micList.ItemChecked += delegate (object s, ItemCheckedEventArgs e)
             {
                 if (_loading) return;
@@ -243,15 +241,20 @@ namespace ProSystemMonitor
             };
             _micList.DoubleClick += delegate { SetDefaultFrom(_micList, false); };
             p.Controls.Add(_micList);
-            p.Controls.Add(Bt("Varsayılan yap", 0, 428, 150, delegate { SetDefaultFrom(_micList, false); }));
-            _micMute = Ck("Mikrofonu sustur", 170, 432, 200, false, v => { if (v != AudioSwitch.MicMuted) _d.ToggleMic(); });
+            p.Controls.Add(Bt("Varsayılan yap", 0, 350, 150, delegate { SetDefaultFrom(_micList, false); }));
+            _micMute = Ck("Mikrofonu sustur", 160, 352, 190, false, v => { if (v != AudioSwitch.MicMuted) _d.ToggleMic(); });
             p.Controls.Add(_micMute);
-            p.Controls.Add(Ck("Alt çubukta mikrofon göstergesi", 380, 432, 300, _d._micBar, v => { _d._micBar = v; _d.SaveSettings(); _d.Invalidate(); }));
-            p.Controls.Add(Ck("Alt çubuğu tamamen gizle (B tuşu)", 380, 496, 320, _d._hideStrip, v => { _d._hideStrip = v; _d.SaveSettings(); _d.Invalidate(); }));
-            p.Controls.Add(Ck("Alt çubukta ses seviyesi kaydırıcısı", 380, 462, 320, _d._volBar, v => { _d._volBar = v; _d.SaveSettings(); _d.Invalidate(); }));
-            p.Controls.Add(Sub("Anlık seviye", 0, 478, 100));
-            _micBarCtl = new ProgressBar { Left = 100, Top = 480, Width = 400, Height = 14, Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
+            p.Controls.Add(Sub("Anlık seviye", 370, 356, 90));
+            _micBarCtl = new ProgressBar { Left = 460, Top = 358, Width = 240, Height = 14, Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
             p.Controls.Add(_micBarCtl);
+
+            p.Controls.Add(Sub("ALT ÇUBUK", 0, 400, 300));
+            p.Controls.Add(Ck("Ses cihazlarını göster", 0, 424, 340, _d._audioBar, v => { _d._audioBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            p.Controls.Add(Ck("Mikrofon göstergesi", 360, 424, 340, _d._micBar, v => { _d._micBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            p.Controls.Add(Ck("Ses seviyesi kaydırıcısı", 0, 454, 340, _d._volBar, v => { _d._volBar = v; _d.SaveSettings(); _d.Invalidate(); }));
+            p.Controls.Add(Ck("Alt çubuğu tamamen gizle (B tuşu)", 360, 454, 340, _d._hideStrip, v => { _d._hideStrip = v; _d.SaveSettings(); _d.Invalidate(); }));
+
+            AddHotkeys(p, 508);
             return p;
         }
 
@@ -334,23 +337,23 @@ namespace ProSystemMonitor
             p.Controls.Add(Sub("PENCERE", 0, 126, 300));
             CheckBox ckTop = null, ckDesk = null;
             ckTop = Ck("Her zaman üstte", 0, 152, 200, _d.TopMost, v => { _d.TopMost = v; if (v && _d._desk) { _d._desk = false; _loading = true; ckDesk.Checked = false; _loading = false; } _d.SaveSettings(); });
-            ckDesk = Ck("Arka planda kal: başka pencere / uygulama panonun üstüne getirilebilir, Win+D panoyu küçültmez (ikinci monitörde hep görünür)", 210, 152, 540, _d._desk, v => { _d._desk = v; if (v) { _d.TopMost = false; _loading = true; ckTop.Checked = false; _loading = false; _d.SendToBottom(); } _d.SaveSettings(); });
+            ckDesk = Ck("Arka planda kal: başka pencere panonun üstüne getirilebilir, Win+D küçültmez", 210, 152, 490, _d._desk, v => { _d._desk = v; if (v) { _d.TopMost = false; _loading = true; ckTop.Checked = false; _loading = false; _d.SendToBottom(); } _d.SaveSettings(); });
             ckDesk.Height = 44;
             p.Controls.Add(ckTop); p.Controls.Add(ckDesk);
             p.Controls.Add(Bt("Panoyu küçült", 0, 202, 160, delegate { _d.UserMinimize(); }));
             p.Controls.Add(Bt("Panoyu kapat", 170, 202, 160, delegate { _d.Close(); }));
-            p.Controls.Add(Sub("Arka planda kal açıkken pano görev çubuğunda ve Alt+Tab'ta görünmez; yalnızca sistem tepsisi simgesinden yönetilir. Değişikliğin Alt+Tab kısmı için uygulamayı yeniden başlat.", 0, 244, 760));
+            { var note = Sub("Arka planda kal açıkken pano görev çubuğunda ve Alt+Tab'ta görünmez, yalnızca sistem tepsisi simgesinden yönetilir. Alt+Tab değişikliği için uygulamayı yeniden başlat.", 0, 246, 700); note.Height = 40; p.Controls.Add(note); }
 
-            p.Controls.Add(Sub("SİSTEM", 0, 276, 300));
+            p.Controls.Add(Sub("SİSTEM", 0, 300, 300));
             bool auto = false; try { auto = Program.IsAutostartEnabled(); } catch { }
-            p.Controls.Add(Ck("Windows ile birlikte başlat (yönetici olarak)", 0, 302, 400, auto, v => System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(v); })));
+            p.Controls.Add(Ck("Windows ile birlikte başlat (yönetici olarak)", 0, 326, 400, auto, v => System.Threading.ThreadPool.QueueUserWorkItem(delegate { Program.SetAutostart(v); })));
 
-            p.Controls.Add(Ck("Düşük CPU modu (veriler 2 sn'de bir yenilenir)", 0, 326, 500, _d._lowCpu, v => { _d._lowCpu = v; Program.PollIntervalMs = v ? 2000 : 1000; _d.SaveSettings(); }));
-            p.Controls.Add(Sub("ESKİ ARAYÜZLER (daha çok RAM kullanır)", 0, 352, 500));
-            p.Controls.Add(Bt("Tarayıcıda aç", 0, 378, 160, delegate { Program.LaunchBrowserDashboard(); }));
-            p.Controls.Add(Bt("Edge uygulaması olarak aç", 170, 378, 220, delegate { Program.LaunchEdgeDashboard(); }));
+            p.Controls.Add(Ck("Düşük CPU modu (veriler 2 sn'de bir yenilenir)", 0, 358, 500, _d._lowCpu, v => { _d._lowCpu = v; Program.PollIntervalMs = v ? 2000 : 1000; _d.SaveSettings(); }));
+            p.Controls.Add(Sub("ESKİ ARAYÜZLER (daha çok RAM kullanır)", 0, 408, 500));
+            p.Controls.Add(Bt("Tarayıcıda aç", 0, 434, 160, delegate { Program.LaunchBrowserDashboard(); }));
+            p.Controls.Add(Bt("Edge uygulaması olarak aç", 170, 434, 220, delegate { Program.LaunchEdgeDashboard(); }));
 
-            p.Controls.Add(Bt("Uygulamadan çık", 0, 450, 180, delegate { Program.ExitApp(); }));
+            p.Controls.Add(Bt("Uygulamadan çık", 0, 500, 180, delegate { Program.ExitApp(); }));
             return p;
         }
 
@@ -449,45 +452,41 @@ namespace ProSystemMonitor
         private readonly Dictionary<string, TextBox> _hkBoxes = new Dictionary<string, TextBox>();
         private Label _hkStatus;
 
-        private Panel BuildHotkeys()
+        private void AddHotkeys(Panel p, int y0)
         {
-            var p = new Panel();
-            p.Controls.Add(H("Kısayol tuşları", 0));
-            p.Controls.Add(Sub("Kutuya tıkla, sonra istediğin tuş kombinasyonuna bas (ör. Alt + NumPad0). Her uygulamada ve oyunda çalışır. Temizle ile kaldır.", 0, 40, 760));
-            p.Controls.Add(Sub("Cihaz değiştirme, Ses ve mikrofon sayfasında işaretli (seçili) cihazlar arasında döner; hiçbiri işaretli değilse hepsi arasında.", 0, 62, 760));
+            p.Controls.Add(Sub("KISAYOL TUŞLARI — her uygulamada ve oyunda çalışır", 0, y0, 690));
+            p.Controls.Add(Sub("Kutuya tıkla, sonra tuş kombinasyonuna bas (ör. Alt + NumPad0). Cihaz değiştirme yukarıda işaretli cihazlar arasında döner.", 0, y0 + 22, 700));
             for (int i = 0; i < Hotkeys.Ids.Length; i++)
             {
-                string id = Hotkeys.Ids[i]; int top = 110 + i * 62;
-                p.Controls.Add(new Label { Text = Hotkeys.Names[i], ForeColor = Tx, Left = 0, Top = top, Width = 600, Height = 22, Font = new Font("Segoe UI", 10f) });
-                var tb = new TextBox { Left = 0, Top = top + 26, Width = 300, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.FixedSingle, ShortcutsEnabled = false, Font = new Font("Segoe UI", 11f) };
+                string id = Hotkeys.Ids[i]; int top = y0 + 54 + i * 38;
+                p.Controls.Add(new Label { Text = Hotkeys.Names[i], ForeColor = Tx, Left = 0, Top = top + 4, Width = 380, Height = 24, Font = new Font("Segoe UI", 9.5f) });
+                var tb = new TextBox { Left = 390, Top = top, Width = 200, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.FixedSingle, ShortcutsEnabled = false, Font = new Font("Segoe UI", 10.5f) };
                 int[] cur; if (Hotkeys.Map.TryGetValue(id, out cur)) tb.Text = Hotkeys.Describe(cur);
                 string cid = id;
-                tb.KeyDown += delegate (object s, KeyEventArgs e)
+                tb.KeyDown += delegate (object s2, KeyEventArgs e)
                 {
                     e.SuppressKeyPress = true; e.Handled = true;
                     Keys k = e.KeyCode;
                     if (k == Keys.ControlKey || k == Keys.ShiftKey || k == Keys.Menu || k == Keys.LWin || k == Keys.RWin) return;
                     int mod = (e.Alt ? 1 : 0) | (e.Control ? 2 : 0) | (e.Shift ? 4 : 0);
                     Hotkeys.Set(cid, mod, (int)k);
-                    int[] now; tb.Text = Hotkeys.Map.TryGetValue(cid, out now) ? Hotkeys.Describe(now) : "";
                     foreach (var kv in _hkBoxes) { int[] o; kv.Value.Text = Hotkeys.Map.TryGetValue(kv.Key, out o) ? Hotkeys.Describe(o) : ""; }
                     _hkStatus.Text = Hotkeys.Status;
                 };
                 _hkBoxes[id] = tb;
                 p.Controls.Add(tb);
-                p.Controls.Add(Bt("Temizle", 310, top + 24, 90, delegate { Hotkeys.Set(cid, 0, 0); tb.Text = ""; _hkStatus.Text = Hotkeys.Status; }));
+                p.Controls.Add(Bt("Temizle", 600, top - 2, 90, delegate { Hotkeys.Set(cid, 0, 0); tb.Text = ""; _hkStatus.Text = Hotkeys.Status; }));
             }
-            _hkStatus = new Label { Text = Hotkeys.Status, ForeColor = Color.FromArgb(255, 140, 120), Left = 0, Top = 110 + Hotkeys.Ids.Length * 62, Width = 740, Height = 24, Font = new Font("Segoe UI", 9.5f) };
+            _hkStatus = new Label { Text = Hotkeys.Status, ForeColor = Color.FromArgb(255, 140, 120), Left = 0, Top = y0 + 54 + Hotkeys.Ids.Length * 38, Width = 690, Height = 24, Font = new Font("Segoe UI", 9.5f) };
             p.Controls.Add(_hkStatus);
-            return p;
         }
 
         private Panel BuildProfiles()
         {
             var p = new Panel();
             p.Controls.Add(H("Ses profilleri", 0));
-            p.Controls.Add(Sub("Şu anki çıkış cihazı, ses seviyesi ve mikrofon durumunu bir profil olarak kaydet; tek tıkla (HUD'daki PROFİL çipleri) veya P tuşuyla uygula.", 0, 40, 760));
-            _profList = LV(0, 72, 740, 260, false);
+            { var pn = Sub("Şu anki çıkış cihazı, ses seviyesi ve mikrofon durumunu bir profil olarak kaydet; tek tıkla (HUD'daki PROFİL çipleri), P tuşuyla veya Ses ve mikrofon sayfasındaki kısayolla uygula.", 0, 40, 720); pn.Height = 34; p.Controls.Add(pn); }
+            _profList = LV(0, 80, 740, 252, false);
             _profList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
             _profList.Columns.Add("Profil", 150); _profList.Columns.Add("Çıkış cihazı", 330); _profList.Columns.Add("Ses", 70); _profList.Columns.Add("Mikrofon", 100);
             p.Controls.Add(_profList);

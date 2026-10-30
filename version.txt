@@ -1,4 +1,4 @@
-version=36
+version=37
 file=ProSystemMonitor.exe
-sha256=50da5d6a39ae7fce26194c8fb2e1faf9ee911aef7ae2a5913984c5dac6e43053
-notes=Görev çubuğu simgesi kaldırıldı; Arka planda kal modu eklendi.
+sha256=fab0e2411f57a68a7b7a9fbdd0fd4b6e82296a60f0ac6e424538a528433f75ee
+notes=Kısayollar ses sayfasında; ayarlar yerleşimi düzeltildi.
