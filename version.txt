@@ -1,4 +1,4 @@
-version=37
+version=38
 file=ProSystemMonitor.exe
-sha256=fab0e2411f57a68a7b7a9fbdd0fd4b6e82296a60f0ac6e424538a528433f75ee
-notes=Kısayollar ses sayfasında; ayarlar yerleşimi düzeltildi.
+sha256=0c2489b3b154d7b6f6c9b58d92325a7494fa0d8ee89342db3633e48d0c5e1b21
+notes=Pano görev çubuğuyla çakışmıyor.

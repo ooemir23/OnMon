@@ -336,8 +336,8 @@ namespace ProSystemMonitor
 
             p.Controls.Add(Sub("PENCERE", 0, 126, 300));
             CheckBox ckTop = null, ckDesk = null;
-            ckTop = Ck("Her zaman üstte", 0, 152, 200, _d.TopMost, v => { _d.TopMost = v; if (v && _d._desk) { _d._desk = false; _loading = true; ckDesk.Checked = false; _loading = false; } _d.SaveSettings(); });
-            ckDesk = Ck("Arka planda kal: başka pencere panonun üstüne getirilebilir, Win+D küçültmez", 210, 152, 490, _d._desk, v => { _d._desk = v; if (v) { _d.TopMost = false; _loading = true; ckTop.Checked = false; _loading = false; _d.SendToBottom(); } _d.SaveSettings(); });
+            ckTop = Ck("Her zaman üstte", 0, 152, 200, _d.TopMost, v => { _d.TopMost = v; if (v && _d._desk) { _d._desk = false; _loading = true; ckDesk.Checked = false; _loading = false; } _d.SaveSettings(); _d.ReapplyArea(); });
+            ckDesk = Ck("Arka planda kal: başka pencere panonun üstüne getirilebilir, Win+D küçültmez", 210, 152, 490, _d._desk, v => { _d._desk = v; if (v) { _d.TopMost = false; _loading = true; ckTop.Checked = false; _loading = false; _d.SendToBottom(); } _d.SaveSettings(); _d.ReapplyArea(); });
             ckDesk.Height = 44;
             p.Controls.Add(ckTop); p.Controls.Add(ckDesk);
             p.Controls.Add(Bt("Panoyu küçült", 0, 202, 160, delegate { _d.UserMinimize(); }));

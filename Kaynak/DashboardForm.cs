@@ -269,8 +269,16 @@ namespace ProSystemMonitor
         {
             Screen[] screens = Screen.AllScreens;
             Screen target = screens.FirstOrDefault(s => !s.Primary) ?? screens.First();
-            _target = target.Bounds;
+            _target = Area(target);
             Bounds = _target;
+        }
+
+        // Arka planda kal modunda görev çubuğu panonun üstüne biner; o yüzden çalışma alanına (görev çubuğu hariç) yerleştir.
+        private Rectangle Area(Screen s) { return (_desk && !TopMost) ? s.WorkingArea : s.Bounds; }
+
+        internal void ReapplyArea()
+        {
+            try { Screen s = Screen.FromRectangle(_target.Width > 0 ? _target : Bounds); _target = Area(s); if (WindowState == FormWindowState.Normal) Bounds = _target; Invalidate(); } catch { }
         }
 
         // ---------------- veri ----------------
@@ -429,7 +437,7 @@ namespace ProSystemMonitor
 
         internal void MoveToScreen(Screen sc)
         {
-            _target = sc.Bounds;
+            _target = Area(sc);
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
             Bounds = _target;
             Invalidate();
@@ -441,7 +449,7 @@ namespace ProSystemMonitor
             if (all.Length < 2) return;
             Screen cur = Screen.FromControl(this);
             int i = Array.FindIndex(all, s => s.DeviceName == cur.DeviceName);
-            _target = all[(i + 1) % all.Length].Bounds;
+            _target = Area(all[(i + 1) % all.Length]);
             Bounds = _target;
             Invalidate();
         }
