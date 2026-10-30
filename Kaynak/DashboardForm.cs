@@ -43,6 +43,23 @@ namespace ProSystemMonitor
         private const float VolW = 300f;
         private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
         private float _lastMic = -1; private bool _lastMuted;
+        internal bool _desk = true;          // arka planda kal: diğer pencereler üstüne gelebilir, Win+D küçültmez
+        private bool _userMin;
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        internal void SendToBottom()
+        {
+            try { if (_desk && IsHandleCreated && !TopMost) SetWindowPos(Handle, new IntPtr(1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); } catch { }
+        }
+        internal void UserMinimize() { _userMin = true; WindowState = FormWindowState.Minimized; }
+        protected override CreateParams CreateParams
+        {
+            get { CreateParams cp = base.CreateParams; if (_desk) cp.ExStyle |= 0x80; return cp; }  // WS_EX_TOOLWINDOW: Alt+Tab'ta görünmez
+        }
+        protected override void OnDeactivate(EventArgs e)
+        {
+            base.OnDeactivate(e);
+            if (_desk) BeginInvoke((Action)SendToBottom);
+        }
         internal readonly HashSet<string> _favs = new HashSet<string>();
         internal readonly HashSet<string> _micFavs = new HashSet<string>();
         private readonly List<KeyValuePair<RectangleF, string>> _hits = new List<KeyValuePair<RectangleF, string>>();
@@ -59,6 +76,7 @@ namespace ProSystemMonitor
             try
             {
                 if (!File.Exists(SettingsPath)) return;
+                bool hasDesk = false;
                 foreach (string line in File.ReadAllLines(SettingsPath))
                 {
                     int i = line.IndexOf('=');
@@ -80,12 +98,15 @@ namespace ProSystemMonitor
                         TelemetryCollector.FanMap = fm;
                     }
                     else if (k == "topmost") TopMost = v == "1";
+                    else if (k == "desk") { hasDesk = true; _desk = v == "1"; }
                     else if (k == "micfav") { _micFavs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _micFavs.Add(x); }
                     else if (k == "soundfav") { _favs.Clear(); foreach (string x in v.Split(new[] { '|' })) if (x.Length > 0) _favs.Add(x); }
                     else if (k == "theme") _th = Themes.Get(v);
                     else if (k == "margin") int.TryParse(v, out _margin);
                     else if (k == "city" && v.Length > 0) _city = v;
                 }
+                if (!hasDesk) { _desk = true; TopMost = false; }
+                if (_desk) TopMost = false;
             }
             catch { }
         }
@@ -95,7 +116,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs) });
             }
             catch { }
         }
@@ -108,7 +129,7 @@ namespace ProSystemMonitor
             Text = "ROG Pro System Monitor";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
-            ShowInTaskbar = true;
+            ShowInTaskbar = false;
             MinimizeBox = true;
             MaximizeBox = false;
             try { Icon = Program.TrayIcon(); } catch { }
@@ -173,6 +194,7 @@ namespace ProSystemMonitor
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            if (_desk) BeginInvoke((Action)SendToBottom);
             if (_target.Width > 0) { Bounds = _target; Invalidate(); }
         }
 
@@ -208,6 +230,12 @@ namespace ProSystemMonitor
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            if (_desk && WindowState == FormWindowState.Minimized && !_userMin)
+            {   // Win+D / "tüm pencereleri küçült": pano masaüstünde kalsın
+                BeginInvoke((Action)delegate { if (!IsDisposed && WindowState == FormWindowState.Minimized) { WindowState = FormWindowState.Normal; SendToBottom(); } });
+                return;
+            }
+            if (WindowState != FormWindowState.Minimized) _userMin = false;
             Program.DashVisible = WindowState != FormWindowState.Minimized && Visible;
             if (WindowState == FormWindowState.Minimized && _frame != null) { _frame.Dispose(); _frame = null; _twCache.Clear(); Program.TrimProcessMemory(); }
         }
@@ -394,7 +422,7 @@ namespace ProSystemMonitor
             m.Items.Add(set);
             m.Items.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", false, delegate { ToggleMic(); }));
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add(Mi("Küçült", null, false, delegate { WindowState = FormWindowState.Minimized; }));
+            m.Items.Add(Mi("Küçült", null, false, delegate { UserMinimize(); }));
             m.Items.Add(Mi("Panoyu kapat", "", false, delegate { Close(); }));
             m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitApp(); }));
         }

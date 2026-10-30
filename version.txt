@@ -1,4 +1,4 @@
-version=35
+version=36
 file=ProSystemMonitor.exe
-sha256=9e5218d3ce8488105a6b7b2fb0c58ae84424b51be023f2044fa29d524cb3b177
-notes=Genel kısayol tuşları eklendi (Ayarlar > Kısayollar).
+sha256=50da5d6a39ae7fce26194c8fb2e1faf9ee911aef7ae2a5913984c5dac6e43053
+notes=Görev çubuğu simgesi kaldırıldı; Arka planda kal modu eklendi.

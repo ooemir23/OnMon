@@ -42,7 +42,7 @@ namespace ProSystemMonitor
             BackColor = Bg; ForeColor = Tx;
             Font = new Font("Segoe UI", 10f);
             TopMost = true;
-            ShowInTaskbar = true;
+            ShowInTaskbar = false;
             try { Icon = Program.TrayIcon(); } catch { }
 
             var side = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = Side };
@@ -332,10 +332,14 @@ namespace ProSystemMonitor
             }));
 
             p.Controls.Add(Sub("PENCERE", 0, 126, 300));
-            p.Controls.Add(Ck("Her zaman üstte", 0, 152, 300, _d.TopMost, v => { _d.TopMost = v; _d.SaveSettings(); }));
-            p.Controls.Add(Bt("Panoyu küçült", 0, 190, 160, delegate { _d.WindowState = FormWindowState.Minimized; }));
-            p.Controls.Add(Bt("Panoyu kapat", 170, 190, 160, delegate { _d.Close(); }));
-            p.Controls.Add(Sub("Win+D (masaüstünü göster) panoyu küçültür; görev çubuğundan geri açılır.", 0, 232, 700));
+            CheckBox ckTop = null, ckDesk = null;
+            ckTop = Ck("Her zaman üstte", 0, 152, 200, _d.TopMost, v => { _d.TopMost = v; if (v && _d._desk) { _d._desk = false; _loading = true; ckDesk.Checked = false; _loading = false; } _d.SaveSettings(); });
+            ckDesk = Ck("Arka planda kal: başka pencere / uygulama panonun üstüne getirilebilir, Win+D panoyu küçültmez (ikinci monitörde hep görünür)", 210, 152, 540, _d._desk, v => { _d._desk = v; if (v) { _d.TopMost = false; _loading = true; ckTop.Checked = false; _loading = false; _d.SendToBottom(); } _d.SaveSettings(); });
+            ckDesk.Height = 44;
+            p.Controls.Add(ckTop); p.Controls.Add(ckDesk);
+            p.Controls.Add(Bt("Panoyu küçült", 0, 202, 160, delegate { _d.UserMinimize(); }));
+            p.Controls.Add(Bt("Panoyu kapat", 170, 202, 160, delegate { _d.Close(); }));
+            p.Controls.Add(Sub("Arka planda kal açıkken pano görev çubuğunda ve Alt+Tab'ta görünmez; yalnızca sistem tepsisi simgesinden yönetilir. Değişikliğin Alt+Tab kısmı için uygulamayı yeniden başlat.", 0, 244, 760));
 
             p.Controls.Add(Sub("SİSTEM", 0, 276, 300));
             bool auto = false; try { auto = Program.IsAutostartEnabled(); } catch { }
