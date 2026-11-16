@@ -699,6 +699,13 @@ namespace ProSystemMonitor
             _diag = new TextBox { Left = 0, Top = 48, Width = 740, Height = 330, Multiline = true, ReadOnly = true, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, Font = new Font("Consolas", 10f), ScrollBars = ScrollBars.Vertical };
             p.Controls.Add(_diag);
             p.Controls.Add(Bt("Yenile", 0, 392, 120, delegate { RefreshDiag(); }));
+            p.Controls.Add(Bt("PawnIO sürücüsünü kur (winget)", 0, 428, 240, delegate
+            {
+                if (MessageBox.Show("CPU sıcaklık/güç ve anakart fan/voltaj sensörleri için PawnIO sürücüsü gerekir (Windows Bellek Bütünlüğü ile uyumlu, imzalı sürücü).\n\nwinget ile 'namazso.PawnIO' kurulsun mu?", "OnMon", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                try { Process.Start(new ProcessStartInfo("cmd.exe", "/c winget install --id namazso.PawnIO -e --accept-source-agreements --accept-package-agreements & echo. & echo Bitti. Uygulamayi kapatip yeniden acin. & pause") { UseShellExecute = true }); }
+                catch (Exception ex) { MessageBox.Show("Başlatılamadı: " + ex.Message); }
+            }));
+            p.Controls.Add(Bt("pawnio.eu sayfasını aç", 250, 428, 200, delegate { try { Process.Start("https://pawnio.eu"); } catch { } }));
             p.Controls.Add(Bt("Sensör listesini kaydet", 130, 392, 220, delegate { Program.RequestSensorDump(); }));
             p.Controls.Add(Bt("Kayıt klasörünü aç", 360, 392, 200, delegate
             {

@@ -1,3 +1,4 @@
+v57 - DENEME: LibreHardwareMonitor 0.9.6 (PawnIO sürücüsü, Bellek Bütünlüğü ile uyumlu), yönetici manifesti gerçekten gömüldü (önceki Linux derlemelerinde eksikti), Tanılama sayfasında PawnIO kur düğmesi.
 v56 - Sensör tanılama: Tanılama sayfasında ve sensorler.txt başında hangi sensör grubunun çalıştığı + ring0 sürücü/HVCI/engel listesi durumu; otomatik başlatma onarımı hatasını kaydeder ve /Change ile yedek dener.
 v55 - Şablon kaydet/paylaş (.onmon dosyası, resimler dahil), şablon aç/içe aktar, kayıtlı şablon listesi; sağ tık varsayılan olarak menü açar, düzenleme modu menüden/ayarlardan girilir (ayarda "sağ tık doğrudan düzenleme" seçeneği).
 v54 - Pano editörü: sağ tıkla düzenleme, ince ızgara (1-40), widget başına tam özelleştirme penceresi (renkler, çerçeve stili/kalınlık/köşe/opaklık, daire ve çubuk stili, içerik ölçeği), metin/logo/kutu widget'ları, boş şablon, çözünürlük/yön/kasa ekranı ayarı, arka plan rengi/resmi.
