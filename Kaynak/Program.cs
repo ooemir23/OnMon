@@ -2033,12 +2033,26 @@ namespace ProSystemMonitor
             "EpicGamesLauncher", "Battle.net", "GalaxyClient", "RiotClientServices", "Origin", "EADesktop", "UbisoftConnect"
         };
 
+        // Bir swap chain'in Present zaman damgaları (olayın kendi QPC zamanı; ETW tamponu toplu teslim ettiği için varış zamanı kullanılmaz).
+        private sealed class Series
+        {
+            public readonly List<long> T = new List<long>(4096);
+            public int Head;
+            public long Newest;
+            public void Add(long ts, long keep)
+            {
+                T.Add(ts); if (ts > Newest) Newest = ts;
+                while (Head < T.Count && Newest - T[Head] > keep) Head++;
+                if (Head > 8192) { T.RemoveRange(0, Head); Head = 0; }
+            }
+            public int Count { get { return T.Count - Head; } }
+        }
+
         private sealed class PidStat
         {
-            public readonly Queue<long> Present = new Queue<long>();   // DXGI / D3D9
-            public readonly Queue<long> Kernel = new Queue<long>();    // DxgKrnl (yedek)
-            public readonly Queue<long> Hist = new Queue<long>();      // son 30 sn (1% low için)
-            public long LastSeen;
+            public readonly Dictionary<ulong, Series> Sw = new Dictionary<ulong, Series>();   // DXGI / D3D9, swap chain başına
+            public readonly Series Kernel = new Series();                                     // DxgKrnl (Vulkan/OpenGL yedeği)
+            public long LastSeen;                                                              // son olayın geliş zamanı (donmuş oyun tespiti)
         }
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
@@ -2182,31 +2196,50 @@ namespace ProSystemMonitor
         {
             try
             {
-                // EVENT_RECORD: ProcessId @12, ProviderId.Data1 @24, EventDescriptor.Id @40
+                // EVENT_RECORD (x64): HeaderFlags @4, ProcessId @12, TimeStamp @16, ProviderId.Data1 @24, EventDescriptor.Id @40,
+                // UserDataLength @86, UserData @96
                 int provider = Marshal.ReadInt32(rec, 24);
                 int id = Marshal.ReadInt16(rec, 40) & 0xFFFF;
-                bool present = false, kernel = false;
-                if (provider == unchecked((int)0xCA11C036)) present = (id == 42);        // DXGI Present_Start
-                else if (provider == 0x783ACA0A) present = (id == 1);                    // D3D9 Present_Start
+                bool dxgi = false, d3d9 = false, kernel = false;
+                if (provider == unchecked((int)0xCA11C036)) dxgi = (id == 42);           // DXGI Present_Start
+                else if (provider == 0x783ACA0A) d3d9 = (id == 1);                       // D3D9 Present_Start
                 else if (provider == unchecked((int)0x802EC45A)) kernel = (id == 184);   // DxgKrnl Present_Info
-                if (!present && !kernel) return;
+                if (!dxgi && !d3d9 && !kernel) return;
 
                 uint pid = (uint)Marshal.ReadInt32(rec, 12);
                 if (pid == 0 || pid == 4) return;
+
+                ulong swap = 0;
+                if (dxgi)
+                {
+                    // Payload: pSwapChain (işaretçi, hedef işlemin boyutunda), Flags (uint), SyncInterval (uint)
+                    int hflags = Marshal.ReadInt16(rec, 4) & 0xFFFF;
+                    int ps = (hflags & 0x20) != 0 ? 4 : 8;
+                    int udLen = Marshal.ReadInt16(rec, 86) & 0xFFFF;
+                    IntPtr ud = Marshal.ReadIntPtr(rec, 96);
+                    if (ud != IntPtr.Zero && udLen >= ps + 4)
+                    {
+                        swap = ps == 8 ? (ulong)Marshal.ReadInt64(ud, 0) : (ulong)(uint)Marshal.ReadInt32(ud, 0);
+                        uint pflags = (uint)Marshal.ReadInt32(ud, ps);
+                        if ((pflags & 0x1) != 0) return;   // DXGI_PRESENT_TEST: gerçek kare değil
+                    }
+                }
+
                 Interlocked.Increment(ref _eventCount);
-                long now = Stopwatch.GetTimestamp();
+                long ts = Marshal.ReadInt64(rec, 16);       // QPC (ClientContext=1)
+                long arrived = Stopwatch.GetTimestamp();
+                long keep = 31 * Stopwatch.Frequency;
                 lock (_gate)
                 {
                     PidStat st;
                     if (!_stats.TryGetValue(pid, out st)) { st = new PidStat(); _stats[pid] = st; }
-                    st.LastSeen = now;
-                    Queue<long> q = present ? st.Present : st.Kernel;
-                    q.Enqueue(now);
-                    while (q.Count > 4000) q.Dequeue();
-                    if (present)
+                    st.LastSeen = arrived;
+                    if (kernel) st.Kernel.Add(ts, keep);
+                    else
                     {
-                        st.Hist.Enqueue(now);
-                        while (st.Hist.Count > 40000) st.Hist.Dequeue();
+                        Series sr;
+                        if (!st.Sw.TryGetValue(swap, out sr)) { if (st.Sw.Count >= 8) return; sr = new Series(); st.Sw[swap] = sr; }
+                        sr.Add(ts, keep);
                     }
                 }
             }
@@ -2256,7 +2289,45 @@ namespace ProSystemMonitor
             return n;
         }
 
-        /// <summary>Son 1 saniyedeki Present sayısından FPS ve kare süresi; oyun/uygulama adını döndürür.</summary>
+        // Zaman damgalarından ortalama kare hızı: (kare-1) / geçen süre. Pencere, serinin en yeni olayında biter.
+        private static bool Rate(Series s, out double fps)
+        {
+            fps = 0;
+            if (s.Count < 2) return false;
+            long f = Stopwatch.Frequency, newest = s.T[s.T.Count - 1];
+            for (int pass = 0; pass < 2; pass++)
+            {
+                long w = pass == 0 ? f : 3 * f;   // düşük FPS'te pencereyi 3 sn'ye genişlet
+                int i = s.T.Count - 1;
+                while (i > s.Head && newest - s.T[i - 1] <= w) i--;
+                int n = s.T.Count - i;
+                if (n >= 5 || pass == 1)
+                {
+                    long span = newest - s.T[i];
+                    if (n < 2 || span <= 0) return false;
+                    fps = (n - 1) * (double)f / span;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool _kernelOn;
+        private long _kernelUsed;
+
+        private void SetKernel(bool on)
+        {
+            if (_kernelOn == on || _session == 0) return;
+            try
+            {
+                Guid g = DxgKrnlGuid;
+                EtwNative.EnableTraceEx2(_session, ref g, on ? 1u : 0u, 4, 0x1, 0, 0, IntPtr.Zero);
+                _kernelOn = on;
+            }
+            catch { }
+        }
+
+        /// <summary>Son kareler arasındaki sürelerden FPS, ortalama kare süresi ve %1 low; oyun/uygulama adını döndürür.</summary>
         public double Read(out string game, out double frameMs, out double low1)
         {
             game = "";
@@ -2280,58 +2351,67 @@ namespace ProSystemMonitor
             catch { }
 
             long now = Stopwatch.GetTimestamp();
-            long window = Stopwatch.Frequency;
-            double bestFps = 0, bestMs = 0;
+            long f = Stopwatch.Frequency;
+            long stale = 2 * f + f / 2;   // ETW tamponları ~1 sn'de bir teslim edilir; bundan uzun sessizlik = kare yok
+            double bestFps = 0;
             uint bestPid = 0;
             string bestName = "";
-            bool bestIsFg = false;
+            bool bestIsFg = false, bestKernel = false;
+            Series bestSeries = null;
+            bool fgHasDxgi = false;
             var dead = new List<uint>();
+            uint self = (uint)Process.GetCurrentProcess().Id;
 
             lock (_gate)
             {
                 foreach (var kv in _stats)
                 {
                     PidStat st = kv.Value;
-                    Prune(st.Present, now, window);
-                    Prune(st.Kernel, now, window);
-                    Prune(st.Hist, now, 30 * window);
-                    // DXGI/D3D9 varsa onu, yoksa (Vulkan/OpenGL gibi) çekirdek olaylarını kullan.
-                    Queue<long> q = st.Present.Count > 0 ? st.Present : st.Kernel;
-                    if (q.Count == 0)
+                    if (now - st.LastSeen > 10 * f) { dead.Add(kv.Key); continue; }
+
+                    // DXGI/D3D9: en hızlı swap chain (oyun içi bindirmeler/ikincil zincirler FPS'i şişirmesin diye tek zincir)
+                    Series chosen = null; double fps = 0; bool useKernel = false;
+                    foreach (Series sr in st.Sw.Values)
                     {
-                        if (now - st.LastSeen > 10 * window) dead.Add(kv.Key);
-                        continue;
+                        if (now - sr.Newest > stale) continue;
+                        double r;
+                        if (Rate(sr, out r) && r > fps) { fps = r; chosen = sr; }
                     }
+                    if (chosen != null && kv.Key == fgPid) fgHasDxgi = true;
+                    if (chosen == null && _kernelOn && now - st.Kernel.Newest <= stale)
+                    {
+                        double r;
+                        if (Rate(st.Kernel, out r)) { fps = r; chosen = st.Kernel; useKernel = true; }
+                    }
+                    if (chosen == null) continue;
 
                     string name = NameOf(kv.Key);
-                    if (name.Length == 0 || Ignored.Contains(name) || kv.Key == (uint)Process.GetCurrentProcess().Id) continue;
+                    if (name.Length == 0 || Ignored.Contains(name) || kv.Key == self) continue;
 
                     bool isFg = kv.Key == fgPid;
                     // Yalnızca oyunlar: bilinen oyun klasörlerindeki exe'ler veya ön planda tam ekran kaplayan pencere.
                     if (!IsGamePath(kv.Key) && !(isFg && fgFullscreen)) continue;
-
-                    double fps, ms;
-                    Rate(q, now, window, out fps, out ms);
                     if (fps < 1 || fps > 1000) continue;
 
                     if ((isFg && !bestIsFg) || (isFg == bestIsFg && fps > bestFps))
                     {
-                        bestFps = fps; bestMs = ms; bestName = name; bestIsFg = isFg; bestPid = kv.Key;
+                        bestFps = fps; bestName = name; bestIsFg = isFg; bestPid = kv.Key; bestSeries = chosen; bestKernel = useKernel;
                     }
                 }
                 foreach (uint d in dead) { _stats.Remove(d); _names.Remove(d); _gamePath.Remove(d); }
 
-                PidStat bs;
-                if (bestPid != 0 && _stats.TryGetValue(bestPid, out bs) && bs.Hist.Count > 120)
+                if (bestSeries != null && bestSeries.Count > 120)
                 {
-                    // %1 low: en yavaş %1'lik karenin süresinden hesaplanan FPS (son 30 sn)
-                    var gaps = new List<double>(bs.Hist.Count);
-                    long prev = 0;
-                    foreach (long t in bs.Hist)
+                    // %1 low: son 30 sn'deki en yavaş %1'lik karelerden hesaplanan FPS (gerçek olay zamanlarıyla)
+                    var gaps = new List<double>(bestSeries.Count);
+                    long prev = 0, cut = bestSeries.Newest - 30 * f;
+                    for (int i = bestSeries.Head; i < bestSeries.T.Count; i++)
                     {
+                        long t = bestSeries.T[i];
+                        if (t < cut) continue;
                         if (prev != 0)
                         {
-                            double g = (t - prev) * 1000.0 / Stopwatch.Frequency;
+                            double g = (t - prev) * 1000.0 / f;
                             if (g > 0 && g < 2000) gaps.Add(g);
                         }
                         prev = t;
@@ -2345,22 +2425,18 @@ namespace ProSystemMonitor
                 }
             }
 
+            // Vulkan/OpenGL oyunları DXGI Present üretmez: ön planda oyun var ama DXGI olayı yoksa DxgKrnl'i geçici aç.
+            if (bestKernel) _kernelUsed = now;
+            if (!_kernelOn && fgPid != 0 && fgPid != self && !fgHasDxgi && bestPid == 0)
+            {
+                string fn = NameOf(fgPid);
+                if (fn.Length > 0 && !Ignored.Contains(fn) && (IsGamePath(fgPid) || fgFullscreen)) { SetKernel(true); _kernelUsed = now; }
+            }
+            else if (_kernelOn && now - _kernelUsed > 60 * f) SetKernel(false);
+
             game = bestName;
-            frameMs = bestMs;
+            frameMs = bestFps > 0 ? 1000.0 / bestFps : 0;
             return Math.Round(bestFps);
-        }
-
-        private static void Prune(Queue<long> q, long now, long window)
-        {
-            while (q.Count > 0 && now - q.Peek() > window) q.Dequeue();
-        }
-
-        private static void Rate(Queue<long> q, long now, long window, out double fps, out double ms)
-        {
-            // Yükleme ekranlarındaki olay patlamalarını (kısa sürede çok Present) şişirmemek için
-            // süreye bölmek yerine son 1 saniyedeki kare sayısı kullanılır.
-            fps = q.Count;
-            ms = fps > 0 ? 1000.0 / fps : 0;
         }
 
         public void Dispose()
