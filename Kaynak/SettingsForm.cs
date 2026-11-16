@@ -183,6 +183,9 @@ namespace ProSystemMonitor
             { var ckb = Ck("Alt bilgi çubuğu: saat, tarih, sıradaki vakte kalan süre", 0, 330, 280, _d._topBar, v => { _d._topBar = v; _d.SaveSettings(); _d.Invalidate(); }); ckb.Height = 48; p.Controls.Add(ckb); }
 
             p.Controls.Add(Bt("✎ Panoyu düzenle (E)", 0, 392, 220, delegate { _d.ToggleEdit(); Close(); }));
+            p.Controls.Add(Bt("Şablonu kaydet / paylaş…", 0, 428, 220, delegate { _d.ExportTemplate(); }));
+            p.Controls.Add(Bt("Şablon aç (içe aktar)…", 0, 464, 220, delegate { _d.ImportTemplate(); }));
+            { var ckr = Ck("Panoda sağ tık doğrudan düzenleme modunu açsın (kapalıysa menü açılır)", 0, 500, 280, _d._rcEdit, v => { _d._rcEdit = v; _d.SaveSettings(); }); ckr.Height = 48; p.Controls.Add(ckr); }
             p.Controls.Add(Sub("TEMA (21 seçenek, listeyi kaydır)", 300, 44, 400));
             _themeList = new ListBox { Left = 300, Top = 68, Width = 440, Height = 480, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 40 };
             foreach (Theme t in Themes.All) _themeList.Items.Add(t.Name);

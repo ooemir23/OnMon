@@ -197,43 +197,65 @@ namespace ProSystemMonitor
         private static string Esc(string s) { return Uri.EscapeDataString(s ?? ""); }
         private static string Unesc(string s) { try { return Uri.UnescapeDataString(s ?? ""); } catch { return ""; } }
 
+        private WInst ParseWLine(string line)
+        {
+            var ic = CultureInfo.InvariantCulture;
+            string[] p = line.Split('|');
+            if (p.Length < 8 || DefOf(p[0]) == null) return null;
+            var w = new WInst { Id = p[0] };
+            w.X = float.Parse(p[1], ic); w.Y = float.Parse(p[2], ic); w.W = float.Parse(p[3], ic); w.H = float.Parse(p[4], ic);
+            w.Vis = p[5] == "1"; w.Fs = float.Parse(p[6], ic);
+            if (p.Length >= 25)
+            {
+                w.A1 = int.Parse(p[7]); w.A2 = int.Parse(p[8]); w.Tx = int.Parse(p[9]); w.PanelC = int.Parse(p[10]); w.PAlpha = int.Parse(p[11]);
+                w.Frame = p[12]; w.FrameC = int.Parse(p[13]); w.FrameW = float.Parse(p[14], ic); w.Radius = float.Parse(p[15], ic);
+                w.NoTitle = p[16] == "1"; w.Bars = p[17]; w.Glow = p[18]; w.Cap = p[19]; w.GaugeW = float.Parse(p[20], ic);
+                w.Locked = p[21] == "1"; w.Align = int.Parse(p[22]); w.Text = Unesc(p[23]); w.Path = Unesc(p[24]);
+                if (p.Length >= 26) w.Zoom = Math.Max(0.2f, Math.Min(5f, float.Parse(p[25], ic)));
+            }
+            else { int c; int.TryParse(p[7], out c); if (c > 0 && c < AccPal.Length) w.A1 = AccPal[c].ToArgb(); }
+            WDef d = DefOf(w.Id);
+            w.W = Math.Max(MinWof(d), w.W); w.H = Math.Max(MinHof(d), w.H);
+            w.Fs = Math.Max(0.3f, Math.Min(3f, w.Fs));
+            return w;
+        }
+
+        private List<WInst> ParseWLines(IEnumerable<string> lines)
+        {
+            var l = new List<WInst>();
+            foreach (string line in lines)
+            {
+                WInst w = null;
+                try { w = ParseWLine(line); } catch { }
+                if (w == null) continue;
+                bool dup = false; foreach (WInst o in l) if (o.Id == w.Id) dup = true;
+                if (!dup) l.Add(w);
+            }
+            return l;
+        }
+
         private void WLoad()
         {
             WReg();
             var l = new List<WInst>();
-            try
-            {
-                if (File.Exists(WidgetsPath))
-                {
-                    var ic = CultureInfo.InvariantCulture;
-                    foreach (string line in File.ReadAllLines(WidgetsPath))
-                    {
-                        string[] p = line.Split('|');
-                        if (p.Length < 8 || DefOf(p[0]) == null) continue;
-                        var w = new WInst { Id = p[0] };
-                        w.X = float.Parse(p[1], ic); w.Y = float.Parse(p[2], ic); w.W = float.Parse(p[3], ic); w.H = float.Parse(p[4], ic);
-                        w.Vis = p[5] == "1"; w.Fs = float.Parse(p[6], ic);
-                        if (p.Length >= 25)
-                        {
-                            w.A1 = int.Parse(p[7]); w.A2 = int.Parse(p[8]); w.Tx = int.Parse(p[9]); w.PanelC = int.Parse(p[10]); w.PAlpha = int.Parse(p[11]);
-                            w.Frame = p[12]; w.FrameC = int.Parse(p[13]); w.FrameW = float.Parse(p[14], ic); w.Radius = float.Parse(p[15], ic);
-                            w.NoTitle = p[16] == "1"; w.Bars = p[17]; w.Glow = p[18]; w.Cap = p[19]; w.GaugeW = float.Parse(p[20], ic);
-                            w.Locked = p[21] == "1"; w.Align = int.Parse(p[22]); w.Text = Unesc(p[23]); w.Path = Unesc(p[24]);
-                            if (p.Length >= 26) w.Zoom = Math.Max(0.2f, Math.Min(5f, float.Parse(p[25], ic)));
-                        }
-                        else { int c; int.TryParse(p[7], out c); if (c > 0 && c < AccPal.Length) w.A1 = AccPal[c].ToArgb(); }
-                        WDef d = DefOf(w.Id);
-                        w.W = Math.Max(MinWof(d), w.W); w.H = Math.Max(MinHof(d), w.H);
-                        w.Fs = Math.Max(0.3f, Math.Min(3f, w.Fs));
-                        bool dup = false; foreach (WInst o in l) if (o.Id == w.Id) dup = true;
-                        if (!dup) l.Add(w);
-                    }
-                }
-            }
-            catch { l.Clear(); }
+            try { if (File.Exists(WidgetsPath)) l = ParseWLines(File.ReadAllLines(WidgetsPath)); } catch { l.Clear(); }
             if (l.Count == 0) { _wd = WTemplate(_layout); return; }
             WFill(l);
             _wd = l;
+        }
+
+        private string WLinesText()
+        {
+            var sb = new StringBuilder();
+            var ic = CultureInfo.InvariantCulture;
+            foreach (WInst w in _wd)
+                sb.Append(w.Id).Append('|').Append(w.X.ToString("0.##", ic)).Append('|').Append(w.Y.ToString("0.##", ic)).Append('|').Append(w.W.ToString("0.##", ic)).Append('|').Append(w.H.ToString("0.##", ic))
+                  .Append('|').Append(w.Vis ? "1" : "0").Append('|').Append(w.Fs.ToString("0.00", ic))
+                  .Append('|').Append(w.A1).Append('|').Append(w.A2).Append('|').Append(w.Tx).Append('|').Append(w.PanelC).Append('|').Append(w.PAlpha)
+                  .Append('|').Append(w.Frame).Append('|').Append(w.FrameC).Append('|').Append(w.FrameW.ToString("0.##", ic)).Append('|').Append(w.Radius.ToString("0.##", ic))
+                  .Append('|').Append(w.NoTitle ? "1" : "0").Append('|').Append(w.Bars).Append('|').Append(w.Glow).Append('|').Append(w.Cap).Append('|').Append(w.GaugeW.ToString("0.##", ic))
+                  .Append('|').Append(w.Locked ? "1" : "0").Append('|').Append(w.Align).Append('|').Append(Esc(w.Text)).Append('|').Append(Esc(w.Path)).Append('|').Append(w.Zoom.ToString("0.##", ic)).AppendLine();
+            return sb.ToString();
         }
 
         private void WSave()
@@ -243,16 +265,7 @@ namespace ProSystemMonitor
             {
                 string dir = Path.GetDirectoryName(WidgetsPath);
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                var sb = new StringBuilder();
-                var ic = CultureInfo.InvariantCulture;
-                foreach (WInst w in _wd)
-                    sb.Append(w.Id).Append('|').Append(w.X.ToString("0.##", ic)).Append('|').Append(w.Y.ToString("0.##", ic)).Append('|').Append(w.W.ToString("0.##", ic)).Append('|').Append(w.H.ToString("0.##", ic))
-                      .Append('|').Append(w.Vis ? "1" : "0").Append('|').Append(w.Fs.ToString("0.00", ic))
-                      .Append('|').Append(w.A1).Append('|').Append(w.A2).Append('|').Append(w.Tx).Append('|').Append(w.PanelC).Append('|').Append(w.PAlpha)
-                      .Append('|').Append(w.Frame).Append('|').Append(w.FrameC).Append('|').Append(w.FrameW.ToString("0.##", ic)).Append('|').Append(w.Radius.ToString("0.##", ic))
-                      .Append('|').Append(w.NoTitle ? "1" : "0").Append('|').Append(w.Bars).Append('|').Append(w.Glow).Append('|').Append(w.Cap).Append('|').Append(w.GaugeW.ToString("0.##", ic))
-                      .Append('|').Append(w.Locked ? "1" : "0").Append('|').Append(w.Align).Append('|').Append(Esc(w.Text)).Append('|').Append(Esc(w.Path)).Append('|').Append(w.Zoom.ToString("0.##", ic)).AppendLine();
-                File.WriteAllText(WidgetsPath, sb.ToString());
+                File.WriteAllText(WidgetsPath, WLinesText());
             }
             catch { }
         }
@@ -703,6 +716,27 @@ namespace ProSystemMonitor
                 it.Click += delegate { ApplyTemplate(id); };
                 m.Items.Add(it);
             }
+            m.Items.Add(new ToolStripSeparator());
+            var sv = new ToolStripMenuItem("Şablonu kaydet / paylaşmak için dışa aktar…"); sv.Click += delegate { ExportTemplate(); }; m.Items.Add(sv);
+            var ld = new ToolStripMenuItem("Şablon dosyası aç (içe aktar)…"); ld.Click += delegate { ImportTemplate(); }; m.Items.Add(ld);
+            try
+            {
+                string dir = TemplateDir;
+                if (Directory.Exists(dir))
+                {
+                    string[] files = Directory.GetFiles(dir, "*.onmon");
+                    if (files.Length > 0) m.Items.Add(new ToolStripSeparator());
+                    foreach (string f in files)
+                    {
+                        string ff = f;
+                        var it = new ToolStripMenuItem("Kayıtlı: " + Path.GetFileNameWithoutExtension(f));
+                        it.Click += delegate { ApplyTemplateFile(ff); };
+                        m.Items.Add(it);
+                    }
+                }
+            }
+            catch { }
+            var od = new ToolStripMenuItem("Şablon klasörünü aç"); od.Click += delegate { try { Directory.CreateDirectory(TemplateDir); System.Diagnostics.Process.Start(TemplateDir); } catch { } }; m.Items.Add(od);
             m.Show(Cursor.Position);
         }
 

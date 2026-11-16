@@ -1,3 +1,4 @@
+v55 - Şablon kaydet/paylaş (.onmon dosyası, resimler dahil), şablon aç/içe aktar, kayıtlı şablon listesi; sağ tık varsayılan olarak menü açar, düzenleme modu menüden/ayarlardan girilir (ayarda "sağ tık doğrudan düzenleme" seçeneği).
 v54 - Pano editörü: sağ tıkla düzenleme, ince ızgara (1-40), widget başına tam özelleştirme penceresi (renkler, çerçeve stili/kalınlık/köşe/opaklık, daire ve çubuk stili, içerik ölçeği), metin/logo/kutu widget'ları, boş şablon, çözünürlük/yön/kasa ekranı ayarı, arka plan rengi/resmi.
 v53 - Widget sistemi: her panel ayrı widget; E tuşu veya sağ alttaki ✎ ile pano üzerinde düzenleme modu (taşı, boyutlandır, widget başına yazı ölçeği ve vurgu rengi, gizle/ekle). Eski 5 düzen şablon olarak duruyor.
 v52 - FPS ölçümü daha doğru: olay zaman damgalarıyla ortalama, swap chain başına ayrım, test Present elenir, gerçek %1 low, Vulkan/OpenGL için otomatik yedek.

@@ -262,6 +262,7 @@ namespace ProSystemMonitor
                     else if (k == "bgimg") _bgImg = v;
                     else if (k == "gfs") { float q; if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out q) && q >= 0.3f && q <= 3f) _gfs = q; }
                     else if (k == "gzoom") { float q; if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out q) && q >= 0.2f && q <= 4f) _gzoom = q; }
+                    else if (k == "rcedit") _rcEdit = v == "1";
                     else if (k == "audiobar") _audioBar = v != "0";
                     else if (k == "micbar") _micBar = v != "0";
                     else if (k == "volbar") _volBar = v != "0";
@@ -296,7 +297,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs), "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture), "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol, "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs), "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture), "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol, "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture), "rcedit=" + (_rcEdit ? "1" : "0") });
             }
             catch { }
         }
@@ -583,7 +584,7 @@ namespace ProSystemMonitor
             m.Font = new Font("Segoe UI", 10f);
             m.ShowCheckMargin = true;
             m.ShowImageMargin = false;
-            m.Opening += delegate (object so, System.ComponentModel.CancelEventArgs ce) { ce.Cancel = true; if (!_edit) ToggleEdit(); else ShowEditMenu(); };
+            m.Opening += delegate (object so, System.ComponentModel.CancelEventArgs ce) { if (_edit) { ce.Cancel = true; ShowEditMenu(); } else if (_rcEdit) { ce.Cancel = true; ToggleEdit(); } else { colors.Accent = _th.A1; PopulateMenu(m); } };
             ContextMenuStrip = m;
         }
 
@@ -607,6 +608,7 @@ namespace ProSystemMonitor
             var set = Mi("Ayarlar…", "F2", false, delegate { OpenSettings(); });
             set.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
             m.Items.Add(set);
+            m.Items.Add(Mi("Panoyu düzenle (widget editörü)", "E", false, delegate { ToggleEdit(); }));
             m.Items.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", false, delegate { ToggleMic(); }));
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add(Mi("Küçült", null, false, delegate { UserMinimize(); }));
