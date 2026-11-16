@@ -155,6 +155,7 @@ namespace ProSystemMonitor
         // ---------- Windows ile başlat (Görev Zamanlayıcı, yönetici izniyle, UAC sormadan) ----------
         private const string AutostartTask = "ProSystemMonitor_Autostart";
 
+        private static string LastSchtasksText = "";
         private static int RunSchtasks(string args)
         {
             try
@@ -168,8 +169,9 @@ namespace ProSystemMonitor
                 };
                 using (Process p = Process.Start(psi))
                 {
-                    p.StandardOutput.ReadToEnd();
-                    p.StandardError.ReadToEnd();
+                    string so = p.StandardOutput.ReadToEnd();
+                    string se = p.StandardError.ReadToEnd();
+                    LastSchtasksText = (so + " " + se).Trim();
                     if (!p.WaitForExit(15000)) return -1;
                     return p.ExitCode;
                 }
@@ -239,7 +241,13 @@ namespace ProSystemMonitor
             try
             {
                 File.WriteAllText(tmp, xml, Encoding.Unicode);
-                return RunSchtasks("/Create /TN " + AutostartTask + " /XML \"" + tmp + "\" /F") == 0;
+                int rc = RunSchtasks("/Create /TN " + AutostartTask + " /XML \"" + tmp + "\" /F");
+                if (rc == 0) return true;
+                Log("otomatik-baslat", new Exception("schtasks /Create kod=" + rc + " : " + LastSchtasksText));
+                // yedek: mevcut görevin sadece çalıştırılacak yolunu değiştir
+                rc = RunSchtasks("/Change /TN " + AutostartTask + " /TR \"\\\"" + Application.ExecutablePath + "\\\"\"");
+                if (rc != 0) Log("otomatik-baslat", new Exception("schtasks /Change kod=" + rc + " : " + LastSchtasksText));
+                return rc == 0;
             }
             finally { try { File.Delete(tmp); } catch { } }
         }
@@ -511,6 +519,7 @@ namespace ProSystemMonitor
         }
 
         public static void RequestSensorDump() { if (_collector != null) _collector.RequestSensorDump(); }
+        public static string SensorReport() { return _collector != null ? _collector.SensorReportText() : "(toplayıcı hazır değil)"; }
 
         /// <summary>Kullanıcı çıkış isterse önce onay sorar.</summary>
         public static void ExitAppAsk()
@@ -1569,12 +1578,81 @@ namespace ProSystemMonitor
             return _lhmCache;
         }
 
+        private static string RegVal(string key, string name)
+        {
+            try { object o = Microsoft.Win32.Registry.GetValue(key, name, null); return o == null ? null : o.ToString(); } catch { return null; }
+        }
+
+        private static bool RegKeyExists(string path)
+        {
+            try { using (var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(path)) return k != null; } catch { return false; }
+        }
+
+        /// <summary>Hangi sensör grubunun çalıştığını ve olası nedeni (sürücü engeli vb.) metin olarak verir.</summary>
+        public string SensorReportText()
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                sb.AppendLine("Yönetici: " + (Program.IsAdministrator() ? "evet" : "HAYIR"));
+                sb.AppendLine("Çalışma süresi (bu program): " + (DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMinutes.ToString("0") + " dk");
+                sb.AppendLine("WinRing0 sürücü kaydı: " + (RegKeyExists(@"SYSTEM\CurrentControlSet\Services\WinRing0_1_2_0") ? "var" : "YOK (yüklenemedi/engellendi)"));
+                sb.AppendLine("PawnIO sürücü kaydı: " + (RegKeyExists(@"SYSTEM\CurrentControlSet\Services\PawnIO") ? "var" : "yok"));
+                string hv = RegVal(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled");
+                sb.AppendLine("Bellek bütünlüğü (HVCI): " + (hv == "1" ? "AÇIK (ring0 sürücüsünü engelleyebilir)" : (hv == "0" ? "kapalı" : "bilinmiyor")));
+                string bl = RegVal(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CI\Config", "VulnerableDriverBlocklistEnable");
+                sb.AppendLine("Güvenlik açığı olan sürücü listesi: " + (bl == "1" ? "AÇIK (WinRing0'ı engeller)" : (bl == "0" ? "kapalı" : "bilinmiyor/varsayılan")));
+                if (_lhmComputer == null) { sb.AppendLine("LibreHardwareMonitor başlatılmadı."); return sb.ToString(); }
+                int cpuT = 0, cpuP = 0, cpuC = 0, cpuV = 0, fans = 0, fansOn = 0, volts = 0, mbT = 0, sio = 0, stor = 0;
+                foreach (IHardware hw in _lhmComputer.Hardware)
+                    CountHw(hw, ref cpuT, ref cpuP, ref cpuC, ref cpuV, ref fans, ref fansOn, ref volts, ref mbT, ref sio, ref stor);
+                sb.AppendLine("CPU sıcaklık sensörü (değeri >0): " + cpuT + (cpuT > 0 ? "  ✔" : "  ✖"));
+                sb.AppendLine("CPU güç sensörü (>0): " + cpuP + (cpuP > 0 ? "  ✔" : "  ✖"));
+                sb.AppendLine("CPU saat sensörü (LHM): " + cpuC + (cpuC > 0 ? "  ✔" : "  ✖ (yaklaşık değer kullanılır)"));
+                sb.AppendLine("CPU voltaj sensörü: " + cpuV + (cpuV > 0 ? "  ✔" : "  ✖"));
+                sb.AppendLine("SuperIO/EC çipi bulundu: " + sio + (sio > 0 ? "  ✔" : "  ✖ (fan/voltaj okunamaz)"));
+                sb.AppendLine("Fan sensörü: " + fans + " (dönen: " + fansOn + ")");
+                sb.AppendLine("Anakart voltaj sensörü: " + volts + "   Anakart sıcaklık: " + mbT);
+                sb.AppendLine("Disk sensörü: " + stor);
+                if (cpuT == 0 && cpuP == 0 && sio == 0 && string.IsNullOrEmpty(LhmError))
+                    sb.AppendLine("→ Muhtemel neden: ring0 sürücüsü yüklenemedi (Windows engelledi). Çözüm için ayarlardaki Tanılama notlarına bak.");
+            }
+            catch (Exception ex) { sb.AppendLine("Rapor hatası: " + ex.Message); }
+            return sb.ToString();
+        }
+
+        private static void CountHw(IHardware hw, ref int cpuT, ref int cpuP, ref int cpuC, ref int cpuV, ref int fans, ref int fansOn, ref int volts, ref int mbT, ref int sio, ref int stor)
+        {
+            HardwareType t = hw.HardwareType;
+            if (t == HardwareType.SuperIO || t == HardwareType.EmbeddedController) sio++;
+            if (t == HardwareType.Storage) stor += hw.Sensors.Length;
+            foreach (ISensor s in hw.Sensors)
+            {
+                double v = s.Value.HasValue && !double.IsNaN(s.Value.Value) ? s.Value.Value : 0;
+                if (t == HardwareType.Cpu)
+                {
+                    if (s.SensorType == SensorType.Temperature && v > 1) cpuT++;
+                    else if (s.SensorType == SensorType.Power && v > 1) cpuP++;
+                    else if (s.SensorType == SensorType.Clock && v > 100) cpuC++;
+                    else if (s.SensorType == SensorType.Voltage && v > 0.1) cpuV++;
+                }
+                else if (t == HardwareType.SuperIO || t == HardwareType.EmbeddedController || t == HardwareType.Motherboard || t == HardwareType.Cooler)
+                {
+                    if (s.SensorType == SensorType.Fan) { fans++; if (v > 0) fansOn++; }
+                    else if (s.SensorType == SensorType.Voltage) volts++;
+                    else if (s.SensorType == SensorType.Temperature) mbT++;
+                }
+            }
+            foreach (IHardware sub in hw.SubHardware) CountHw(sub, ref cpuT, ref cpuP, ref cpuC, ref cpuV, ref fans, ref fansOn, ref volts, ref mbT, ref sio, ref stor);
+        }
+
         private void DumpSensors()
         {
             try
             {
                 var sb = new StringBuilder();
                 sb.AppendLine("ProSystemMonitor sensör listesi - " + DateTime.Now);
+                sb.AppendLine(SensorReportText());
                 foreach (IHardware hw in _lhmComputer.Hardware) DumpHw(hw, sb, 0);
                 string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sensorler.txt");
                 File.WriteAllText(path, sb.ToString(), Encoding.UTF8);

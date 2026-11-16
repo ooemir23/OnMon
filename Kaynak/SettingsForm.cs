@@ -714,7 +714,8 @@ namespace ProSystemMonitor
             sb.AppendLine("  " + (string.IsNullOrEmpty(_d._source) ? "(henüz veri yok)" : _d._source));
             sb.AppendLine();
             sb.AppendLine("LibreHardwareMonitor: " + (string.IsNullOrEmpty(TelemetryCollector.LhmError) ? "çalışıyor" : "HATA — " + TelemetryCollector.LhmError));
-            sb.AppendLine("Yönetici: " + (Program.IsAdministrator() ? "evet" : "hayır (sıcaklık/fan okunamaz)"));
+            sb.AppendLine("Sürücü ve sensör durumu:");
+            sb.AppendLine(Program.SensorReport());
             sb.AppendLine("Ses çıkışı: " + AudioSwitch.DefaultName);
             sb.AppendLine("Mikrofon: " + AudioSwitch.MicName + (AudioSwitch.MicMuted ? " (sessiz)" : ""));
             sb.AppendLine("Sürüm: v" + Updater.AppVersion);

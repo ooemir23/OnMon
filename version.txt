@@ -1,4 +1,4 @@
-version=55
+version=56
 file=ProSystemMonitor.exe
-sha256=feb7978120a27baa8520da9251aee92dba5f060b143ba4d8f2f9b1bad636abaf
-notes=Sablon kaydet/paylas.
+sha256=ee0b19b1c665100fa7ddf90f2892cf6319256e3190be87ece4c4b4947643dd07
+notes=Sensor tanilama.
