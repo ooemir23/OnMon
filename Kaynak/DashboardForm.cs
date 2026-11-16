@@ -296,6 +296,7 @@ namespace ProSystemMonitor
         public DashboardForm()
         {
             LoadSettings();
+            WLoad();
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
             Text = "OnMon";
             FormBorderStyle = FormBorderStyle.None;
@@ -336,13 +337,13 @@ namespace ProSystemMonitor
                 else if (_desk && !TopMost && WindowState != FormWindowState.Minimized && DeskAboveMe()) SendToBottom();   // masaüstü öne çıktıysa (Win+D) yine üstüne çık
                 if (WindowState == FormWindowState.Minimized || !Visible) return;
                 _tickN++;
-                if (_micBar || _layout == "studio" || _layout == "hud")
+                if (_micBar || WVis("sound"))
                 {
                     AudioSwitch.PollMic();
                     bool mu = AudioSwitch.MicMuted;
                     if (mu != _lastMuted) { _lastMuted = mu; _dirty = true; }
                 }
-                if ((_volBar || _layout == "studio" || _layout == "hud") && (_tickN & 3) == 0)
+                if ((_volBar || WVis("sound")) && (_tickN & 3) == 0)
                 {
                     AudioSwitch.PollVolume();
                     float vl = AudioSwitch.VolLevel; bool vm = AudioSwitch.VolMuted;
@@ -378,6 +379,7 @@ namespace ProSystemMonitor
         {
             base.OnMouseMove(e);
             _lastMouse = DateTime.UtcNow;
+            if (_edit && _drag != 0 && _sc > 0) EditMouseMove((e.X - _ox) / _sc, (e.Y - _oy) / _sc);
             if (_volDrag && _sc > 0 && _volRect.Width > 0 && e.Button == MouseButtons.Left) SetVolumeTo(((e.X - _ox) / _sc - _volRect.X) / _volRect.Width);
             if (_curHidden) { _curHidden = false; Cursor.Show(); }
         }
@@ -385,7 +387,9 @@ namespace ProSystemMonitor
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-            if (e.KeyCode == Keys.D1) SetLayout("classic");
+            if (_edit) { EditKey(e); return; }
+            if (e.KeyCode == Keys.E) ToggleEdit();
+            else if (e.KeyCode == Keys.D1) SetLayout("classic");
             else if (e.KeyCode == Keys.D2) SetLayout("hud");
             else if (e.KeyCode == Keys.D3) SetLayout("cockpit");
             else if (e.KeyCode == Keys.D4) SetLayout("aida");
@@ -455,8 +459,7 @@ namespace ProSystemMonitor
             int ev = GameSession.Update(s);
             if (_autoGame)
             {
-                if (ev == 1 && _layout != "hud") { _prevLayout = _layout; _layout = "hud"; }
-                else if (ev == -1 && _prevLayout != null) { _layout = _prevLayout; _prevLayout = null; }
+                GameLayout(ev);
             }
             Add("fps", s.Fps);
             Add("frame", s.FrameMs);
@@ -669,6 +672,7 @@ namespace ProSystemMonitor
         {
             base.OnMouseUp(e);
             _volDrag = false;
+            if (_edit) EditMouseUp();
         }
 
         internal void ToggleMic()
@@ -698,6 +702,7 @@ namespace ProSystemMonitor
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
             float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
+            if (_edit) { EditMouseDown(cx, cy); return; }
             if (_infoOpen)
             {
                 if (_infoBtn.Contains(cx, cy) || _infoPanel.Contains(cx, cy)) { ToggleInfo(); return; }
@@ -706,7 +711,8 @@ namespace ProSystemMonitor
             foreach (var h in _hits)
                 if (h.Key.Contains(cx, cy))
                 {
-                    if (h.Value == "info:toggle") ToggleInfo();
+                    if (h.Value == "edit:toggle") ToggleEdit();
+                    else if (h.Value == "info:toggle") ToggleInfo();
                     else if (h.Value == "mic:toggle") ToggleMic();
                     else if (h.Value == "vol:mute") ToggleVolMute();
                     else if (h.Value == "out:next") NextAudio();
@@ -718,7 +724,7 @@ namespace ProSystemMonitor
                 }
         }
 
-        internal void SetLayout(string id) { _prevLayout = null; _layout = id; SaveSettings(); _dirty = true; Invalidate(); }
+        internal void SetLayout(string id) { if (_edit && _wSaved != null) _wSaved = null; ApplyTemplate(id); }
         internal void SetTheme(Theme t) { _th = t; SaveSettings(); _dirty = true; Invalidate(); }
         private void NextTheme()
         {
@@ -753,6 +759,7 @@ namespace ProSystemMonitor
         private Font F(float size, bool bold, bool light)
         {
             string name = _th.Mono ? _fontMono : (light ? _fontLight : _fontMain);
+            if (_fs != 1f) size = (float)Math.Round(size * _fs * 2f) / 2f;
             string key = name + "|" + size + "|" + bold;
             Font f;
             if (!_fonts.TryGetValue(key, out f))
@@ -1152,6 +1159,7 @@ namespace ProSystemMonitor
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
             bool strip = StripOn;
             float chh = (strip ? 1112f : 1080f) + (_topBar ? InfoH : 0);
+            _chh = chh;
             float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
             DrawBackground(W, Hh, sc);
 
@@ -1166,11 +1174,7 @@ namespace ProSystemMonitor
             }
             else
             {
-                if (_layout == "studio") DrawStudio(s);
-                else if (_layout == "aida") DrawAida(s);
-                else if (_layout == "hud") DrawHud(s);
-                else if (_layout == "cockpit") DrawCockpit(s);
-                else DrawClassic(s);
+                DrawWidgets(s);
 
                 if (!string.IsNullOrEmpty(s.Throttle))
                 {
@@ -1193,6 +1197,7 @@ namespace ProSystemMonitor
                 G.FillRectangle(Br(Color.FromArgb((int)(255 * (100 - _bright) / 100f), 0, 0, 0)), 0, 0, W, Hh);
                 G.TranslateTransform(_ox, _oy); G.ScaleTransform(sc, sc);
             }
+            if (_edit) DrawEditor();
             DrawBrightBtn();
 
             if (t.Style == "crt")
@@ -1469,6 +1474,7 @@ namespace ProSystemMonitor
             string date = now.ToString("d MMMM dddd", tr);
             string pr = PrayerLeft(now);
             float x = 1920 - 14;
+            { var er = new RectangleF(1920 - 44, y, 30, 30); Txt("✎", F(24, true, false), _edit ? t.A1 : t.Dim, er.X, er.Y - 2, er.Width, er.Height + 4, 1); _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(er.X - 4, er.Y - 4, er.Width + 8, er.Height + 8), "edit:toggle")); x -= 40; }
             Font fc = F(28, true, false);
             float cw = TW(clock, fc) + 6;
             Txt(clock, fc, t.Tx, x - cw, y - 2, cw + 4, h + 4, 2); x -= cw + 20;

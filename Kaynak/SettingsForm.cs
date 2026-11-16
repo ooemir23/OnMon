@@ -159,7 +159,7 @@ namespace ProSystemMonitor
             var p = new Panel();
             p.Controls.Add(H("Görünüm", 0));
 
-            p.Controls.Add(Sub("DÜZEN", 0, 44, 200));
+            p.Controls.Add(Sub("ŞABLON (seçince yerleşimi değiştirir)", 0, 44, 300));
             _layoutList = new ListBox { Left = 0, Top = 68, Width = 260, Height = 176, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 34 };
             string[] names = { "Klasik", "Oyun HUD", "Pro Kokpit", "Sensör Paneli", "Komuta Merkezi" };
             string[] ids = { "classic", "hud", "cockpit", "aida", "studio" };
@@ -182,6 +182,7 @@ namespace ProSystemMonitor
             p.Controls.Add(tb); p.Controls.Add(tl);
             { var ckb = Ck("Alt bilgi çubuğu: saat, tarih, sıradaki vakte kalan süre", 0, 330, 280, _d._topBar, v => { _d._topBar = v; _d.SaveSettings(); _d.Invalidate(); }); ckb.Height = 48; p.Controls.Add(ckb); }
 
+            p.Controls.Add(Bt("✎ Panoyu düzenle (E)", 0, 392, 220, delegate { _d.ToggleEdit(); Close(); }));
             p.Controls.Add(Sub("TEMA (21 seçenek, listeyi kaydır)", 300, 44, 400));
             _themeList = new ListBox { Left = 300, Top = 68, Width = 440, Height = 480, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 40 };
             foreach (Theme t in Themes.All) _themeList.Items.Add(t.Name);

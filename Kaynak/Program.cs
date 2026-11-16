@@ -1140,7 +1140,7 @@ namespace ProSystemMonitor
                 double dt = _procPrevAt == DateTime.MinValue ? 0 : (nowT - _procPrevAt).TotalSeconds;
                 var cur = new Dictionary<int, double>();
                 DashboardForm dsh = Program.Dash;
-                bool wantCpu = dsh != null && !dsh.IsDisposed && dsh._layout == "hud";
+                bool wantCpu = dsh != null && !dsh.IsDisposed && dsh.WVis("apps");
                 if (!wantCpu) { _procPrev.Clear(); _procPrevAt = DateTime.MinValue; }
                 int selfId = Process.GetCurrentProcess().Id;
                 var all = new List<ProcItem>();

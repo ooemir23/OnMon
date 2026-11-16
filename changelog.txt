@@ -1,3 +1,4 @@
+v53 - Widget sistemi: her panel ayrı widget; E tuşu veya sağ alttaki ✎ ile pano üzerinde düzenleme modu (taşı, boyutlandır, widget başına yazı ölçeği ve vurgu rengi, gizle/ekle). Eski 5 düzen şablon olarak duruyor.
 v52 - FPS ölçümü daha doğru: olay zaman damgalarıyla ortalama, swap chain başına ayrım, test Present elenir, gerçek %1 low, Vulkan/OpenGL için otomatik yedek.
 v51 - Otomatik başlatma görev yolu onarımı düzeltildi (görev eski v9.exe dosyasını gösteriyordu).
 v50 - Otomatik başlatma: Windows Run anahtarı yedeği, görev tanılaması ve açılış kaydı (hata.log).

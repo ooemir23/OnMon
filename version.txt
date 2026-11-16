@@ -1,4 +1,4 @@
-version=52
+version=53
 file=ProSystemMonitor.exe
-sha256=2037b29dd6c829b64b18e6a31664d48517dee63e16a19823f81c0c812be24660
-notes=FPS ölçümü doğruluğu artırıldı.
+sha256=b23c9c54d4aca12ff1d5d9dfd3729764e3afc4b74c90be98313613026994b4de
+notes=Widget sistemi ve pano düzenleme modu.
