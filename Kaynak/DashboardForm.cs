@@ -38,7 +38,7 @@ namespace ProSystemMonitor
         private const float MicW = 440f;
         internal bool _audioBar = true, _micBar = true, _volBar = true, _hideStrip = false, _autoGame = true, _topBar = true, _lowCpu = true;
         private const float InfoH = 36f;
-        private string _prevLayout;
+        private string _prevLayout; // kullanılmıyor
         private bool StripOn { get { return !_hideStrip && (_audioBar || _micBar || _volBar); } }
         private const float VolW = 300f;
         private float _lastVol; private bool _lastVolMuted; private RectangleF _volRect; private bool _volDrag;
@@ -253,6 +253,15 @@ namespace ProSystemMonitor
                     if (i < 0) continue;
                     string k = line.Substring(0, i).Trim(), v = line.Substring(i + 1).Trim();
                     if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida" || v == "studio")) _layout = v;
+                    else if (k == "cw") { int q; if (int.TryParse(v, out q) && q >= 200 && q <= 8000) _cw = q; }
+                    else if (k == "ch") { int q; if (int.TryParse(v, out q) && q >= 120 && q <= 8000) _ch = q; }
+                    else if (k == "grid") { float q; if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out q) && q >= 1 && q <= 200) _grid = q; }
+                    else if (k == "showgrid") _showGrid = v != "0";
+                    else if (k == "snap") _snapOn = v != "0";
+                    else if (k == "bgcol") { int q; int.TryParse(v, out q); _bgCol = q; }
+                    else if (k == "bgimg") _bgImg = v;
+                    else if (k == "gfs") { float q; if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out q) && q >= 0.3f && q <= 3f) _gfs = q; }
+                    else if (k == "gzoom") { float q; if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out q) && q >= 0.2f && q <= 4f) _gzoom = q; }
                     else if (k == "audiobar") _audioBar = v != "0";
                     else if (k == "micbar") _micBar = v != "0";
                     else if (k == "volbar") _volBar = v != "0";
@@ -287,7 +296,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs) });
+                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs), "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture), "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol, "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture) });
             }
             catch { }
         }
@@ -574,7 +583,7 @@ namespace ProSystemMonitor
             m.Font = new Font("Segoe UI", 10f);
             m.ShowCheckMargin = true;
             m.ShowImageMargin = false;
-            m.Opening += delegate { colors.Accent = _th.A1; PopulateMenu(m); };
+            m.Opening += delegate (object so, System.ComponentModel.CancelEventArgs ce) { ce.Cancel = true; if (!_edit) ToggleEdit(); else ShowEditMenu(); };
             ContextMenuStrip = m;
         }
 
@@ -702,7 +711,7 @@ namespace ProSystemMonitor
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left || _sc <= 0) return;
             float cx = (e.X - _ox) / _sc, cy = (e.Y - _oy) / _sc;
-            if (_edit) { EditMouseDown(cx, cy); return; }
+            if (_edit) { EditMouseDown(e.X, e.Y, cx, cy); return; }
             if (_infoOpen)
             {
                 if (_infoBtn.Contains(cx, cy) || _infoPanel.Contains(cx, cy)) { ToggleInfo(); return; }
@@ -853,11 +862,12 @@ namespace ProSystemMonitor
         {
             Theme t = _th;
             string st = t.Style;
+            if (st == "none") return;
             if (st == "brutal")
             {
                 G.FillRectangle(Br(t.A1), r.X + 7, r.Y + 7, r.Width, r.Height);
                 G.FillRectangle(Br(t.Panel), r.X, r.Y, r.Width, r.Height);
-                G.DrawRectangle(Pn(t.Line, 3), r.X + 1.5f, r.Y + 1.5f, r.Width - 3, r.Height - 3);
+                G.DrawRectangle(Pn(t.Line, FW(3)), r.X + 1.5f, r.Y + 1.5f, r.Width - 3, r.Height - 3);
                 return;
             }
             if (st == "clip")
@@ -865,7 +875,7 @@ namespace ProSystemMonitor
                 using (GraphicsPath p = Clip(r, 26))
                 {
                     G.FillPath(Br(t.Panel), p);
-                    G.DrawPath(Pn(t.Line, 1), p);
+                    G.DrawPath(Pn(t.Line, FW(1)), p);
                 }
                 G.FillRectangle(Br(t.A1), r.X, r.Y + 26, 4, r.Height - 52);
                 return;
@@ -876,14 +886,14 @@ namespace ProSystemMonitor
                 {
                     using (var lg = new LinearGradientBrush(r, Al(Mix(t.Panel, t.Bg, 0.1f), 235), Al(t.Tile, 200), 55f))
                         G.FillPath(lg, p);
-                    G.DrawPath(Pn(Al(t.Tx, 36), 1), p);
+                    G.DrawPath(Pn(Al(t.Tx, 36), FW(1)), p);
                 }
                 else if (st == "neon")
                 {
                     G.FillPath(Br(t.Panel), p);
                     G.DrawPath(Pn(Al(t.A1, 30), 8), p);
                     G.DrawPath(Pn(Al(t.A1, 60), 4), p);
-                    G.DrawPath(Pn(Al(t.A1, 140), 1.5f), p);
+                    G.DrawPath(Pn(Al(t.A1, 140), FW(1.5f)), p);
                 }
                 else if (st == "blueprint")
                 {
@@ -894,7 +904,7 @@ namespace ProSystemMonitor
                 {
                     G.FillPath(Br(t.Panel), p);
                     G.DrawPath(Pn(Al(t.A1, 40), 6), p);
-                    G.DrawPath(Pn(t.A1, 1), p);
+                    G.DrawPath(Pn(t.A1, FW(1)), p);
                 }
                 else if (st == "hud")
                 {
@@ -911,7 +921,7 @@ namespace ProSystemMonitor
                 else
                 {
                     G.FillPath(Br(t.Panel), p);
-                    G.DrawPath(Pn(t.Line, 1), p);
+                    G.DrawPath(Pn(t.Line, FW(1)), p);
                 }
             }
         }
@@ -921,6 +931,7 @@ namespace ProSystemMonitor
         {
             Panel(r);
             Theme t = _th;
+            if (_wsNoTitle) return new RectangleF(r.X + 20, r.Y + 60, r.Width - 40, r.Height - 74);
             float x = r.X + 20, y = r.Y + 14;
             G.FillRectangle(Br(t.A1), x, y + 3, 5, 30);
             Font ft = F(30, true, false), fs = F(30, false, true);
@@ -1027,6 +1038,8 @@ namespace ProSystemMonitor
             RectangleF box = new RectangleF(cx - rad, cy - rad, rad * 2, rad * 2);
             var cap = (t.Style == "blueprint" || t.Style == "crt" || t.Style == "brutal" || t.Style == "hud") ? LineCap.Flat : LineCap.Round;
             if (t.Style == "brutal") sw = 12 * k;
+            if (_wsGw > 0) sw *= _wsGw;
+            if (_wsCap == "round") cap = LineCap.Round; else if (_wsCap == "flat") cap = LineCap.Flat;
             using (var tp = new Pen(t.Track, sw)) { tp.StartCap = cap; tp.EndCap = cap; G.DrawArc(tp, box, 135, 270); }
             float sweep = (float)(270.0 * pct / 100.0);
             if (sweep > 0.5f)
@@ -1152,25 +1165,33 @@ namespace ProSystemMonitor
             G.TextRenderingHint = TextRenderingHint.AntiAlias;
             G.PixelOffsetMode = PixelOffsetMode.HighQuality;
             Theme t = _th;
-            G.Clear(t.Bg);
+            G.Clear(_bgCol != 0 ? Color.FromArgb(255, Color.FromArgb(_bgCol)) : t.Bg);
             _marqActive = false; _marqRects.Clear(); _marqItems.Clear(); _hits.Clear();
 
             float W = ClientSize.Width, Hh = ClientSize.Height;
             float aw = W - _margin * 2, ah = Hh - _margin * 2;
             bool strip = StripOn;
-            float chh = (strip ? 1112f : 1080f) + (_topBar ? InfoH : 0);
+            float chh = (strip ? _ch + 32f : _ch) + (_topBar ? InfoH : 0);
             _chh = chh;
-            float sc = Math.Max(0.1f, Math.Min(aw / 1920f, ah / chh));
-            DrawBackground(W, Hh, sc);
+            float sc = Math.Max(0.1f, Math.Min(aw / _cw, ah / chh));
+            Image bgi = string.IsNullOrEmpty(_bgImg) ? null : GetImg(_bgImg, 2560);
+            if (bgi != null)
+            {
+                float k = Math.Max(W / bgi.Width, Hh / bgi.Height);
+                float sw2 = W / k, sh2 = Hh / k;
+                G.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                G.DrawImage(bgi, new RectangleF(0, 0, W, Hh), new RectangleF((bgi.Width - sw2) / 2f, (bgi.Height - sh2) / 2f, sw2, sh2), GraphicsUnit.Pixel);
+            }
+            else DrawBackground(W, Hh, sc);
 
-            _ox = _margin + (aw - 1920 * sc) / 2f; _oy = _margin + (ah - chh * sc) / 2f; _sc = sc;
+            _ox = _margin + (aw - _cw * sc) / 2f; _oy = _margin + (ah - chh * sc) / 2f; _sc = sc;
             G.TranslateTransform(_ox, _oy);
             G.ScaleTransform(sc, sc);
 
             Snap s = _snap;
             if (s == null)
             {
-                Txt("Veriler okunuyor…", F(48, false, true), t.Dim, 0, 0, 1920, 1080, 1);
+                Txt("Veriler okunuyor…", F(48, false, true), t.Dim, 0, 0, _cw, _ch, 1);
             }
             else
             {
@@ -1181,7 +1202,7 @@ namespace ProSystemMonitor
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
                     float w = TW(m, f) + 28;
-                    var r = new RectangleF(1920 - w - 14 - RightW(), StripOn ? 1084 : 1054, w, 26);
+                    var r = new RectangleF(_cw - w - 14 - RightW(), StripOn ? _ch + 4 : _ch - 26, w, 26);
                     using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(Al(t.Crit, 235)), p); }
                     Txt(m, f, Color.White, r.X, r.Y, r.Width, r.Height, 1);
                 }
@@ -1189,8 +1210,8 @@ namespace ProSystemMonitor
 
             DrawAudioBar();
             _brRect = RectangleF.Empty;
-            if (_topBar) DrawInfoBar(_snap, StripOn ? 1112f : 1080f);
-            if (_topBar) DrawInfoPanel(_snap, StripOn ? 1112f : 1080f);
+            if (_topBar) DrawInfoBar(_snap, StripOn ? _ch + 32f : _ch);
+            if (_topBar) DrawInfoPanel(_snap, StripOn ? _ch + 32f : _ch);
             if (_bright < 100)
             {
                 G.ResetTransform();
@@ -1198,7 +1219,7 @@ namespace ProSystemMonitor
                 G.TranslateTransform(_ox, _oy); G.ScaleTransform(sc, sc);
             }
             if (_edit) DrawEditor();
-            DrawBrightBtn();
+            if (!_edit) DrawBrightBtn();
 
             if (t.Style == "crt")
             {
@@ -1473,8 +1494,7 @@ namespace ProSystemMonitor
             string clock = now.ToString("HH:mm", tr);
             string date = now.ToString("d MMMM dddd", tr);
             string pr = PrayerLeft(now);
-            float x = 1920 - 14;
-            { var er = new RectangleF(1920 - 44, y, 30, 30); Txt("✎", F(24, true, false), _edit ? t.A1 : t.Dim, er.X, er.Y - 2, er.Width, er.Height + 4, 1); _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(er.X - 4, er.Y - 4, er.Width + 8, er.Height + 8), "edit:toggle")); x -= 40; }
+            float x = _cw - 14;
             Font fc = F(28, true, false);
             float cw = TW(clock, fc) + 6;
             Txt(clock, fc, t.Tx, x - cw, y - 2, cw + 4, h + 4, 2); x -= cw + 20;
@@ -1616,7 +1636,7 @@ namespace ProSystemMonitor
             var show = new List<AudioDevice>();
             foreach (AudioDevice d in all) if (_favs.Count == 0 || _favs.Contains(d.Id) || d.IsDefault) show.Add(d);
             Font f = F(18, true, false);
-            float x = 10, y = 1084, h = 26, maxX = 1920 - 340 - RightW();
+            float x = 10, y = _ch + 4, h = 26, maxX = _cw - 340 - RightW();
             Txt("♪", F(20, true, false), t.A1, x, y, 20, h, 1);
             x += 24;
             foreach (AudioDevice d in show)
@@ -1650,7 +1670,7 @@ namespace ProSystemMonitor
         private void DrawVol()
         {
             Theme t = _th;
-            float w = VolW, h = 26, x = 1920 - 14 - (_micBar ? MicW + 12 : 0) - w, y = 1084;
+            float w = VolW, h = 26, x = _cw - 14 - (_micBar ? MicW + 12 : 0) - w, y = _ch + 4;
             var r = new RectangleF(x, y, w, h);
             bool avail = AudioSwitch.VolAvailable, muted = AudioSwitch.VolMuted;
             float lv = Math.Max(0f, Math.Min(1f, AudioSwitch.VolLevel));
@@ -1681,7 +1701,7 @@ namespace ProSystemMonitor
         private void DrawMic()
         {
             Theme t = _th;
-            float w = MicW, h = 26, x = 1920 - 14 - w, y = 1084;
+            float w = MicW, h = 26, x = _cw - 14 - w, y = _ch + 4;
             var r = new RectangleF(x, y, w, h);
             bool avail = AudioSwitch.MicAvailable, muted = AudioSwitch.MicMuted;
             using (GraphicsPath p = RR(r, h / 2f))

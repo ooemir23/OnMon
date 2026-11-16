@@ -16,7 +16,14 @@ namespace ProSystemMonitor
         public float X, Y, W, H;
         public bool Vis;
         public float Fs = 1f;
-        public int Col;   // 0 = tema rengi
+        public int A1, A2, Tx, PanelC, FrameC;      // ARGB, 0 = tema
+        public int PAlpha = 100;                    // panel opaklığı %
+        public string Frame = "", Bars = "", Glow = "", Cap = "";
+        public float FrameW, Radius = -1f, GaugeW;  // 0 / -1 = tema
+        public bool NoTitle, Locked;
+        public int Align = 1;
+        public float Zoom = 1f;
+        public string Text = "", Path = "";
         public WInst Copy() { return (WInst)MemberwiseClone(); }
     }
 
@@ -24,6 +31,7 @@ namespace ProSystemMonitor
     {
         public string Id, Name;
         public float W, H, MinW, MinH;
+        public bool Multi;
         public Action<RectangleF, Snap> Draw;
     }
 
@@ -36,11 +44,16 @@ namespace ProSystemMonitor
         private List<WInst> _wSaved;           // oyun modu geçici düzeni
         private float _fs = 1f;
         private float _chh = 1080f;
+        internal int _cw = 1920, _ch = 1080, _bgCol;
+        internal float _grid = 10f, _gfs = 1f, _gzoom = 1f;
+        internal bool _showGrid = true, _snapOn = true;
+        internal string _bgImg = "";
+        private WInst _cur;
         private static readonly Color[] AccPal = {
             Color.Empty, Color.FromArgb(0, 229, 255), Color.FromArgb(61, 220, 132), Color.FromArgb(255, 193, 7),
             Color.FromArgb(255, 122, 24), Color.FromArgb(255, 77, 77), Color.FromArgb(255, 79, 216), Color.FromArgb(166, 107, 255), Color.FromArgb(232, 232, 232) };
-        private static readonly string[] TplIds = { "classic", "hud", "cockpit", "aida", "studio" };
-        private static readonly string[] TplNames = { "Klasik", "Oyun HUD", "Pro Kokpit", "Sensör Paneli", "Komuta Merkezi" };
+        internal static readonly string[] TplIds = { "empty", "classic", "hud", "cockpit", "aida", "studio" };
+        internal static readonly string[] TplNames = { "Boş (sıfırdan başla)", "Klasik", "Oyun HUD", "Pro Kokpit", "Sensör Paneli", "Komuta Merkezi" };
 
         private static string WidgetsPath
         {
@@ -71,6 +84,9 @@ namespace ProSystemMonitor
             Wd("fans", "Fanlar", 250, 250, 160, 100, (r, s) => PFans(r, s));
             Wd("volts", "Voltajlar", 200, 250, 160, 100, (r, s) => PVolts(r, s));
             Wd("sound", "Ses", 440, 338, 300, 160, (r, s) => PSound(r, s));
+            Wd("text", "Metin", 500, 120, 80, 40, (r, s) => WText(r, s)); _wlist[_wlist.Count - 1].Multi = true;
+            Wd("image", "Logo / Resim", 300, 300, 60, 60, (r, s) => WImage(r, s)); _wlist[_wlist.Count - 1].Multi = true;
+            Wd("box", "Kutu / Çerçeve", 500, 300, 60, 60, (r, s) => WBox(r, s)); _wlist[_wlist.Count - 1].Multi = true;
             Wd("aclock", "Saat (sensör)", 450, 245, 220, 100, (r, s) => PAClock(r, s));
             Wd("amem", "Bellek (sensör)", 470, 245, 220, 100, (r, s) => PAMem(r, s));
             Wd("amobo", "Anakart", 960, 245, 300, 100, (r, s) => PAMobo(r, s));
@@ -82,6 +98,11 @@ namespace ProSystemMonitor
             _wdefs = new Dictionary<string, WDef>();
             foreach (WDef d in _wlist) _wdefs[d.Id] = d;
         }
+
+        internal static string BaseId(string id) { int i = id.IndexOf('#'); return i < 0 ? id : id.Substring(0, i); }
+        internal WDef DefOf(string id) { WReg(); WDef d; return _wdefs.TryGetValue(BaseId(id), out d) ? d : null; }
+        internal static float MinWof(WDef d) { return Math.Max(40f, d.MinW * 0.5f); }
+        internal static float MinHof(WDef d) { return Math.Max(30f, d.MinH * 0.5f); }
 
         private void Wd(string id, string name, float w, float h, float mw, float mh, Action<RectangleF, Snap> draw)
         {
@@ -125,6 +146,7 @@ namespace ProSystemMonitor
                 A("net", new RectangleF(b[1].X, b[1].Y, b[1].Width, 275)); A("disks", new RectangleF(b[1].X, b[1].Y + 285, b[1].Width, 275));
                 c = Row(826, 244, 950, 323, 607); A("fps", c[0]); A("procs", c[1]); A("sys", c[2]);
             }
+            else if (id == "empty") { }
             else
             {
                 A("hudbar", new RectangleF(10, 10, 1900, 86));
@@ -133,6 +155,11 @@ namespace ProSystemMonitor
                 A("cpu", new RectangleF(a[1].X, a[1].Y, a[1].Width, 305)); A("gpu", new RectangleF(a[1].X, a[1].Y + 315, a[1].Width, 305));
                 A("temps", new RectangleF(a[2].X, a[2].Y, a[2].Width, 200)); A("gpugraph", new RectangleF(a[2].X, a[2].Y + 210, a[2].Width, 200)); A("power", new RectangleF(a[2].X, a[2].Y + 420, a[2].Width, 200));
                 b = Row(736, 338, 440, 360, 360, 340, 360); A("sound", b[0]); A("net", b[1]); A("disks", b[2]); A("mem", b[3]); A("apps", b[4]);
+            }
+            if (_cw != 1920 || _ch != 1080)
+            {
+                float kx = _cw / 1920f, ky = _ch / 1080f;
+                foreach (WInst x in l) { x.X = (float)Math.Round(x.X * kx); x.Y = (float)Math.Round(x.Y * ky); x.W = (float)Math.Round(x.W * kx); x.H = (float)Math.Round(x.H * ky); }
             }
             WFill(l);
             return l;
@@ -143,6 +170,7 @@ namespace ProSystemMonitor
         {
             foreach (WDef d in _wlist)
             {
+                if (d.Multi) continue;
                 bool has = false;
                 foreach (WInst w in l) if (w.Id == d.Id) { has = true; break; }
                 if (!has) l.Add(new WInst { Id = d.Id, X = 100, Y = 100, W = d.W, H = d.H, Vis = false });
@@ -151,17 +179,24 @@ namespace ProSystemMonitor
 
         internal bool WVis(string id)
         {
-            for (int i = 0; i < _wd.Count; i++) if (_wd[i].Id == id && _wd[i].Vis) return true;
+            for (int i = 0; i < _wd.Count; i++) if (BaseId(_wd[i].Id) == id && _wd[i].Vis) return true;
             return false;
         }
 
-        private WInst WGet(string id)
+        internal WInst WGet(string id)
         {
             for (int i = 0; i < _wd.Count; i++) if (_wd[i].Id == id) return _wd[i];
             return null;
         }
 
+        internal WInst WSelected { get { return _sel != null ? WGet(_sel) : null; } }
+
+        internal void WChanged() { WSave(); _dirty = true; Invalidate(); }
+
         // ---------------- kayıt / yükleme ----------------
+        private static string Esc(string s) { return Uri.EscapeDataString(s ?? ""); }
+        private static string Unesc(string s) { try { return Uri.UnescapeDataString(s ?? ""); } catch { return ""; } }
+
         private void WLoad()
         {
             WReg();
@@ -170,18 +205,26 @@ namespace ProSystemMonitor
             {
                 if (File.Exists(WidgetsPath))
                 {
+                    var ic = CultureInfo.InvariantCulture;
                     foreach (string line in File.ReadAllLines(WidgetsPath))
                     {
                         string[] p = line.Split('|');
-                        if (p.Length < 8 || !_wdefs.ContainsKey(p[0])) continue;
+                        if (p.Length < 8 || DefOf(p[0]) == null) continue;
                         var w = new WInst { Id = p[0] };
-                        var ic = CultureInfo.InvariantCulture;
                         w.X = float.Parse(p[1], ic); w.Y = float.Parse(p[2], ic); w.W = float.Parse(p[3], ic); w.H = float.Parse(p[4], ic);
-                        w.Vis = p[5] == "1"; w.Fs = float.Parse(p[6], ic); int c; int.TryParse(p[7], out c);
-                        w.Col = (c >= 0 && c < AccPal.Length) ? c : 0;
-                        WDef d = _wdefs[w.Id];
-                        w.W = Math.Max(d.MinW, w.W); w.H = Math.Max(d.MinH, w.H);
-                        w.Fs = Math.Max(0.5f, Math.Min(2f, w.Fs));
+                        w.Vis = p[5] == "1"; w.Fs = float.Parse(p[6], ic);
+                        if (p.Length >= 25)
+                        {
+                            w.A1 = int.Parse(p[7]); w.A2 = int.Parse(p[8]); w.Tx = int.Parse(p[9]); w.PanelC = int.Parse(p[10]); w.PAlpha = int.Parse(p[11]);
+                            w.Frame = p[12]; w.FrameC = int.Parse(p[13]); w.FrameW = float.Parse(p[14], ic); w.Radius = float.Parse(p[15], ic);
+                            w.NoTitle = p[16] == "1"; w.Bars = p[17]; w.Glow = p[18]; w.Cap = p[19]; w.GaugeW = float.Parse(p[20], ic);
+                            w.Locked = p[21] == "1"; w.Align = int.Parse(p[22]); w.Text = Unesc(p[23]); w.Path = Unesc(p[24]);
+                            if (p.Length >= 26) w.Zoom = Math.Max(0.2f, Math.Min(5f, float.Parse(p[25], ic)));
+                        }
+                        else { int c; int.TryParse(p[7], out c); if (c > 0 && c < AccPal.Length) w.A1 = AccPal[c].ToArgb(); }
+                        WDef d = DefOf(w.Id);
+                        w.W = Math.Max(MinWof(d), w.W); w.H = Math.Max(MinHof(d), w.H);
+                        w.Fs = Math.Max(0.3f, Math.Min(3f, w.Fs));
                         bool dup = false; foreach (WInst o in l) if (o.Id == w.Id) dup = true;
                         if (!dup) l.Add(w);
                     }
@@ -203,8 +246,12 @@ namespace ProSystemMonitor
                 var sb = new StringBuilder();
                 var ic = CultureInfo.InvariantCulture;
                 foreach (WInst w in _wd)
-                    sb.Append(w.Id).Append('|').Append(w.X.ToString("0.#", ic)).Append('|').Append(w.Y.ToString("0.#", ic)).Append('|').Append(w.W.ToString("0.#", ic)).Append('|').Append(w.H.ToString("0.#", ic))
-                      .Append('|').Append(w.Vis ? "1" : "0").Append('|').Append(w.Fs.ToString("0.00", ic)).Append('|').Append(w.Col).AppendLine();
+                    sb.Append(w.Id).Append('|').Append(w.X.ToString("0.##", ic)).Append('|').Append(w.Y.ToString("0.##", ic)).Append('|').Append(w.W.ToString("0.##", ic)).Append('|').Append(w.H.ToString("0.##", ic))
+                      .Append('|').Append(w.Vis ? "1" : "0").Append('|').Append(w.Fs.ToString("0.00", ic))
+                      .Append('|').Append(w.A1).Append('|').Append(w.A2).Append('|').Append(w.Tx).Append('|').Append(w.PanelC).Append('|').Append(w.PAlpha)
+                      .Append('|').Append(w.Frame).Append('|').Append(w.FrameC).Append('|').Append(w.FrameW.ToString("0.##", ic)).Append('|').Append(w.Radius.ToString("0.##", ic))
+                      .Append('|').Append(w.NoTitle ? "1" : "0").Append('|').Append(w.Bars).Append('|').Append(w.Glow).Append('|').Append(w.Cap).Append('|').Append(w.GaugeW.ToString("0.##", ic))
+                      .Append('|').Append(w.Locked ? "1" : "0").Append('|').Append(w.Align).Append('|').Append(Esc(w.Text)).Append('|').Append(Esc(w.Path)).Append('|').Append(w.Zoom.ToString("0.##", ic)).AppendLine();
                 File.WriteAllText(WidgetsPath, sb.ToString());
             }
             catch { }
@@ -225,18 +272,128 @@ namespace ProSystemMonitor
             if (ev != 0) { _dirty = true; }
         }
 
-        // ---------------- çizim ----------------
-        private readonly Dictionary<string, Theme> _accThemes = new Dictionary<string, Theme>();
-        private Theme AccTheme(Theme t, int col)
+        // ---------------- tuval (çözünürlük) ----------------
+        internal void SetCanvas(int w, int h, bool scaleWidgets)
         {
-            string k = t.Id + "|" + col;
+            w = Math.Max(200, Math.Min(8000, w)); h = Math.Max(120, Math.Min(8000, h));
+            if (scaleWidgets && (w != _cw || h != _ch))
+            {
+                float kx = w / (float)_cw, ky = h / (float)_ch;
+                foreach (WInst x in _wd) { x.X = (float)Math.Round(x.X * kx); x.Y = (float)Math.Round(x.Y * ky); x.W = (float)Math.Round(x.W * kx); x.H = (float)Math.Round(x.H * ky); }
+                if (_wSaved != null) foreach (WInst x in _wSaved) { x.X = (float)Math.Round(x.X * kx); x.Y = (float)Math.Round(x.Y * ky); x.W = (float)Math.Round(x.W * kx); x.H = (float)Math.Round(x.H * ky); }
+            }
+            if (scaleWidgets && (w != _cw || h != _ch)) _gzoom = Math.Max(0.2f, Math.Min(4f, _gzoom * Math.Min(w / (float)_cw, h / (float)_ch)));
+            _cw = w; _ch = h;
+            foreach (WInst x in _wd) { x.W = Math.Min(x.W, _cw); x.H = Math.Min(x.H, _ch); x.X = Math.Max(0, Math.Min(_cw - x.W, x.X)); x.Y = Math.Max(0, Math.Min(_ch - x.H, x.Y)); }
+            WSave(); SaveSettings(); _dirty = true; Invalidate();
+        }
+
+        // ---------------- görüntü önbelleği ----------------
+        private readonly Dictionary<string, Image> _imgs = new Dictionary<string, Image>();
+        private Image GetImg(string path, int max)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            string key = path + "|" + max;
+            Image im;
+            if (_imgs.TryGetValue(key, out im)) return im;
+            try
+            {
+                using (var fs = File.OpenRead(path))
+                using (Image src = Image.FromStream(fs))
+                {
+                    float k = Math.Min(1f, max / (float)Math.Max(src.Width, src.Height));
+                    int nw = Math.Max(1, (int)(src.Width * k)), nh = Math.Max(1, (int)(src.Height * k));
+                    var bmp = new Bitmap(nw, nh, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                    using (Graphics g = Graphics.FromImage(bmp)) { g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.DrawImage(src, 0, 0, nw, nh); }
+                    im = bmp;
+                }
+            }
+            catch { im = null; }
+            if (_imgs.Count > 12) { foreach (Image x in _imgs.Values) if (x != null) x.Dispose(); _imgs.Clear(); }
+            _imgs[key] = im;
+            return im;
+        }
+
+        // ---------------- özel widget'lar ----------------
+        private string Tokens(string t, Snap s)
+        {
+            if (string.IsNullOrEmpty(t) || t.IndexOf('{') < 0) return t ?? "";
+            var tr = new CultureInfo("tr-TR");
+            DateTime n = DateTime.Now;
+            t = t.Replace("{saat}", n.ToString("HH:mm", tr)).Replace("{saniye}", n.ToString("HH:mm:ss", tr)).Replace("{tarih}", n.ToString("d MMMM yyyy", tr)).Replace("{gun}", n.ToString("dddd", tr));
+            if (s != null)
+                t = t.Replace("{cpu}", I0(s.CpuLoad) + "%").Replace("{gpu}", I0(s.GpuLoad) + "%").Replace("{cpusic}", Tc(s.CpuTemp)).Replace("{gpusic}", Tc(s.GpuTemp))
+                     .Replace("{ram}", I0(s.MemLoad) + "%").Replace("{fps}", I0(s.Fps)).Replace("{ping}", I0(s.Ping) + " ms");
+            return t;
+        }
+
+        private void WText(RectangleF r, Snap s)
+        {
+            WInst w = _cur; if (w == null) return;
+            Panel(r);
+            string txt = Tokens(w.Text, s);
+            if (string.IsNullOrEmpty(txt)) { if (_edit) Txt("Metin yaz (Özellikler)", F(20, false, true), _th.Dim, r.X, r.Y, r.Width, r.Height, 1); return; }
+            string[] lines = txt.Replace("\r", "").Split('\n');
+            float sz = Math.Max(10f, r.Height * 0.55f / Math.Max(1, lines.Length) / Math.Max(0.3f, _fs));
+            float avail = r.Width - 24;
+            for (; sz > 8f; sz -= 2f)
+            {
+                Font f = F(sz, true, false);
+                float mw = 0; foreach (string ln in lines) mw = Math.Max(mw, TW(ln, f));
+                if (mw <= avail) break;
+            }
+            Font ff = F(sz, true, false);
+            float lh = ff.Size * 1.3f, total = lh * lines.Length, y = r.Y + (r.Height - total) / 2f;
+            for (int i = 0; i < lines.Length; i++) Txt(lines[i], ff, _th.Tx, r.X + 12, y + i * lh, avail, lh, w.Align);
+        }
+
+        private void WImage(RectangleF r, Snap s)
+        {
+            WInst w = _cur; if (w == null) return;
+            Panel(r);
+            Image im = GetImg(w.Path, 1024);
+            if (im == null) { Txt(string.IsNullOrEmpty(w.Path) ? "Resim seç (Özellikler)" : "Resim bulunamadı", F(20, false, true), _th.Dim, r.X, r.Y, r.Width, r.Height, 1); return; }
+            float pad = Math.Min(12f, Math.Min(r.Width, r.Height) * 0.05f);
+            float aw = r.Width - pad * 2, ah = r.Height - pad * 2;
+            float k = Math.Min(aw / im.Width, ah / im.Height);
+            float dw = im.Width * k, dh = im.Height * k;
+            G.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            G.DrawImage(im, r.X + (r.Width - dw) / 2f, r.Y + (r.Height - dh) / 2f, dw, dh);
+        }
+
+        private void WBox(RectangleF r, Snap s)
+        {
+            WInst w = _cur; if (w == null) return;
+            if (!string.IsNullOrEmpty(w.Text)) Card(r, Tokens(w.Text, s), null, null); else Panel(r);
+        }
+
+        // ---------------- widget başına stil ----------------
+        private readonly Dictionary<string, Theme> _accThemes = new Dictionary<string, Theme>();
+        private float _wsFw, _wsGw; private bool _wsNoTitle; private string _wsCap = "";
+
+        private Theme WTheme(Theme t, WInst w)
+        {
+            if (w.A1 == 0 && w.A2 == 0 && w.Tx == 0 && w.PanelC == 0 && w.PAlpha >= 100 && w.Frame == "" && w.FrameC == 0 && w.Radius < 0 && w.Bars == "" && w.Glow == "") return t;
+            string k = t.Id + "|" + w.A1 + "|" + w.A2 + "|" + w.Tx + "|" + w.PanelC + "|" + w.PAlpha + "|" + w.Frame + "|" + w.FrameC + "|" + w.Radius + "|" + w.Bars + "|" + w.Glow;
             Theme o;
-            if (_accThemes.TryGetValue(k, out o) && o.Bg == t.Bg) return o;
-            Color c = AccPal[col];
-            o = new Theme { Id = t.Id, Name = t.Name, Style = t.Style, Bars = t.Bars, Fx = t.Fx, Bg = t.Bg, Panel = t.Panel, Tile = t.Tile, Line = t.Line, A1 = c, A2 = Mix(c, t.A2, 0.45f), Track = t.Track, Tx = t.Tx, Dim = t.Dim, Crit = t.Crit, R = t.R, Glow = t.Glow, Mono = t.Mono };
+            if (_accThemes.TryGetValue(k, out o)) return o;
+            o = new Theme { Id = t.Id, Name = t.Name, Style = t.Style, Bars = t.Bars, Fx = t.Fx, Bg = t.Bg, Panel = t.Panel, Tile = t.Tile, Line = t.Line, A1 = t.A1, A2 = t.A2, Track = t.Track, Tx = t.Tx, Dim = t.Dim, Crit = t.Crit, R = t.R, Glow = t.Glow, Mono = t.Mono };
+            if (w.A1 != 0) { o.A1 = Color.FromArgb(255, Color.FromArgb(w.A1)); o.A2 = Mix(o.A1, t.A2, 0.45f); }
+            if (w.A2 != 0) o.A2 = Color.FromArgb(255, Color.FromArgb(w.A2));
+            if (w.Tx != 0) { o.Tx = Color.FromArgb(255, Color.FromArgb(w.Tx)); o.Dim = Mix(o.Tx, t.Bg, 0.45f); }
+            if (w.PanelC != 0) o.Panel = Color.FromArgb(255, Color.FromArgb(w.PanelC));
+            if (w.PAlpha < 100) { o.Panel = Color.FromArgb(Math.Max(0, w.PAlpha) * 255 / 100, o.Panel); o.Tile = Color.FromArgb(Math.Max(0, w.PAlpha) * 255 / 100, o.Tile); }
+            if (w.FrameC != 0) o.Line = Color.FromArgb(255, Color.FromArgb(w.FrameC));
+            if (w.Frame != "") o.Style = w.Frame == "flat" ? "flat" : w.Frame;
+            if (w.Radius >= 0) o.R = w.Radius;
+            if (w.Bars != "") o.Bars = w.Bars;
+            if (w.Glow != "") o.Glow = w.Glow == "on";
+            if (_accThemes.Count > 300) _accThemes.Clear();
             _accThemes[k] = o;
             return o;
         }
+
+        private float FW(float d) { return _wsFw > 0 ? _wsFw : d; }
 
         private bool _wErr;
         private void DrawWidgets(Snap s)
@@ -246,24 +403,31 @@ namespace ProSystemMonitor
             {
                 WInst w = _wd[i];
                 if (!w.Vis) continue;
-                WDef d;
-                if (!_wdefs.TryGetValue(w.Id, out d)) continue;
+                WDef d = DefOf(w.Id);
+                if (d == null) continue;
                 Theme saved = _th;
-                if (w.Col > 0) _th = AccTheme(saved, w.Col);
-                _fs = w.Fs;
+                _th = WTheme(saved, w);
+                _fs = w.Fs * _gfs; _wsFw = w.FrameW; _wsGw = w.GaugeW; _wsNoTitle = w.NoTitle; _wsCap = w.Cap; _cur = w;
                 var r = new RectangleF(w.X, w.Y, w.W, w.H);
                 var st = G.Save();
                 G.SetClip(RectangleF.Inflate(r, 10, 10), CombineMode.Intersect);
-                try { d.Draw(r, s); }
+                float z = w.Zoom * _gzoom;
+                int h0 = _hits.Count;
+                RectangleF rd = r;
+                if (Math.Abs(z - 1f) > 0.001f) { G.TranslateTransform(r.X, r.Y); G.ScaleTransform(z, z); rd = new RectangleF(0, 0, r.Width / z, r.Height / z); }
+                try { d.Draw(rd, s); }
                 catch (Exception ex) { if (!_wErr) { _wErr = true; Program.Log("widget " + w.Id, ex); } }
+                if (Math.Abs(z - 1f) > 0.001f)
+                    for (int hi = h0; hi < _hits.Count; hi++) { RectangleF hr = _hits[hi].Key; _hits[hi] = new KeyValuePair<RectangleF, string>(new RectangleF(r.X + hr.X * z, r.Y + hr.Y * z, hr.Width * z, hr.Height * z), _hits[hi].Value); }
                 G.Restore(st);
-                _th = saved; _fs = 1f;
+                _th = saved; _fs = 1f; _wsFw = 0; _wsGw = 0; _wsNoTitle = false; _wsCap = ""; _cur = null;
             }
         }
 
         // ---------------- düzenleme modu ----------------
-        private bool _edit, _palOpen;
-        private string _sel;
+        internal bool _edit;
+        private bool _palOpen;
+        internal string _sel;
         private int _drag;                 // 0 yok, 1 taşı, 2 boyutlandır
         private float _dx, _dy;
         private int _lastEdPaint;
@@ -273,9 +437,17 @@ namespace ProSystemMonitor
         {
             _edit = !_edit; _sel = null; _palOpen = false; _drag = 0;
             if (_edit && _wSaved != null) { _wd = _wSaved; _wSaved = null; }
-            if (!_edit) WSave();
+            if (!_edit) { WSave(); CloseEditorDialogs(); }
             _dirty = true; Invalidate();
         }
+
+        private float SnapV(float v)
+        {
+            if (!_snapOn || _grid <= 1f) return (float)Math.Round(v);
+            return (float)Math.Round(v / _grid) * _grid;
+        }
+
+        private RectangleF WinRect(WInst w) { return new RectangleF(_ox + w.X * _sc, _oy + w.Y * _sc, w.W * _sc, w.H * _sc); }
 
         private void DrawEditor()
         {
@@ -283,102 +455,120 @@ namespace ProSystemMonitor
             WReg();
             _edHits.Clear();
             G.SmoothingMode = SmoothingMode.AntiAlias;
-            // ızgara
-            Pen gp = Pn(Al(t.A1, 22), 1);
-            for (int x = 0; x <= 1920; x += 40) G.DrawLine(gp, x, 0, x, 1080);
-            for (int y = 0; y <= 1080; y += 40) G.DrawLine(gp, 0, y, 1920, y);
+            // tuval sınırı + ızgara
+            G.DrawRectangle(Pn(Al(t.A1, 200), 2), 0, 0, _cw, _ch);
+            if (_showGrid)
+            {
+                float g = Math.Max(1f, _grid), step = g;
+                while (step * _sc < 7f) step += g;
+                Pen gp = Pn(Al(t.A1, 24), 1);
+                for (float x = 0; x <= _cw; x += step) G.DrawLine(gp, x, 0, x, _ch);
+                for (float y = 0; y <= _ch; y += step) G.DrawLine(gp, 0, y, _cw, y);
+            }
             Font fn = F(16, true, false);
             foreach (WInst w in _wd)
             {
                 if (!w.Vis) continue;
-                WDef d; if (!_wdefs.TryGetValue(w.Id, out d)) continue;
+                WDef d = DefOf(w.Id); if (d == null) continue;
                 bool sel = w.Id == _sel;
                 var r = new RectangleF(w.X, w.Y, w.W, w.H);
                 Color oc = sel ? t.A1 : Al(t.A1, 150);
                 using (var dp = new Pen(oc, sel ? 3f : 1.6f)) { if (!sel) dp.DashStyle = DashStyle.Dash; G.DrawRectangle(dp, r.X, r.Y, r.Width, r.Height); }
-                string nm = d.Name + (w.Fs != 1f ? "  " + ((int)Math.Round(w.Fs * 100)) + "%" : "");
+                string nm = (w.Locked ? "🔒 " : "") + d.Name + (w.Fs != 1f ? "  " + ((int)Math.Round(w.Fs * 100)) + "%" : "");
                 float tw = TW(nm, fn) + 14;
                 var tr = new RectangleF(r.X, r.Y, tw, 24);
                 G.FillRectangle(Br(sel ? t.A1 : Al(t.Panel, 235)), tr);
                 Txt(nm, fn, sel ? t.Bg : t.Tx, tr.X + 7, tr.Y, tw, 24, 0);
-                var hnd = new RectangleF(r.Right - 26, r.Bottom - 26, 26, 26);
-                G.FillRectangle(Br(sel ? t.A1 : Al(t.A1, 160)), hnd);
-                G.DrawLine(Pn(t.Bg, 2), hnd.X + 8, hnd.Bottom - 5, hnd.Right - 5, hnd.Y + 8);
+                if (!w.Locked)
+                {
+                    var hnd = new RectangleF(r.Right - 26, r.Bottom - 26, 26, 26);
+                    G.FillRectangle(Br(sel ? t.A1 : Al(t.A1, 160)), hnd);
+                    G.DrawLine(Pn(t.Bg, 2), hnd.X + 8, hnd.Bottom - 5, hnd.Right - 5, hnd.Y + 8);
+                }
             }
-            // araç çubuğu
-            WInst cur = _sel != null ? WGet(_sel) : null;
-            float by = _chh - 66;
-            if (cur != null && cur.Y + cur.H > by - 6) by = 8;   // seçili widget altta ise çubuk üste geçer
-            var bar = new RectangleF(10, by, 1900, 58);
+
+            // ----- araç çubuğu: pencere pikselleriyle çizilir (tuval ölçeğinden bağımsız) -----
+            G.ResetTransform();
+            float W = ClientSize.Width, Hh = ClientSize.Height;
+            WInst cur = WSelected;
+            float bh = 52, by = Hh - bh - 6;
+            if (cur != null) { RectangleF wr = WinRect(cur); if (wr.Bottom > by - 4) by = 6; }
+            var bar = new RectangleF(6, by, W - 12, bh);
             G.FillRectangle(Br(Al(t.Bg, 250)), bar);
             G.DrawRectangle(Pn(t.A1, 2), bar.X, bar.Y, bar.Width, bar.Height);
-            float x0 = bar.X + 10, yb = bar.Y + 9, hb = 40;
-            Font fb = F(20, true, false);
+            float x0 = bar.X + 8, yb = bar.Y + 7, hb = 38;
+            Font fb = F(16, true, false);
             x0 = EdBtn("✔ Bitti", "ed:done", x0, yb, hb, fb, true);
             x0 = EdBtn("⟲ Sıfırla", "ed:reset", x0, yb, hb, fb, false);
-            int ti = Math.Max(0, Array.IndexOf(TplIds, _layout));
-            x0 = EdBtn("Şablon: " + TplNames[ti], "ed:tpl", x0, yb, hb, fb, false);
-            x0 = EdBtn("＋ Widget ekle", "ed:add", x0, yb, hb, fb, _palOpen);
-            x0 += 14;
+            x0 = EdBtn("Şablon ▾", "ed:tpl", x0, yb, hb, fb, false);
+            x0 = EdBtn("＋ Ekle", "ed:add", x0, yb, hb, fb, _palOpen);
+            x0 = EdBtn("⚙ Pano", "ed:canvas", x0, yb, hb, fb, false);
+            x0 += 10;
             if (cur != null)
             {
-                WDef cd = _wdefs[cur.Id];
-                Txt(cd.Name, fb, t.A1, x0, yb, 190, hb, 0); x0 += 170;
+                WDef cd = DefOf(cur.Id);
+                string nm = cd.Name; float nw = Math.Min(170, TW(nm, fb) + 12);
+                Txt(nm, fb, t.A1, x0, yb, nw, hb, 0); x0 += nw + 4;
                 x0 = EdBtn("A−", "ed:fs-", x0, yb, hb, fb, false);
-                Txt(((int)Math.Round(cur.Fs * 100)) + "%", fb, t.Tx, x0, yb, 66, hb, 1); x0 += 66;
+                Txt(((int)Math.Round(cur.Fs * 100)) + "%", fb, t.Tx, x0, yb, 52, hb, 1); x0 += 52;
                 x0 = EdBtn("A+", "ed:fs+", x0, yb, hb, fb, false);
-                x0 += 10;
-                x0 = EdBtn("◀", "ed:col-", x0, yb, hb, fb, false);
-                var sw = new RectangleF(x0, yb + 4, 46, hb - 8);
-                G.FillRectangle(Br(cur.Col == 0 ? t.A1 : AccPal[cur.Col]), sw);
+                var sw = new RectangleF(x0, yb + 3, 40, hb - 6);
+                G.FillRectangle(Br(cur.A1 == 0 ? t.A1 : Color.FromArgb(255, Color.FromArgb(cur.A1))), sw);
                 G.DrawRectangle(Pn(t.Tx, 1.5f), sw.X, sw.Y, sw.Width, sw.Height);
-                Txt(cur.Col == 0 ? "tema" : "", F(14, true, false), t.Bg, sw.X, sw.Y, sw.Width, sw.Height, 1);
-                x0 += 52;
-                x0 = EdBtn("▶", "ed:col+", x0, yb, hb, fb, false);
-                x0 = EdBtn("Gizle", "ed:hide", x0 + 10, yb, hb, fb, false);
+                _edHits.Add(new KeyValuePair<RectangleF, string>(sw, "ed:color"));
+                x0 += 48;
+                x0 = EdBtn("Özellikler", "ed:props", x0, yb, hb, fb, false);
+                x0 = EdBtn(cd.Multi ? "Sil" : "Gizle", "ed:hide", x0, yb, hb, fb, false);
             }
             else
             {
-                Txt("Bir widget seç  ·  sürükle: taşı  ·  sağ-alt köşe: boyut  ·  Del: gizle  ·  Esc: bitir", F(17, false, true), t.Dim, x0, yb, 1100, hb, 0);
+                Txt("Sağ tık: menü  ·  sürükle: taşı  ·  sağ-alt köşe: boyut  ·  ok tuşları: ince taşı  ·  Del: gizle  ·  Esc: bitir", F(14, false, true), t.Dim, x0, yb, Math.Max(100, bar.Right - x0 - 10), hb, 0);
             }
             // ekleme paneli
             if (_palOpen)
             {
                 var hid = new List<WInst>();
-                foreach (WInst w in _wd) if (!w.Vis) hid.Add(w);
-                int cols = 5; float cw = 300, ch = 40;
-                int rows = Math.Max(1, (hid.Count + cols - 1) / cols);
-                float ph = rows * (ch + 8) + 20;
-                float py = by > 100 ? by - ph - 8 : by + 66;
-                var pr = new RectangleF(10, py, cols * (cw + 8) + 12, ph);
+                foreach (WInst w in _wd) if (!w.Vis && !DefOf(w.Id).Multi) hid.Add(w);
+                int cols = Math.Max(1, Math.Min(5, (int)((W - 40) / 190)));
+                float cw = 180, ch = 36;
+                int items = hid.Count + 3;
+                int rows = Math.Max(1, (items + cols - 1) / cols);
+                float ph = rows * (ch + 6) + 16;
+                float py = by > 100 ? by - ph - 6 : by + bh + 6;
+                var pr = new RectangleF(6, py, cols * (cw + 6) + 10, ph);
                 G.FillRectangle(Br(Al(t.Bg, 250)), pr);
                 G.DrawRectangle(Pn(t.A1, 2), pr.X, pr.Y, pr.Width, pr.Height);
-                if (hid.Count == 0) Txt("Tüm widgetlar zaten ekranda.", fb, t.Dim, pr.X + 14, pr.Y + 8, 600, 40, 0);
+                string[] nid = { "text", "image", "box" }; string[] nnm = { "＋ Yeni metin", "＋ Logo / resim", "＋ Kutu / çerçeve" };
+                for (int i = 0; i < 3; i++) EdBtnAt(nnm[i], "ed:new:" + nid[i], pr.X + 8 + (i % cols) * (cw + 6), pr.Y + 8 + (i / cols) * (ch + 6), cw, ch, fb, true);
                 for (int i = 0; i < hid.Count; i++)
-                    EdBtnAt(_wdefs[hid[i].Id].Name, "ed:addw:" + hid[i].Id, pr.X + 10 + (i % cols) * (cw + 8), pr.Y + 10 + (i / cols) * (ch + 8), cw, ch, fb, false);
+                {
+                    int k = i + 3;
+                    EdBtnAt(DefOf(hid[i].Id).Name, "ed:addw:" + hid[i].Id, pr.X + 8 + (k % cols) * (cw + 6), pr.Y + 8 + (k / cols) * (ch + 6), cw, ch, fb, false);
+                }
             }
+            G.TranslateTransform(_ox, _oy); G.ScaleTransform(_sc, _sc);
         }
 
         private float EdBtn(string text, string id, float x, float y, float h, Font f, bool on)
         {
-            float w = TW(text, f) + 30;
+            float w = TW(text, f) + 22;
             EdBtnAt(text, id, x, y, w, h, f, on);
-            return x + w + 8;
+            return x + w + 6;
         }
 
         private void EdBtnAt(string text, string id, float x, float y, float w, float h, Font f, bool on)
         {
             Theme t = _th;
             var r = new RectangleF(x, y, w, h);
-            using (GraphicsPath p = RR(r, 8)) { G.FillPath(Br(on ? t.A1 : t.Tile), p); G.DrawPath(Pn(on ? t.A1 : t.Line, 1.4f), p); }
+            using (GraphicsPath p = RR(r, 7)) { G.FillPath(Br(on ? t.A1 : t.Tile), p); G.DrawPath(Pn(on ? t.A1 : t.Line, 1.4f), p); }
             Txt(text, f, on ? t.Bg : t.Tx, x, y, w, h, 1);
             _edHits.Add(new KeyValuePair<RectangleF, string>(r, id));
         }
 
-        private bool EditMouseDown(float cx, float cy)
+        private bool EditMouseDown(float wx, float wy, float cx, float cy)
         {
             foreach (var h in _edHits)
-                if (h.Key.Contains(cx, cy)) { EditAction(h.Value); return true; }
+                if (h.Key.Contains(wx, wy)) { EditAction(h.Value); return true; }
             _palOpen = false;
             // en üstteki widget (listenin sonu üstte)
             for (int i = _wd.Count - 1; i >= 0; i--)
@@ -389,17 +579,16 @@ namespace ProSystemMonitor
                 {
                     _sel = w.Id;
                     _wd.RemoveAt(i); _wd.Add(w);   // öne al
-                    if (cx > w.X + w.W - 34 && cy > w.Y + w.H - 34) { _drag = 2; _dx = w.X + w.W - cx; _dy = w.Y + w.H - cy; }
+                    if (w.Locked) _drag = 0;
+                    else if (cx > w.X + w.W - 34 && cy > w.Y + w.H - 34) { _drag = 2; _dx = w.X + w.W - cx; _dy = w.Y + w.H - cy; }
                     else { _drag = 1; _dx = cx - w.X; _dy = cy - w.Y; }
-                    _dirty = true; Invalidate();
+                    _dirty = true; Invalidate(); SyncProps();
                     return true;
                 }
             }
-            _sel = null; _dirty = true; Invalidate();
+            _sel = null; _dirty = true; Invalidate(); SyncProps();
             return true;
         }
-
-        private static float Snap10(float v) { return (float)Math.Round(v / 10f) * 10f; }
 
         private void EditMouseMove(float cx, float cy)
         {
@@ -408,82 +597,201 @@ namespace ProSystemMonitor
             if (now - _lastEdPaint < 20) return;
             _lastEdPaint = now;
             WInst w = WGet(_sel); if (w == null) return;
-            WDef d = _wdefs[w.Id];
+            WDef d = DefOf(w.Id);
             if (_drag == 1)
             {
-                w.X = Math.Max(0, Math.Min(1920 - w.W, Snap10(cx - _dx)));
-                w.Y = Math.Max(0, Math.Min(1080 - w.H, Snap10(cy - _dy)));
+                w.X = Math.Max(0, Math.Min(_cw - w.W, SnapV(cx - _dx)));
+                w.Y = Math.Max(0, Math.Min(_ch - w.H, SnapV(cy - _dy)));
             }
             else
             {
-                w.W = Math.Max(d.MinW, Math.Min(1920 - w.X, Snap10(cx + _dx - w.X)));
-                w.H = Math.Max(d.MinH, Math.Min(1080 - w.Y, Snap10(cy + _dy - w.Y)));
+                w.W = Math.Max(MinWof(d), Math.Min(_cw - w.X, SnapV(cx + _dx - w.X)));
+                w.H = Math.Max(MinHof(d), Math.Min(_ch - w.Y, SnapV(cy + _dy - w.Y)));
             }
             _dirty = true; Invalidate();
         }
 
         private void EditMouseUp()
         {
-            if (_drag != 0) { _drag = 0; WSave(); }
+            if (_drag != 0) { _drag = 0; WSave(); SyncProps(); }
+        }
+
+        private string NewId(string b)
+        {
+            for (int n = 1; ; n++) { string id = b + "#" + n; if (WGet(id) == null) return id; }
+        }
+
+        internal void AddWidget(string id)
+        {
+            WReg();
+            WDef bd = DefOf(id);
+            WInst w;
+            if (bd.Multi)
+            {
+                w = new WInst { Id = NewId(id), Vis = true };
+                if (id == "text") w.Text = "{saat}";
+                _wd.Add(w);
+            }
+            else { w = WGet(id); if (w == null) return; }
+            w.Vis = true; w.Fs = 1f;
+            float sx = _cw / 1920f, sy = _ch / 1080f;
+            w.W = (float)Math.Round(Math.Min(_cw, bd.W * Math.Min(sx, sy))); w.H = (float)Math.Round(Math.Min(_ch, bd.H * Math.Min(sx, sy)));
+            w.X = SnapV(Math.Max(0, (_cw - w.W) / 2f)); w.Y = SnapV(Math.Max(0, (_ch - w.H) / 2f));
+            _wd.Remove(w); _wd.Add(w); _sel = w.Id; _palOpen = false; WChanged(); SyncProps();
+        }
+
+        internal void RemoveSelected()
+        {
+            WInst cur = WSelected; if (cur == null) return;
+            if (DefOf(cur.Id).Multi) _wd.Remove(cur); else cur.Vis = false;
+            _sel = null; WChanged(); SyncProps();
+        }
+
+        internal void DuplicateSelected()
+        {
+            WInst cur = WSelected; if (cur == null) return;
+            WDef d = DefOf(cur.Id);
+            if (!d.Multi) return;
+            WInst c = cur.Copy(); c.Id = NewId(BaseId(cur.Id));
+            c.X = Math.Min(_cw - c.W, cur.X + 20); c.Y = Math.Min(_ch - c.H, cur.Y + 20);
+            _wd.Add(c); _sel = c.Id; WChanged(); SyncProps();
+        }
+
+        internal void ReorderSelected(bool front)
+        {
+            WInst cur = WSelected; if (cur == null) return;
+            _wd.Remove(cur); if (front) _wd.Add(cur); else _wd.Insert(0, cur);
+            WChanged();
         }
 
         private void EditAction(string a)
         {
-            WInst cur = _sel != null ? WGet(_sel) : null;
+            WInst cur = WSelected;
             if (a == "ed:done") ToggleEdit();
-            else if (a == "ed:reset") { _wd = WTemplate(_layout); _sel = null; WSave(); }
-            else if (a == "ed:tpl")
-            {
-                int i = (Math.Max(0, Array.IndexOf(TplIds, _layout)) + 1) % TplIds.Length;
-                ApplyTemplate(TplIds[i]);
-            }
+            else if (a == "ed:reset") { _wd = WTemplate(_layout); _sel = null; WSave(); SyncProps(); }
+            else if (a == "ed:tpl") ShowTemplateMenu();
             else if (a == "ed:add") _palOpen = !_palOpen;
-            else if (a.StartsWith("ed:addw:"))
-            {
-                WInst w = WGet(a.Substring(8));
-                if (w != null)
-                {
-                    w.Vis = true; w.Fs = 1f;
-                    WDef d = _wdefs[w.Id];
-                    w.W = d.W; w.H = d.H;
-                    w.X = Snap10(Math.Max(0, Math.Min(1920 - w.W, (1920 - w.W) / 2f))); w.Y = Snap10(Math.Max(0, Math.Min(1080 - w.H, (1080 - w.H) / 2f)));
-                    _wd.Remove(w); _wd.Add(w); _sel = w.Id; _palOpen = false; WSave();
-                }
-            }
+            else if (a == "ed:canvas") OpenCanvasDialog();
+            else if (a == "ed:props") OpenPropsDialog();
+            else if (a == "ed:color") { if (cur != null) QuickColor(cur); }
+            else if (a.StartsWith("ed:new:")) AddWidget(a.Substring(7));
+            else if (a.StartsWith("ed:addw:")) AddWidget(a.Substring(8));
             else if (cur != null)
             {
-                if (a == "ed:fs-") cur.Fs = Math.Max(0.5f, (float)Math.Round(cur.Fs - 0.1f, 2));
-                else if (a == "ed:fs+") cur.Fs = Math.Min(2f, (float)Math.Round(cur.Fs + 0.1f, 2));
-                else if (a == "ed:col+") cur.Col = (cur.Col + 1) % AccPal.Length;
-                else if (a == "ed:col-") cur.Col = (cur.Col + AccPal.Length - 1) % AccPal.Length;
-                else if (a == "ed:hide") { cur.Vis = false; _sel = null; }
-                WSave();
+                if (a == "ed:fs-") cur.Fs = Math.Max(0.3f, (float)Math.Round(cur.Fs - 0.05f, 2));
+                else if (a == "ed:fs+") cur.Fs = Math.Min(3f, (float)Math.Round(cur.Fs + 0.05f, 2));
+                else if (a == "ed:hide") { RemoveSelected(); return; }
+                WSave(); SyncProps();
             }
             _dirty = true; Invalidate();
         }
 
+        private void QuickColor(WInst cur)
+        {
+            using (var cd = new ColorDialog { FullOpen = true, Color = cur.A1 != 0 ? Color.FromArgb(cur.A1) : _th.A1 })
+                if (cd.ShowDialog(this) == DialogResult.OK) { cur.A1 = Color.FromArgb(255, cd.Color).ToArgb(); WSave(); SyncProps(); }
+        }
+
+        private void ShowTemplateMenu()
+        {
+            var m = new ContextMenuStrip();
+            m.Font = new Font("Segoe UI", 10f);
+            for (int i = 0; i < TplIds.Length; i++)
+            {
+                string id = TplIds[i];
+                var it = new ToolStripMenuItem(TplNames[i]) { Checked = id == _layout };
+                it.Click += delegate { ApplyTemplate(id); };
+                m.Items.Add(it);
+            }
+            m.Show(Cursor.Position);
+        }
+
+        // sağ tık menüsü (düzenleme modunda)
+        private void ShowEditMenu()
+        {
+            Point cp = PointToClient(Cursor.Position);
+            float cx = (cp.X - _ox) / _sc, cy = (cp.Y - _oy) / _sc;
+            WInst hit = null;
+            for (int i = _wd.Count - 1; i >= 0; i--) { WInst w = _wd[i]; if (w.Vis && new RectangleF(w.X, w.Y, w.W, w.H).Contains(cx, cy)) { hit = w; break; } }
+            _sel = hit != null ? hit.Id : null; _dirty = true; Invalidate(); SyncProps();
+            var m = new ContextMenuStrip();
+            m.Font = new Font("Segoe UI", 10f);
+            Action<string, Action> add = delegate (string txt, Action act) { var it = new ToolStripMenuItem(txt); it.Click += delegate { act(); }; m.Items.Add(it); };
+            if (hit != null)
+            {
+                WDef d = DefOf(hit.Id);
+                var hdr = new ToolStripMenuItem(d.Name) { Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) }; m.Items.Add(hdr);
+                add("Özellikler…", delegate { OpenPropsDialog(); });
+                if (d.Multi) add("Çoğalt", delegate { DuplicateSelected(); });
+                add("Öne getir", delegate { ReorderSelected(true); });
+                add("Arkaya gönder", delegate { ReorderSelected(false); });
+                add(hit.Locked ? "Kilidi aç" : "Kilitle", delegate { hit.Locked = !hit.Locked; WChanged(); SyncProps(); });
+                add("Ortala (yatay)", delegate { hit.X = (float)Math.Round((_cw - hit.W) / 2f); WChanged(); SyncProps(); });
+                add("Ortala (dikey)", delegate { hit.Y = (float)Math.Round((_ch - hit.H) / 2f); WChanged(); SyncProps(); });
+                add(d.Multi ? "Sil" : "Gizle", delegate { RemoveSelected(); });
+                m.Items.Add(new ToolStripSeparator());
+            }
+            add("Widget ekle…", delegate { _palOpen = true; _dirty = true; Invalidate(); });
+            add("Pano ayarları (çözünürlük, ızgara, arka plan)…", delegate { OpenCanvasDialog(); });
+            add("Şablon…", delegate { ShowTemplateMenu(); });
+            m.Items.Add(new ToolStripSeparator());
+            add("Uygulama ayarları…", delegate { OpenSettings(); });
+            add("✔ Düzenlemeyi bitir", delegate { ToggleEdit(); });
+            m.Show(Cursor.Position);
+        }
+
         private void EditKey(KeyEventArgs e)
         {
-            WInst cur = _sel != null ? WGet(_sel) : null;
+            WInst cur = WSelected;
             if (e.KeyCode == Keys.Escape || e.KeyCode == Keys.E) { ToggleEdit(); return; }
             if (cur == null) return;
-            WDef d = _wdefs[cur.Id];
-            float step = e.Shift ? 40f : 10f;
-            if (e.KeyCode == Keys.Delete) { cur.Vis = false; _sel = null; }
+            if (cur.Locked && e.KeyCode != Keys.Delete) return;
+            WDef d = DefOf(cur.Id);
+            float step = e.Alt ? 1f : (e.Shift ? Math.Max(10f, _grid * 4f) : Math.Max(1f, _grid));
+            if (e.KeyCode == Keys.Delete) { RemoveSelected(); return; }
             else if (e.Control)
             {
-                if (e.KeyCode == Keys.Left) cur.W = Math.Max(d.MinW, cur.W - step);
-                else if (e.KeyCode == Keys.Right) cur.W = Math.Min(1920 - cur.X, cur.W + step);
-                else if (e.KeyCode == Keys.Up) cur.H = Math.Max(d.MinH, cur.H - step);
-                else if (e.KeyCode == Keys.Down) cur.H = Math.Min(1080 - cur.Y, cur.H + step);
+                if (e.KeyCode == Keys.Left) cur.W = Math.Max(MinWof(d), cur.W - step);
+                else if (e.KeyCode == Keys.Right) cur.W = Math.Min(_cw - cur.X, cur.W + step);
+                else if (e.KeyCode == Keys.Up) cur.H = Math.Max(MinHof(d), cur.H - step);
+                else if (e.KeyCode == Keys.Down) cur.H = Math.Min(_ch - cur.Y, cur.H + step);
                 else return;
             }
             else if (e.KeyCode == Keys.Left) cur.X = Math.Max(0, cur.X - step);
-            else if (e.KeyCode == Keys.Right) cur.X = Math.Min(1920 - cur.W, cur.X + step);
+            else if (e.KeyCode == Keys.Right) cur.X = Math.Min(_cw - cur.W, cur.X + step);
             else if (e.KeyCode == Keys.Up) cur.Y = Math.Max(0, cur.Y - step);
-            else if (e.KeyCode == Keys.Down) cur.Y = Math.Min(1080 - cur.H, cur.Y + step);
+            else if (e.KeyCode == Keys.Down) cur.Y = Math.Min(_ch - cur.H, cur.Y + step);
             else return;
-            WSave(); _dirty = true; Invalidate();
+            WSave(); SyncProps(); _dirty = true; Invalidate();
+        }
+
+        // ---------------- düzenleme pencereleri ----------------
+        private WidgetPropsForm _propsForm;
+        private CanvasForm _canvasForm;
+
+        internal void OpenPropsDialog()
+        {
+            if (WSelected == null) return;
+            if (_propsForm == null || _propsForm.IsDisposed) _propsForm = new WidgetPropsForm(this);
+            _propsForm.Bind(WSelected);
+            _propsForm.PlaceNear(this);
+            _propsForm.Show(); _propsForm.Activate();
+        }
+
+        internal void OpenCanvasDialog()
+        {
+            if (_canvasForm == null || _canvasForm.IsDisposed) _canvasForm = new CanvasForm(this);
+            _canvasForm.Reload();
+            _canvasForm.PlaceNear(this);
+            _canvasForm.Show(); _canvasForm.Activate();
+        }
+
+        private void SyncProps() { if (_propsForm != null && !_propsForm.IsDisposed && _propsForm.Visible) _propsForm.Bind(WSelected); }
+
+        private void CloseEditorDialogs()
+        {
+            if (_propsForm != null && !_propsForm.IsDisposed) _propsForm.Close();
+            if (_canvasForm != null && !_canvasForm.IsDisposed) _canvasForm.Close();
         }
     }
 }

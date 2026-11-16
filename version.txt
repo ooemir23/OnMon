@@ -1,4 +1,4 @@
-version=53
+version=54
 file=ProSystemMonitor.exe
-sha256=b23c9c54d4aca12ff1d5d9dfd3729764e3afc4b74c90be98313613026994b4de
-notes=Widget sistemi ve pano düzenleme modu.
+sha256=956dd9b77059f9a71155588803e4ef96022f07f2fba528e53f42fb2ad7b08993
+notes=Pano editorü genişletildi.
