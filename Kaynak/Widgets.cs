@@ -29,10 +29,12 @@ namespace ProSystemMonitor
 
     internal sealed class WDef
     {
-        public string Id, Name, Category;
+        public string Id, Name, NameEn, Category, CategoryEn;
         public float W, H, MinW, MinH;
         public bool Multi;
         public Action<RectangleF, Snap> Draw;
+        public string Title { get { return L.T(Name, string.IsNullOrEmpty(NameEn) ? Name : NameEn); } }
+        public string CatTitle { get { return L.T(Category, string.IsNullOrEmpty(CategoryEn) ? Category : CategoryEn); } }
     }
 
     public sealed partial class DashboardForm
@@ -52,8 +54,81 @@ namespace ProSystemMonitor
         private static readonly Color[] AccPal = {
             Color.Empty, Color.FromArgb(0, 229, 255), Color.FromArgb(61, 220, 132), Color.FromArgb(255, 193, 7),
             Color.FromArgb(255, 122, 24), Color.FromArgb(255, 77, 77), Color.FromArgb(255, 79, 216), Color.FromArgb(166, 107, 255), Color.FromArgb(232, 232, 232) };
-        internal static readonly string[] TplIds = { "empty", "classic", "hud", "cockpit", "aida", "studio" };
-        internal static readonly string[] TplNames = { "Boş (sıfırdan başla)", "Klasik", "Oyun HUD", "Pro Kokpit", "Sensör Paneli", "Komuta Merkezi" };
+        internal static readonly string[] TplIds = {
+            "empty", "zen", "minimalring", "bento", "esports", "extreme", "creator", "panoramic", "vertical",
+            "classic", "hud", "cockpit", "aida", "studio"
+        };
+
+        internal static string GetTplName(string id)
+        {
+            switch (id)
+            {
+                case "empty": return L.T("Boş Tuval (Sıfırdan)", "Blank Canvas (Start Fresh)");
+                case "zen": return L.T("Zen Minimal (Sade)", "Zen Minimal");
+                case "minimalring": return L.T("Minimal Halkalar", "Minimal Rings");
+                case "bento": return L.T("Modern Bento Izgara", "Modern Bento Grid");
+                case "esports": return L.T("E-Spor Rekabetçi", "Esports Competitive");
+                case "extreme": return L.T("Ekstrem Mühendislik", "Extreme Telemetry");
+                case "creator": return L.T("Yayıncı & Stüdyo", "Creator & Streamer");
+                case "panoramic": return L.T("Panoramik Şerit", "Panoramic Strip");
+                case "vertical": return L.T("Dikey / Kompakt Kule", "Vertical / Compact Tower");
+                case "classic": return L.T("Klasik Pano", "Classic Dashboard");
+                case "hud": return L.T("Oyun HUD", "Gaming HUD");
+                case "cockpit": return L.T("Pro Kokpit", "Pro Cockpit");
+                case "aida": return L.T("Sensör Paneli (AIDA)", "Sensor Panel (AIDA)");
+                case "studio": return L.T("Komuta Merkezi", "Command Center");
+                default: return id ?? "";
+            }
+        }
+
+        internal static string GetTplCat(string id)
+        {
+            switch (id)
+            {
+                case "zen":
+                case "minimalring":
+                case "vertical":
+                case "empty":
+                    return "minimal";
+                case "bento":
+                case "creator":
+                case "panoramic":
+                case "classic":
+                    return "modern";
+                case "esports":
+                case "hud":
+                    return "gaming";
+                case "extreme":
+                case "cockpit":
+                case "aida":
+                case "studio":
+                    return "detailed";
+                default:
+                    return "custom";
+            }
+        }
+
+        internal static string GetTplDesc(string id)
+        {
+            switch (id)
+            {
+                case "empty": return L.T("Kendi tasarımın için boş başlangıç", "Clean slate for custom design");
+                case "zen": return L.T("Ferah, göz yormayan sade kartlar", "Spacious, distraction-free cards");
+                case "minimalring": return L.T("Çift halka + tek bakışta özet", "Dual ring + clean summary");
+                case "bento": return L.T("Modern asimetrik Bento modülleri", "Modern modular Bento grid");
+                case "esports": return L.T("FPS, %1 Low, kare süresi ve termal", "FPS, 1% Low, frametime & thermals");
+                case "extreme": return L.T("Tüm sensörler, voltaj ve fan matrisi", "Full sensors, voltages & fan matrix");
+                case "creator": return L.T("Yayın, ses mikseri, RAM ve ağ odaklı", "Audio mixer, top apps, VRAM & net");
+                case "panoramic": return L.T("Yatay performans şeritleri ve mini kartlar", "Horizontal performance strip & cards");
+                case "vertical": return L.T("İkili kule dizilimi ve yan ekran uyumu", "Stacked 2-column tower layout");
+                case "classic": return L.T("Dengeli günlük sistem izleme panosu", "Balanced everyday system monitor");
+                case "hud": return L.T("Oyun sırasında otomatik açılan HUD", "Full gaming HUD with session stats");
+                case "cockpit": return L.T("Çoklu kadran ve grafik kokpiti", "Multi-dial performance cockpit");
+                case "aida": return L.T("Teknik donanım ve anakart raporu", "Deep hardware & motherboard panel");
+                case "studio": return L.T("16 panelli tam kapsamlı merkez", "16-panel full command station");
+                default: return "";
+            }
+        }
 
         private static string WidgetsPath
         {
@@ -64,41 +139,56 @@ namespace ProSystemMonitor
         {
             if (_wlist != null) return;
             _wlist = new List<WDef>();
-            Wd("hudbar", "Oyun şeridi", "Oyun ve Performans", 1900, 86, 600, 70, (r, s) => PHudBar(r, s));
-            Wd("hudfps", "FPS (HUD)", "Oyun ve Performans", 800, 620, 380, 300, (r, s) => PHudFps(r, s));
-            Wd("fpsl", "FPS (büyük)", "Oyun ve Performans", 770, 300, 300, 160, (r, s) => PFps(r, s, true));
-            Wd("fps", "FPS", "Oyun ve Performans", 950, 244, 300, 160, (r, s) => PFps(r, s, false));
-            Wd("cpu", "CPU", "Oyun ve Performans", 560, 300, 260, 150, (r, s) => PCpu(r, s, true));
-            Wd("gpu", "GPU", "Oyun ve Performans", 560, 300, 260, 150, (r, s) => PGpu(r, s));
-            Wd("cores", "Çekirdekler", "Oyun ve Performans", 650, 250, 260, 120, (r, s) => PCores(r, s));
-            Wd("gpugraph", "GPU grafiği", "Oyun ve Performans", 420, 250, 200, 100, (r, s) => PGpuGraph(r, s));
+            string cModTr = "Modern ve Sade", cModEn = "Modern & Minimal";
+            string cGamTr = "Oyun ve Performans", cGamEn = "Gaming & Performance";
+            string cDetTr = "Detaylı Sensör Panelleri", cDetEn = "Detailed Sensor Panels";
+            string cThmTr = "Sıcaklık, Güç ve Fan", cThmEn = "Thermals, Power & Fans";
+            string cSysTr = "Sistem, Disk ve Ağ", cSysEn = "System, Storage & Network";
+            string cAudTr = "Ses, Saat ve Özel Öğeler", cAudEn = "Audio, Clock & Custom";
 
-            Wd("acpu", "CPU (sensör)", "Detaylı Sensör Panelleri", 940, 550, 300, 200, (r, s) => PACpu(r, s));
-            Wd("agpu", "GPU (sensör)", "Detaylı Sensör Panelleri", 940, 550, 300, 200, (r, s) => PAGpu(r, s));
-            Wd("amobo", "Anakart", "Detaylı Sensör Panelleri", 960, 245, 300, 100, (r, s) => PAMobo(r, s));
-            Wd("amem", "Bellek (sensör)", "Detaylı Sensör Panelleri", 470, 245, 220, 100, (r, s) => PAMem(r, s));
-            Wd("astorage", "Depolama", "Detaylı Sensör Panelleri", 940, 245, 300, 100, (r, s) => PAStorage(r, s));
-            Wd("apower", "Güç (sensör)", "Detaylı Sensör Panelleri", 310, 245, 200, 100, (r, s) => PAPower(r, s));
-            Wd("anet", "Ağ (sensör)", "Detaylı Sensör Panelleri", 630, 245, 260, 100, (r, s) => PANet(r, s));
-            Wd("aclock", "Saat (sensör)", "Detaylı Sensör Panelleri", 450, 245, 220, 100, (r, s) => PAClock(r, s));
+            Wd("hero", "Üst Sistem Başlığı", "System Hero Banner", cModTr, cModEn, 1900, 105, 420, 76, (r, s) => PHero(r, s));
+            Wd("perfstrip", "Performans Şeridi", "Performance Strip", cModTr, cModEn, 1900, 130, 520, 90, (r, s) => PPerfStrip(r, s));
+            Wd("dualring", "CPU + GPU İkili Halka", "CPU + GPU Dual Ring", cModTr, cModEn, 1240, 390, 480, 220, (r, s) => PDualRing(r, s));
+            Wd("minicpu", "CPU (Minimal Kart)", "CPU (Minimal Card)", cModTr, cModEn, 520, 300, 220, 140, (r, s) => PMiniCpu(r, s));
+            Wd("minigpu", "GPU (Minimal Kart)", "GPU (Minimal Card)", cModTr, cModEn, 520, 300, 220, 140, (r, s) => PMiniGpu(r, s));
+            Wd("miniram", "RAM & I/O (Minimal)", "RAM & I/O (Minimal)", cModTr, cModEn, 520, 260, 220, 130, (r, s) => PMiniRam(r, s));
+            Wd("thermals", "Termal & Fan Matrisi", "Thermal & Fan Matrix", cModTr, cModEn, 620, 380, 340, 200, (r, s) => PThermals(r, s));
 
-            Wd("temps", "Sıcaklıklar", "Sıcaklık, Güç ve Fan", 420, 250, 200, 100, (r, s) => PTemps(r, s));
-            Wd("power", "Güç", "Sıcaklık, Güç ve Fan", 380, 250, 200, 100, (r, s) => PPower(r, s));
-            Wd("fans", "Fanlar", "Sıcaklık, Güç ve Fan", 250, 250, 160, 100, (r, s) => PFans(r, s));
-            Wd("volts", "Voltajlar", "Sıcaklık, Güç ve Fan", 200, 250, 160, 100, (r, s) => PVolts(r, s));
+            Wd("hudbar", "Oyun Şeridi", "Game Bar", cGamTr, cGamEn, 1900, 86, 600, 70, (r, s) => PHudBar(r, s));
+            Wd("hudfps", "FPS (HUD)", "FPS (HUD)", cGamTr, cGamEn, 800, 620, 380, 300, (r, s) => PHudFps(r, s));
+            Wd("fpsl", "FPS (Büyük)", "FPS (Large)", cGamTr, cGamEn, 770, 300, 300, 160, (r, s) => PFps(r, s, true));
+            Wd("fps", "FPS", "FPS", cGamTr, cGamEn, 950, 244, 300, 160, (r, s) => PFps(r, s, false));
+            Wd("cpu", "CPU", "CPU", cGamTr, cGamEn, 560, 300, 260, 150, (r, s) => PCpu(r, s, true));
+            Wd("gpu", "GPU", "GPU", cGamTr, cGamEn, 560, 300, 260, 150, (r, s) => PGpu(r, s));
+            Wd("cores", "Çekirdekler", "CPU Cores", cGamTr, cGamEn, 650, 250, 260, 120, (r, s) => PCores(r, s));
+            Wd("gpugraph", "GPU Grafiği", "GPU Load Graph", cGamTr, cGamEn, 420, 250, 200, 100, (r, s) => PGpuGraph(r, s));
 
-            Wd("mem", "Bellek", "Sistem, Disk ve Ağ", 450, 250, 220, 120, (r, s) => PMem(r, s));
-            Wd("disks", "Diskler", "Sistem, Disk ve Ağ", 500, 250, 220, 120, (r, s) => PDisks(r, s));
-            Wd("net", "Ağ", "Sistem, Disk ve Ağ", 450, 250, 220, 120, (r, s) => PNet(r, s));
-            Wd("procs", "İşlemler", "Sistem, Disk ve Ağ", 380, 234, 220, 120, (r, s) => PProcs(r, s));
-            Wd("apps", "Uygulamalar", "Sistem, Disk ve Ağ", 360, 338, 240, 200, (r, s) => PApps(r, s));
-            Wd("sys", "Sistem", "Sistem, Disk ve Ağ", 530, 234, 220, 100, (r, s) => PSys(r, s));
+            Wd("acpu", "CPU (Sensör)", "CPU (Detailed)", cDetTr, cDetEn, 940, 550, 300, 200, (r, s) => PACpu(r, s));
+            Wd("agpu", "GPU (Sensör)", "GPU (Detailed)", cDetTr, cDetEn, 940, 550, 300, 200, (r, s) => PAGpu(r, s));
+            Wd("amobo", "Anakart", "Motherboard", cDetTr, cDetEn, 960, 245, 300, 100, (r, s) => PAMobo(r, s));
+            Wd("amem", "Bellek (Sensör)", "Memory (Detailed)", cDetTr, cDetEn, 470, 245, 220, 100, (r, s) => PAMem(r, s));
+            Wd("astorage", "Depolama", "Storage (Detailed)", cDetTr, cDetEn, 940, 245, 300, 100, (r, s) => PAStorage(r, s));
+            Wd("apower", "Güç (Sensör)", "Power (Detailed)", cDetTr, cDetEn, 310, 245, 200, 100, (r, s) => PAPower(r, s));
+            Wd("anet", "Ağ (Sensör)", "Network (Detailed)", cDetTr, cDetEn, 630, 245, 260, 100, (r, s) => PANet(r, s));
+            Wd("aclock", "Saat (Sensör)", "Clock (Detailed)", cDetTr, cDetEn, 450, 245, 220, 100, (r, s) => PAClock(r, s));
 
-            Wd("sound", "Ses", "Ses, Saat ve Özel Öğeler", 440, 338, 300, 160, (r, s) => PSound(r, s));
-            Wd("clock", "Saat", "Ses, Saat ve Özel Öğeler", 420, 234, 200, 100, (r, s) => PClock(r, s));
-            Wd("text", "Metin", "Ses, Saat ve Özel Öğeler", 500, 120, 80, 40, (r, s) => WText(r, s)); _wlist[_wlist.Count - 1].Multi = true;
-            Wd("image", "Logo / Resim", "Ses, Saat ve Özel Öğeler", 300, 300, 60, 60, (r, s) => WImage(r, s)); _wlist[_wlist.Count - 1].Multi = true;
-            Wd("box", "Kutu / Çerçeve", "Ses, Saat ve Özel Öğeler", 500, 300, 60, 60, (r, s) => WBox(r, s)); _wlist[_wlist.Count - 1].Multi = true;
+            Wd("temps", "Sıcaklık Grafiği", "Temp History", cThmTr, cThmEn, 420, 250, 200, 100, (r, s) => PTemps(r, s));
+            Wd("power", "Güç Grafiği", "Power History", cThmTr, cThmEn, 380, 250, 200, 100, (r, s) => PPower(r, s));
+            Wd("fans", "Fanlar", "Fans", cThmTr, cThmEn, 250, 250, 160, 100, (r, s) => PFans(r, s));
+            Wd("volts", "Voltajlar", "Voltages", cThmTr, cThmEn, 200, 250, 160, 100, (r, s) => PVolts(r, s));
+
+            Wd("mem", "Bellek", "Memory", cSysTr, cSysEn, 450, 250, 220, 120, (r, s) => PMem(r, s));
+            Wd("disks", "Diskler", "Disks", cSysTr, cSysEn, 500, 250, 220, 120, (r, s) => PDisks(r, s));
+            Wd("net", "Ağ", "Network", cSysTr, cSysEn, 450, 250, 220, 120, (r, s) => PNet(r, s));
+            Wd("procs", "İşlemler", "Processes", cSysTr, cSysEn, 380, 234, 220, 120, (r, s) => PProcs(r, s));
+            Wd("apps", "Uygulamalar", "Top Apps", cSysTr, cSysEn, 360, 338, 240, 200, (r, s) => PApps(r, s));
+            Wd("sys", "Sistem Özeti", "System Summary", cSysTr, cSysEn, 530, 234, 220, 100, (r, s) => PSys(r, s));
+
+            Wd("sound", "Ses Mikseri", "Audio Mixer", cAudTr, cAudEn, 440, 338, 300, 160, (r, s) => PSound(r, s));
+            Wd("clock", "Saat & Hava", "Clock & Weather", cAudTr, cAudEn, 420, 234, 200, 100, (r, s) => PClock(r, s));
+            Wd("text", "Özel Metin", "Custom Text", cAudTr, cAudEn, 500, 120, 80, 40, (r, s) => WText(r, s)); _wlist[_wlist.Count - 1].Multi = true;
+            Wd("image", "Logo / Resim", "Logo / Image", cAudTr, cAudEn, 300, 300, 60, 60, (r, s) => WImage(r, s)); _wlist[_wlist.Count - 1].Multi = true;
+            Wd("box", "Kutu / Çerçeve", "Box / Frame", cAudTr, cAudEn, 500, 300, 60, 60, (r, s) => WBox(r, s)); _wlist[_wlist.Count - 1].Multi = true;
 
             _wdefs = new Dictionary<string, WDef>();
             foreach (WDef d in _wlist) _wdefs[d.Id] = d;
@@ -109,12 +199,12 @@ namespace ProSystemMonitor
         internal static float MinWof(WDef d) { return Math.Max(40f, d.MinW * 0.5f); }
         internal static float MinHof(WDef d) { return Math.Max(30f, d.MinH * 0.5f); }
 
-        private void Wd(string id, string name, string category, float w, float h, float mw, float mh, Action<RectangleF, Snap> draw)
+        private void Wd(string id, string name, string nameEn, string category, string categoryEn, float w, float h, float mw, float mh, Action<RectangleF, Snap> draw)
         {
-            _wlist.Add(new WDef { Id = id, Name = name, Category = category, W = w, H = h, MinW = mw, MinH = mh, Draw = draw });
+            _wlist.Add(new WDef { Id = id, Name = name, NameEn = nameEn, Category = category, CategoryEn = categoryEn, W = w, H = h, MinW = mw, MinH = mh, Draw = draw });
         }
 
-        // ---------------- şablonlar (eski düzenler) ----------------
+        // ---------------- yerleşik şablonlar ----------------
         internal List<WInst> WTemplate(string id) { return WTemplate(id, _cw, _ch); }
         internal List<WInst> WTemplate(string id, int cw, int ch)
         {
@@ -122,7 +212,97 @@ namespace ProSystemMonitor
             var l = new List<WInst>();
             Action<string, RectangleF> A = delegate (string wid, RectangleF r) { l.Add(new WInst { Id = wid, X = r.X, Y = r.Y, W = r.Width, H = r.Height, Vis = true }); };
             RectangleF[] a, b, c, d;
-            if (id == "studio")
+            if (id == "zen")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 110));
+                A("minicpu", new RectangleF(10, 135, 620, 480));
+                A("minigpu", new RectangleF(650, 135, 620, 480));
+                A("miniram", new RectangleF(1290, 135, 620, 480));
+                A("net", new RectangleF(10, 635, 940, 435));
+                A("clock", new RectangleF(970, 635, 940, 435));
+            }
+            else if (id == "minimalring")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 105));
+                A("dualring", new RectangleF(10, 130, 1280, 550));
+                A("clock", new RectangleF(1305, 130, 605, 550));
+                A("perfstrip", new RectangleF(10, 695, 1280, 135));
+                A("net", new RectangleF(10, 845, 632, 225));
+                A("disks", new RectangleF(658, 845, 632, 225));
+                A("sound", new RectangleF(1305, 695, 605, 375));
+            }
+            else if (id == "bento")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 100));
+                A("dualring", new RectangleF(10, 122, 1240, 390));
+                A("cores", new RectangleF(10, 524, 614, 266));
+                A("fps", new RectangleF(636, 524, 614, 266));
+                A("net", new RectangleF(10, 802, 614, 268));
+                A("disks", new RectangleF(636, 802, 614, 268));
+                A("miniram", new RectangleF(1262, 122, 648, 230));
+                A("thermals", new RectangleF(1262, 364, 648, 366));
+                A("sound", new RectangleF(1262, 742, 648, 328));
+            }
+            else if (id == "esports")
+            {
+                A("hudbar", new RectangleF(10, 10, 1900, 86));
+                A("hudfps", new RectangleF(10, 108, 860, 590));
+                A("minicpu", new RectangleF(882, 108, 508, 289));
+                A("minigpu", new RectangleF(882, 409, 508, 289));
+                A("thermals", new RectangleF(1402, 108, 508, 590));
+                A("cores", new RectangleF(10, 710, 625, 360));
+                A("net", new RectangleF(647, 710, 625, 360));
+                A("sound", new RectangleF(1284, 710, 626, 360));
+            }
+            else if (id == "extreme")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 96));
+                A("acpu", new RectangleF(10, 116, 680, 510));
+                A("agpu", new RectangleF(700, 116, 680, 510));
+                A("thermals", new RectangleF(1390, 116, 520, 510));
+                A("amobo", new RectangleF(10, 636, 680, 212));
+                A("amem", new RectangleF(700, 636, 420, 212));
+                A("volts", new RectangleF(1130, 636, 350, 212));
+                A("power", new RectangleF(1490, 636, 420, 212));
+                A("astorage", new RectangleF(10, 858, 680, 212));
+                A("anet", new RectangleF(700, 858, 680, 212));
+                A("apps", new RectangleF(1390, 858, 520, 212));
+            }
+            else if (id == "creator")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 100));
+                A("dualring", new RectangleF(10, 120, 1040, 460));
+                A("sound", new RectangleF(1060, 120, 850, 460));
+                A("miniram", new RectangleF(10, 590, 460, 235));
+                A("disks", new RectangleF(10, 835, 460, 235));
+                A("apps", new RectangleF(480, 590, 570, 480));
+                A("net", new RectangleF(1060, 590, 420, 480));
+                A("fpsl", new RectangleF(1490, 590, 420, 480));
+            }
+            else if (id == "panoramic")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 110));
+                A("perfstrip", new RectangleF(10, 132, 1900, 130));
+                A("minicpu", new RectangleF(10, 274, 467, 430));
+                A("minigpu", new RectangleF(487, 274, 468, 430));
+                A("miniram", new RectangleF(965, 274, 467, 430));
+                A("thermals", new RectangleF(1442, 274, 468, 430));
+                A("cores", new RectangleF(10, 716, 626, 354));
+                A("fps", new RectangleF(646, 716, 628, 354));
+                A("net", new RectangleF(1284, 716, 626, 354));
+            }
+            else if (id == "vertical")
+            {
+                A("hero", new RectangleF(10, 10, 1900, 104));
+                A("perfstrip", new RectangleF(10, 124, 1900, 126));
+                A("minicpu", new RectangleF(10, 260, 945, 260));
+                A("minigpu", new RectangleF(965, 260, 945, 260));
+                A("thermals", new RectangleF(10, 530, 945, 265));
+                A("miniram", new RectangleF(965, 530, 945, 265));
+                A("fps", new RectangleF(10, 805, 945, 265));
+                A("clock", new RectangleF(965, 805, 945, 265));
+            }
+            else if (id == "studio")
             {
                 a = Row(10, 300, 560, 770, 560); A("cpu", a[0]); A("fpsl", a[1]); A("gpu", a[2]);
                 b = Row(320, 250, 650, 420, 420, 380); A("cores", b[0]); A("temps", b[1]); A("gpugraph", b[2]); A("power", b[3]);
@@ -358,12 +538,22 @@ namespace ProSystemMonitor
         private string Tokens(string t, Snap s)
         {
             if (string.IsNullOrEmpty(t) || t.IndexOf('{') < 0) return t ?? "";
-            var tr = new CultureInfo("tr-TR");
+            CultureInfo ci = L.Culture;
             DateTime n = DateTime.Now;
-            t = t.Replace("{saat}", n.ToString("HH:mm", tr)).Replace("{saniye}", n.ToString("HH:mm:ss", tr)).Replace("{tarih}", n.ToString("d MMMM yyyy", tr)).Replace("{gun}", n.ToString("dddd", tr));
+            string tm = n.ToString("HH:mm", ci), sc = n.ToString("HH:mm:ss", ci), dt = n.ToString("d MMMM yyyy", ci), dy = n.ToString("dddd", ci);
+            t = t.Replace("{saat}", tm).Replace("{time}", tm)
+                 .Replace("{saniye}", sc).Replace("{sec}", sc)
+                 .Replace("{tarih}", dt).Replace("{date}", dt)
+                 .Replace("{gun}", dy).Replace("{day}", dy);
             if (s != null)
-                t = t.Replace("{cpu}", I0(s.CpuLoad) + "%").Replace("{gpu}", I0(s.GpuLoad) + "%").Replace("{cpusic}", Tc(s.CpuTemp)).Replace("{gpusic}", Tc(s.GpuTemp))
-                     .Replace("{ram}", I0(s.MemLoad) + "%").Replace("{fps}", I0(s.Fps)).Replace("{ping}", I0(s.Ping) + " ms");
+            {
+                string bat = double.IsNaN(s.SysBat) ? "--" : (I0(s.SysBat) + "%");
+                t = t.Replace("{cpu}", I0(s.CpuLoad) + "%").Replace("{gpu}", I0(s.GpuLoad) + "%")
+                     .Replace("{cpusic}", Tc(s.CpuTemp)).Replace("{cputemp}", Tc(s.CpuTemp))
+                     .Replace("{gpusic}", Tc(s.GpuTemp)).Replace("{gputemp}", Tc(s.GpuTemp))
+                     .Replace("{ram}", I0(s.MemLoad) + "%").Replace("{fps}", I0(s.Fps))
+                     .Replace("{ping}", I0(s.Ping) + " ms").Replace("{bat}", bat);
+            }
             return t;
         }
 
@@ -372,7 +562,7 @@ namespace ProSystemMonitor
             WInst w = _cur; if (w == null) return;
             Panel(r);
             string txt = Tokens(w.Text, s);
-            if (string.IsNullOrEmpty(txt)) { if (_edit) Txt("Metin yaz (Özellikler)", F(20, false, true), _th.Dim, r.X, r.Y, r.Width, r.Height, 1); return; }
+            if (string.IsNullOrEmpty(txt)) { if (_edit) Txt(L.T("Metin yaz (Özellikler)", "Enter text (Properties)"), F(20, false, true), _th.Dim, r.X, r.Y, r.Width, r.Height, 1); return; }
             string[] lines = txt.Replace("\r", "").Split('\n');
             float sz = Math.Max(10f, r.Height * 0.55f / Math.Max(1, lines.Length) / Math.Max(0.3f, _fs));
             float avail = r.Width - 24;
@@ -392,7 +582,7 @@ namespace ProSystemMonitor
             WInst w = _cur; if (w == null) return;
             Panel(r);
             Image im = GetImg(w.Path, 1024);
-            if (im == null) { Txt(string.IsNullOrEmpty(w.Path) ? "Resim seç (Özellikler)" : "Resim bulunamadı", F(20, false, true), _th.Dim, r.X, r.Y, r.Width, r.Height, 1); return; }
+            if (im == null) { Txt(string.IsNullOrEmpty(w.Path) ? L.T("Resim seç (Özellikler)", "Select image (Properties)") : L.T("Resim bulunamadı", "Image not found"), F(20, false, true), _th.Dim, r.X, r.Y, r.Width, r.Height, 1); return; }
             float pad = Math.Min(12f, Math.Min(r.Width, r.Height) * 0.05f);
             float aw = r.Width - pad * 2, ah = r.Height - pad * 2;
             float k = Math.Min(aw / im.Width, ah / im.Height);
@@ -570,7 +760,7 @@ namespace ProSystemMonitor
                 var r = new RectangleF(w.X, w.Y, w.W, w.H);
                 Color oc = sel ? t.A1 : Al(t.A1, 150);
                 using (var dp = new Pen(oc, sel ? 3f : 1.6f)) { if (!sel) dp.DashStyle = DashStyle.Dash; G.DrawRectangle(dp, r.X, r.Y, r.Width, r.Height); }
-                string nm = (w.Locked ? "🔒 " : "") + d.Name + (sel ? "  [" + (int)Math.Round(w.X) + "," + (int)Math.Round(w.Y) + " " + (int)Math.Round(w.W) + "×" + (int)Math.Round(w.H) + "]" : (w.Fs != 1f ? "  " + ((int)Math.Round(w.Fs * 100)) + "%" : ""));
+                string nm = (w.Locked ? "🔒 " : "") + d.Title + (sel ? "  [" + (int)Math.Round(w.X) + "," + (int)Math.Round(w.Y) + " " + (int)Math.Round(w.W) + "×" + (int)Math.Round(w.H) + "]" : (w.Fs != 1f ? "  " + ((int)Math.Round(w.Fs * 100)) + "%" : ""));
                 float tw = TW(nm, fn) + 14;
                 var tr = new RectangleF(r.X, r.Y, tw, 24);
                 G.FillRectangle(Br(sel ? t.A1 : Al(t.Panel, 235)), tr);
@@ -602,17 +792,17 @@ namespace ProSystemMonitor
             G.DrawRectangle(Pn(t.A1, 2), bar.X, bar.Y, bar.Width, bar.Height);
             float x0 = bar.X + 8, yb = bar.Y + 7, hb = 38;
             Font fb = F(15, true, false);
-            x0 = EdBtn("✔ Bitti", "ed:done", x0, yb, hb, fb, true);
-            x0 = EdBtn("🎨 Stüdyo", "ed:studio", x0, yb, hb, fb, false);
-            x0 = EdBtn("📁 Galeri", "ed:gallery", x0, yb, hb, fb, false);
-            x0 = EdBtn("＋ Ekle", "ed:add", x0, yb, hb, fb, _palOpen);
-            x0 = EdBtn("Şablon ▾", "ed:tpl", x0, yb, hb, fb, false);
-            x0 = EdBtn("⚙ Pano", "ed:canvas", x0, yb, hb, fb, false);
+            x0 = EdBtn(L.T("✔ Bitti", "✔ Done"), "ed:done", x0, yb, hb, fb, true);
+            x0 = EdBtn(L.T("🎨 Stüdyo", "🎨 Studio"), "ed:studio", x0, yb, hb, fb, false);
+            x0 = EdBtn(L.T("📁 Galeri", "📁 Gallery"), "ed:gallery", x0, yb, hb, fb, false);
+            x0 = EdBtn(L.T("＋ Ekle", "＋ Add"), "ed:add", x0, yb, hb, fb, _palOpen);
+            x0 = EdBtn(L.T("Düzen ▾", "Layout ▾"), "ed:tpl", x0, yb, hb, fb, false);
+            x0 = EdBtn(L.T("⚙ Pano", "⚙ Canvas"), "ed:canvas", x0, yb, hb, fb, false);
             x0 += 8;
             if (cur != null)
             {
                 WDef cd = DefOf(cur.Id);
-                string nm = cd.Name; float nw = Math.Min(150, TW(nm, fb) + 12);
+                string nm = cd.Title; float nw = Math.Min(150, TW(nm, fb) + 12);
                 Txt(nm, fb, t.A1, x0, yb, nw, hb, 0); x0 += nw + 4;
                 x0 = EdBtn("A−", "ed:fs-", x0, yb, hb, fb, false);
                 Txt(((int)Math.Round(cur.Fs * 100)) + "%", fb, t.Tx, x0, yb, 48, hb, 1); x0 += 48;
@@ -622,12 +812,12 @@ namespace ProSystemMonitor
                 G.DrawRectangle(Pn(t.Tx, 1.5f), sw.X, sw.Y, sw.Width, sw.Height);
                 _edHits.Add(new KeyValuePair<RectangleF, string>(sw, "ed:color"));
                 x0 += 42;
-                x0 = EdBtn("Özellikler", "ed:props", x0, yb, hb, fb, false);
-                x0 = EdBtn(cd.Multi ? "Sil" : "Gizle", "ed:hide", x0, yb, hb, fb, false);
+                x0 = EdBtn(L.T("Özellikler", "Properties"), "ed:props", x0, yb, hb, fb, false);
+                x0 = EdBtn(cd.Multi ? L.T("Sil", "Delete") : L.T("Gizle", "Hide"), "ed:hide", x0, yb, hb, fb, false);
             }
             else
             {
-                Txt("Ctrl+Z: geri al  ·  sürükle: taşı  ·  kenar/köşe: boyut  ·  sağ tık: menü  ·  Esc: bitir", F(13, false, true), t.Dim, x0, yb, Math.Max(100, bar.Right - x0 - 10), hb, 0);
+                Txt(L.T("Ctrl+Z: geri al  ·  sürükle: taşı  ·  kenar/köşe: boyut  ·  sağ tık: menü  ·  Esc: bitir", "Ctrl+Z: undo  ·  drag: move  ·  edges/corners: resize  ·  right-click: menu  ·  Esc: finish"), F(13, false, true), t.Dim, x0, yb, Math.Max(100, bar.Right - x0 - 10), hb, 0);
             }
             // ekleme paneli
             if (_palOpen)
@@ -643,12 +833,13 @@ namespace ProSystemMonitor
                 var pr = new RectangleF(6, py, cols * (cw + 6) + 10, ph);
                 G.FillRectangle(Br(Al(t.Bg, 250)), pr);
                 G.DrawRectangle(Pn(t.A1, 2), pr.X, pr.Y, pr.Width, pr.Height);
-                string[] nid = { "text", "image", "box" }; string[] nnm = { "＋ Yeni metin", "＋ Logo / resim", "＋ Kutu / çerçeve" };
+                string[] nid = { "text", "image", "box" };
+                string[] nnm = { L.T("＋ Yeni metin", "＋ New Text"), L.T("＋ Logo / resim", "＋ Logo / Image"), L.T("＋ Kutu / çerçeve", "＋ Box / Frame") };
                 for (int i = 0; i < 3; i++) EdBtnAt(nnm[i], "ed:new:" + nid[i], pr.X + 8 + (i % cols) * (cw + 6), pr.Y + 8 + (i / cols) * (ch + 6), cw, ch, fb, true);
                 for (int i = 0; i < hid.Count; i++)
                 {
                     int k = i + 3;
-                    EdBtnAt(DefOf(hid[i].Id).Name, "ed:addw:" + hid[i].Id, pr.X + 8 + (k % cols) * (cw + 6), pr.Y + 8 + (k / cols) * (ch + 6), cw, ch, fb, false);
+                    EdBtnAt(DefOf(hid[i].Id).Title, "ed:addw:" + hid[i].Id, pr.X + 8 + (k % cols) * (cw + 6), pr.Y + 8 + (k / cols) * (ch + 6), cw, ch, fb, false);
                 }
             }
             G.TranslateTransform(_ox, _oy); G.ScaleTransform(_sc, _sc);
@@ -821,7 +1012,7 @@ namespace ProSystemMonitor
             if (bd.Multi)
             {
                 w = new WInst { Id = NewId(id), Vis = true };
-                if (id == "text") w.Text = "{saat}";
+                if (id == "text") w.Text = L.IsEn ? "{time}" : "{saat}";
                 _wd.Add(w);
             }
             else { w = WGet(id); if (w == null) return; }
@@ -893,13 +1084,13 @@ namespace ProSystemMonitor
             for (int i = 0; i < TplIds.Length; i++)
             {
                 string id = TplIds[i];
-                var it = new ToolStripMenuItem(TplNames[i]) { Checked = id == _layout };
+                var it = new ToolStripMenuItem(GetTplName(id)) { Checked = id == _layout };
                 it.Click += delegate { ApplyTemplate(id); };
                 m.Items.Add(it);
             }
             m.Items.Add(new ToolStripSeparator());
-            var sv = new ToolStripMenuItem("Şablonu kaydet / paylaşmak için dışa aktar…"); sv.Click += delegate { ExportTemplate(); }; m.Items.Add(sv);
-            var ld = new ToolStripMenuItem("Şablon dosyası aç (içe aktar)…"); ld.Click += delegate { ImportTemplate(); }; m.Items.Add(ld);
+            var sv = new ToolStripMenuItem(L.T("Şablonu kaydet / paylaşmak için dışa aktar…", "Save / Export Layout (.onmon)…")); sv.Click += delegate { ExportTemplate(); }; m.Items.Add(sv);
+            var ld = new ToolStripMenuItem(L.T("Şablon dosyası aç (içe aktar)…", "Open / Import Layout File…")); ld.Click += delegate { ImportTemplate(); }; m.Items.Add(ld);
             try
             {
                 string dir = TemplateDir;
@@ -910,14 +1101,14 @@ namespace ProSystemMonitor
                     foreach (string f in files)
                     {
                         string ff = f;
-                        var it = new ToolStripMenuItem("Kayıtlı: " + Path.GetFileNameWithoutExtension(f));
+                        var it = new ToolStripMenuItem(L.T("Kayıtlı: ", "Saved: ") + Path.GetFileNameWithoutExtension(f));
                         it.Click += delegate { ApplyTemplateFile(ff); };
                         m.Items.Add(it);
                     }
                 }
             }
             catch { }
-            var od = new ToolStripMenuItem("Şablon klasörünü aç"); od.Click += delegate { try { Directory.CreateDirectory(TemplateDir); System.Diagnostics.Process.Start(TemplateDir); } catch { } }; m.Items.Add(od);
+            var od = new ToolStripMenuItem(L.T("Şablon klasörünü aç", "Open Layouts Folder")); od.Click += delegate { try { Directory.CreateDirectory(TemplateDir); System.Diagnostics.Process.Start(TemplateDir); } catch { } }; m.Items.Add(od);
             m.Show(Cursor.Position);
         }
 
@@ -935,27 +1126,27 @@ namespace ProSystemMonitor
             if (hit != null)
             {
                 WDef d = DefOf(hit.Id);
-                var hdr = new ToolStripMenuItem(d.Name) { Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) }; m.Items.Add(hdr);
-                add("Özellikler…", delegate { OpenPropsDialog(); });
-                add("Stili kopyala", delegate { _copiedStyle = hit.Copy(); });
-                if (_copiedStyle != null) add("Stili yapıştır", delegate { PushUndo(); CopyStyleFields(_copiedStyle, hit); WChanged(); SyncProps(); });
-                if (d.Multi) add("Çoğalt", delegate { DuplicateSelected(); });
-                add("Öne getir", delegate { ReorderSelected(true); });
-                add("Arkaya gönder", delegate { ReorderSelected(false); });
-                add(hit.Locked ? "Kilidi aç" : "Kilitle", delegate { hit.Locked = !hit.Locked; WChanged(); SyncProps(); });
-                add("Ortala (yatay)", delegate { PushUndo(); hit.X = (float)Math.Round((_cw - hit.W) / 2f); WChanged(); SyncProps(); });
-                add("Ortala (dikey)", delegate { PushUndo(); hit.Y = (float)Math.Round((_ch - hit.H) / 2f); WChanged(); SyncProps(); });
-                add(d.Multi ? "Sil" : "Gizle", delegate { PushUndo(); RemoveSelected(); });
+                var hdr = new ToolStripMenuItem(d.Title) { Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) }; m.Items.Add(hdr);
+                add(L.T("Özellikler…", "Properties…"), delegate { OpenPropsDialog(); });
+                add(L.T("Stili kopyala", "Copy Style"), delegate { _copiedStyle = hit.Copy(); });
+                if (_copiedStyle != null) add(L.T("Stili yapıştır", "Paste Style"), delegate { PushUndo(); CopyStyleFields(_copiedStyle, hit); WChanged(); SyncProps(); });
+                if (d.Multi) add(L.T("Çoğalt", "Duplicate"), delegate { DuplicateSelected(); });
+                add(L.T("Öne getir", "Bring to Front"), delegate { ReorderSelected(true); });
+                add(L.T("Arkaya gönder", "Send to Back"), delegate { ReorderSelected(false); });
+                add(hit.Locked ? L.T("Kilidi aç", "Unlock") : L.T("Kilitle", "Lock"), delegate { hit.Locked = !hit.Locked; WChanged(); SyncProps(); });
+                add(L.T("Ortala (yatay)", "Center Horizontally"), delegate { PushUndo(); hit.X = (float)Math.Round((_cw - hit.W) / 2f); WChanged(); SyncProps(); });
+                add(L.T("Ortala (dikey)", "Center Vertically"), delegate { PushUndo(); hit.Y = (float)Math.Round((_ch - hit.H) / 2f); WChanged(); SyncProps(); });
+                add(d.Multi ? L.T("Sil", "Delete") : L.T("Gizle", "Hide"), delegate { PushUndo(); RemoveSelected(); });
                 m.Items.Add(new ToolStripSeparator());
             }
-            add("🎨 Düzen Stüdyosunu aç…", delegate { ToggleEdit(); OpenStudio(); });
-            add("📁 Düzen Galerisi…", delegate { ToggleEdit(); OpenGallery(); });
-            add("Widget ekle…", delegate { _palOpen = true; _dirty = true; Invalidate(); });
-            add("Pano ayarları (çözünürlük, ızgara, arka plan)…", delegate { OpenCanvasDialog(); });
-            add("Şablon…", delegate { ShowTemplateMenu(); });
+            add(L.T("🎨 Düzen Stüdyosunu aç…", "🎨 Open Layout Studio…"), delegate { ToggleEdit(); OpenStudio(); });
+            add(L.T("📁 Düzen Galerisi…", "📁 Layout Gallery…"), delegate { ToggleEdit(); OpenGallery(); });
+            add(L.T("Widget ekle…", "Add Widget…"), delegate { _palOpen = true; _dirty = true; Invalidate(); });
+            add(L.T("Pano ayarları (çözünürlük, ızgara, arka plan)…", "Canvas Settings (resolution, grid, background)…"), delegate { OpenCanvasDialog(); });
+            add(L.T("Düzen seç…", "Select Layout…"), delegate { ShowTemplateMenu(); });
             m.Items.Add(new ToolStripSeparator());
-            add("Uygulama ayarları…", delegate { OpenSettings(); });
-            add("✔ Düzenlemeyi bitir", delegate { ToggleEdit(); });
+            add(L.T("Uygulama ayarları…", "Application Settings…"), delegate { OpenSettings(); });
+            add(L.T("✔ Düzenlemeyi bitir", "✔ Finish Editing"), delegate { ToggleEdit(); });
             m.Show(Cursor.Position);
         }
 

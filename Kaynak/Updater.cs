@@ -12,13 +12,13 @@ namespace ProSystemMonitor
     /// <summary>GitHub'daki en son sürümü denetler, exe'yi indirip kendini değiştirir ve yeniden başlar.</summary>
     internal static class Updater
     {
-        public const int AppVersion = 58;
+        public const int AppVersion = 59;
         private const string RawBase = "https://raw.githubusercontent.com/ooemir23/OnMon/main/";
 
         public static volatile int LatestVersion;
         public static volatile string LatestNotes = "";
         public static volatile string Changelog = "";
-        public static volatile string Status = "Henüz denetlenmedi";
+        public static volatile string Status = "";
         public static volatile bool Busy;
         private static string _sha = "";
         private static string _file = "ProSystemMonitor.exe";
@@ -77,7 +77,7 @@ namespace ProSystemMonitor
                     else if (k == "sha256") sha = v.ToLowerInvariant();
                     else if (k == "file" && v.Length > 0) file = v;
                 }
-                if (ver <= 0) { Status = "Sürüm bilgisi okunamadı"; return false; }
+                if (ver <= 0) { Status = L.T("Sürüm bilgisi okunamadı", "Could not read version info"); return false; }
                 try
                 {
                     using (WebClient wc2 = Client())
@@ -85,12 +85,14 @@ namespace ProSystemMonitor
                 }
                 catch { }
                 LatestVersion = ver; LatestNotes = notes; _sha = sha; _file = file;
-                Status = ver > AppVersion ? "Yeni sürüm var: v" + ver + " (yüklü: v" + AppVersion + ")" : "Güncelsin — en son sürümü kullanıyorsun (v" + AppVersion + ")";
+                Status = ver > AppVersion
+                    ? L.T("Yeni sürüm var: v" + ver + " (yüklü: v" + AppVersion + ")", "Update available: v" + ver + " (installed: v" + AppVersion + ")")
+                    : L.T("Güncelsin — en son sürümü kullanıyorsun (v" + AppVersion + ")", "Up to date — running latest version (v" + AppVersion + ")");
                 return true;
             }
             catch (Exception ex)
             {
-                Status = "Denetlenemedi: " + ex.Message;
+                Status = L.T("Denetlenemedi: ", "Check failed: ") + ex.Message;
                 Program.Log("güncelleme-denetimi", ex);
                 return false;
             }
@@ -99,27 +101,27 @@ namespace ProSystemMonitor
         /// <summary>Yeni exe'yi indirir, çalışan exe ile değiştirir ve uygulamayı yeniden başlatır. Hata varsa mesaj döner, başarılıysa null.</summary>
         public static string ApplyUpdate()
         {
-            if (Busy) return "Güncelleme zaten sürüyor";
+            if (Busy) return L.T("Güncelleme zaten sürüyor", "Update already in progress");
             Busy = true;
             try
             {
-                if (!UpdateAvailable) return "Yeni sürüm yok";
+                if (!UpdateAvailable) return L.T("Yeni sürüm yok", "No update available");
                 string exe = Application.ExecutablePath;
                 string dir = Path.GetDirectoryName(exe);
                 string tmp = Path.Combine(dir, "update.tmp");
-                Status = "İndiriliyor…";
+                Status = L.T("İndiriliyor…", "Downloading…");
                 using (WebClient wc = Client())
                     wc.DownloadFile(RawBase + _file + "?t=" + DateTime.UtcNow.Ticks, tmp);
 
                 byte[] data = File.ReadAllBytes(tmp);
                 if (data.Length < 50000 || data[0] != (byte)'M' || data[1] != (byte)'Z')
-                { try { File.Delete(tmp); } catch { } return "İndirilen dosya geçersiz"; }
+                { try { File.Delete(tmp); } catch { } return L.T("İndirilen dosya geçersiz", "Downloaded file is invalid"); }
                 if (_sha.Length > 0)
                 {
                     string h;
                     using (var sha = SHA256.Create())
                         h = BitConverter.ToString(sha.ComputeHash(data)).Replace("-", "").ToLowerInvariant();
-                    if (h != _sha) { try { File.Delete(tmp); } catch { } return "Doğrulama başarısız (SHA-256 uyuşmuyor)"; }
+                    if (h != _sha) { try { File.Delete(tmp); } catch { } return L.T("Doğrulama başarısız (SHA-256 uyuşmuyor)", "Verification failed (SHA-256 mismatch)"); }
                 }
 
                 // Çalışan exe silinemez ama yeniden adlandırılabilir.
@@ -216,7 +218,9 @@ namespace ProSystemMonitor
                         if (AutoCheck && Check() && UpdateAvailable && LatestVersion != lastNotified)
                         {
                             lastNotified = LatestVersion;
-                            Program.ShowBalloon("Yeni sürüm hazır: v" + LatestVersion + ". Ayarlar > Güncelleme sayfasından güncelleyebilirsin.");
+                            Program.ShowBalloon(L.T(
+                                "Yeni sürüm hazır: v" + LatestVersion + ". Ayarlar > Güncelleme sayfasından güncelleyebilirsin.",
+                                "New version ready: v" + LatestVersion + ". Update via Settings > Update."));
                         }
                     }
                     catch { }

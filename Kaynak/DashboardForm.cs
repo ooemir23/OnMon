@@ -57,21 +57,25 @@ namespace ProSystemMonitor
             var rows = new List<KeyValuePair<string, string>>();
             if (s != null)
             {
-                rows.Add(new KeyValuePair<string, string>("Sistem", s.Brand + " " + s.MoboModel));
+                rows.Add(new KeyValuePair<string, string>(L.T("Sistem", "System"), (s.Brand + " " + s.MoboModel).Trim()));
                 if (s.Bios.Length > 0 && SysInfo.Rows.Count == 0) rows.Add(new KeyValuePair<string, string>("BIOS", s.Bios));
             }
             foreach (var kv in SysInfo.Rows) rows.Add(kv);
             if (s != null)
             {
-                if (s.Chipset.Length > 0) rows.Add(new KeyValuePair<string, string>("Yonga seti", s.Chipset));
-                if (s.CpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>("İşlemci", s.CpuModel));
-                if (s.GpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>("Ekran kartı", s.GpuModel + (s.GpuBus.Length > 0 ? "  (" + s.GpuBus + ")" : "")));
-                if (s.MemSpeed.Length > 0) rows.Add(new KeyValuePair<string, string>("Bellek hızı", s.MemSpeed));
+                if (s.Chipset.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("Yonga seti", "Chipset"), s.Chipset));
+                if (s.CpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("İşlemci", "Processor"), s.CpuModel));
+                if (s.GpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("Ekran kartı", "Graphics Card"), s.GpuModel + (s.GpuBus.Length > 0 ? "  (" + s.GpuBus + ")" : "")));
+                if (s.MemSpeed.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("Bellek hızı", "Memory Speed"), s.MemSpeed));
+                if (!double.IsNaN(s.SysBat)) rows.Add(new KeyValuePair<string, string>(L.T("Pil durumu", "Battery"), I0(s.SysBat) + "%" + (s.SysBatChg ? L.T(" (Şarj oluyor)", " (Charging)") : "")));
             }
             if (SysInfo.Boot != DateTime.MinValue)
             {
                 TimeSpan up = DateTime.Now - SysInfo.Boot;
-                rows.Add(new KeyValuePair<string, string>("Açık kalma", (up.Days > 0 ? up.Days + " g " : "") + up.Hours + " sa " + up.Minutes + " dk"));
+                string upTxt = L.IsEn
+                    ? ((up.Days > 0 ? up.Days + "d " : "") + up.Hours + "h " + up.Minutes + "m")
+                    : ((up.Days > 0 ? up.Days + " g " : "") + up.Hours + " sa " + up.Minutes + " dk");
+                rows.Add(new KeyValuePair<string, string>(L.T("Açık kalma", "Uptime"), upTxt));
             }
             rows.Add(new KeyValuePair<string, string>("OnMon", "v" + Updater.AppVersion));
             float rh = 30, w = 760, h = 64 + rows.Count * rh + (SysInfo.Loading ? 30 : 0);
@@ -81,8 +85,8 @@ namespace ProSystemMonitor
                 G.FillPath(Br(Color.FromArgb(252, 16, 18, 24)), gp);
                 G.DrawPath(Pn(t.A1, 1.6f), gp);
             }
-            Txt("SİSTEM BİLGİSİ", F(18, true, false), t.A1, _infoPanel.X + 20, _infoPanel.Y + 10, 400, 30, 0);
-            Txt("kapatmak için tıkla", F(14, false, true), t.Dim, _infoPanel.Right - 220, _infoPanel.Y + 12, 200, 26, 2);
+            Txt(L.T("SİSTEM BİLGİSİ", "SYSTEM INFORMATION"), F(18, true, false), t.A1, _infoPanel.X + 20, _infoPanel.Y + 10, 400, 30, 0);
+            Txt(L.T("kapatmak için tıkla", "click to close"), F(14, false, true), t.Dim, _infoPanel.Right - 220, _infoPanel.Y + 12, 200, 26, 2);
             float yy = _infoPanel.Y + 50;
             Font fk = F(17, false, false), fv = F(17, true, false);
             foreach (var kv in rows)
@@ -91,7 +95,7 @@ namespace ProSystemMonitor
                 Txt(Fit(kv.Value, fv, w - 230), fv, t.Tx, _infoPanel.X + 200, yy, w - 220, rh, 0);
                 yy += rh;
             }
-            if (SysInfo.Loading) Txt("okunuyor…", fk, t.Dim, _infoPanel.X + 20, yy, 300, rh, 0);
+            if (SysInfo.Loading) Txt(L.T("okunuyor…", "reading…"), fk, t.Dim, _infoPanel.X + 20, yy, 300, rh, 0);
         }
         internal int _bright = 100;          // uygulama parlaklığı %
         private RectangleF _brRect;
@@ -285,6 +289,7 @@ namespace ProSystemMonitor
                     else if (k == "theme") _th = Themes.Get(v);
                     else if (k == "margin") int.TryParse(v, out _margin);
                     else if (k == "city" && v.Length > 0) _city = v;
+                    else if (k == "lang" && (v == "en" || v == "tr")) L.Lang = v;
                 }
                 if (!hasDesk) { _desk = true; TopMost = false; }
                 if (_desk) TopMost = false;
@@ -297,7 +302,7 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs), "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture), "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol, "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture), "rcedit=" + (_rcEdit ? "1" : "0") });
+                File.WriteAllLines(SettingsPath, new[] { "lang=" + L.Lang, "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs), "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture), "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol, "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture), "rcedit=" + (_rcEdit ? "1" : "0") });
             }
             catch { }
         }
@@ -596,7 +601,7 @@ namespace ProSystemMonitor
 
         private ToolStripMenuItem Sec(string text)
         {
-            var it = new ToolStripMenuItem(text.ToUpper(new CultureInfo("tr-TR")));
+            var it = new ToolStripMenuItem((text ?? "").ToUpper(L.Culture));
             it.Tag = "sec";
             it.Enabled = false;
             it.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
@@ -620,6 +625,28 @@ namespace ProSystemMonitor
         private SettingsForm _settings;
         internal StudioForm _studioForm;
         internal GalleryForm _galleryForm;
+
+        internal void RefreshLanguage()
+        {
+            _dirty = true; Invalidate();
+            Action rebuild = delegate
+            {
+                if (IsDisposed) return;
+                bool reopenSet = _settings != null && !_settings.IsDisposed && _settings.Visible;
+                bool reopenStu = _studioForm != null && !_studioForm.IsDisposed && _studioForm.Visible;
+                bool reopenGal = _galleryForm != null && !_galleryForm.IsDisposed && _galleryForm.Visible;
+                try { if (_settings != null && !_settings.IsDisposed) { _settings.Close(); _settings.Dispose(); } } catch { }
+                try { if (_studioForm != null && !_studioForm.IsDisposed) { _studioForm.Close(); _studioForm.Dispose(); } } catch { }
+                try { if (_galleryForm != null && !_galleryForm.IsDisposed) { _galleryForm.Close(); _galleryForm.Dispose(); } } catch { }
+                _settings = null; _studioForm = null; _galleryForm = null;
+                CloseEditorDialogs();
+                if (reopenSet) OpenSettings();
+                if (reopenStu) OpenStudio();
+                if (reopenGal) OpenGallery();
+                _dirty = true; Invalidate();
+            };
+            if (IsHandleCreated) BeginInvoke(rebuild); else rebuild();
+        }
 
         internal void OpenSettings()
         {
@@ -662,19 +689,27 @@ namespace ProSystemMonitor
             m.Items.Clear();
             AudioSwitch.PollMic();
 
-            m.Items.Add(new ToolStripMenuItem("ROG PRO SYSTEM MONITOR") { Tag = "hdr", Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) });
+            string hdr = (_snap != null && !string.IsNullOrEmpty(_snap.Brand)) ? (_snap.Brand.ToUpper(L.Culture) + " · ONMON") : "ONMON SYSTEM MONITOR";
+            m.Items.Add(new ToolStripMenuItem(hdr) { Tag = "hdr", Enabled = false, Font = new Font("Segoe UI", 10f, FontStyle.Bold) });
             m.Items.Add(new ToolStripSeparator());
-            var set = Mi("Ayarlar…", "F2", false, delegate { OpenSettings(); });
+            var set = Mi(L.T("Ayarlar…", "Settings…"), "F2", false, delegate { OpenSettings(); });
             set.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
             m.Items.Add(set);
-            m.Items.Add(Mi("🎨 Düzen Stüdyosu (görsel editör)…", null, false, delegate { OpenStudio(); }));
-            m.Items.Add(Mi("📁 Düzen Galerisi / Düzen Ekle…", null, false, delegate { OpenGallery(); }));
-            m.Items.Add(Mi("Pano üstü hızlı düzenle", "E", false, delegate { ToggleEdit(); }));
-            m.Items.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", false, delegate { ToggleMic(); }));
+            m.Items.Add(Mi(L.T("🎨 Düzen Stüdyosu (görsel editör)…", "🎨 Layout Studio (Visual Editor)…"), null, false, delegate { OpenStudio(); }));
+            m.Items.Add(Mi(L.T("📁 Düzen Galerisi / Düzen Ekle…", "📁 Layout Gallery / Import…"), null, false, delegate { OpenGallery(); }));
+            m.Items.Add(Mi(L.T("Pano üstü hızlı düzenle", "Quick On-Screen Edit"), "E", false, delegate { ToggleEdit(); }));
+            m.Items.Add(Mi(AudioSwitch.MicMuted ? L.T("Mikrofonu aç", "Unmute Microphone") : L.T("Mikrofonu sustur", "Mute Microphone"), "M", false, delegate { ToggleMic(); }));
+
+            var langMenu = new ToolStripMenuItem("🌐 Dil / Language");
+            langMenu.Padding = new Padding(2, 5, 2, 5);
+            langMenu.DropDownItems.Add(Mi("Türkçe", null, !L.IsEn, delegate { L.Set("tr", this); }));
+            langMenu.DropDownItems.Add(Mi("English", null, L.IsEn, delegate { L.Set("en", this); }));
+            m.Items.Add(langMenu);
+
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add(Mi("Küçült", null, false, delegate { UserMinimize(); }));
-            m.Items.Add(Mi("Panoyu kapat", "", false, delegate { Close(); }));
-            m.Items.Add(Mi("Uygulamadan çık", null, false, delegate { Program.ExitAppAsk(); }));
+            m.Items.Add(Mi(L.T("Küçült", "Minimize"), null, false, delegate { UserMinimize(); }));
+            m.Items.Add(Mi(L.T("Panoyu kapat", "Close Dashboard"), "", false, delegate { Close(); }));
+            m.Items.Add(Mi(L.T("Uygulamadan çık", "Exit Application"), null, false, delegate { Program.ExitAppAsk(); }));
         }
 
         internal void MoveToScreen(Screen sc)
@@ -998,7 +1033,7 @@ namespace ProSystemMonitor
             float x = r.X + 20, y = r.Y + 14;
             G.FillRectangle(Br(t.A1), x, y + 3, 5, 30);
             Font ft = F(30, true, false), fs = F(30, false, true);
-            string T = (title ?? "").ToUpper(new CultureInfo("tr-TR"));
+            string T = (title ?? "").ToUpper(L.Culture);
             float tw = TW(T, ft);
             Txt(T, ft, t.Tx, x + 14, y, tw + 20, 36, 0);
             float sx = x + 14 + tw + 12;
@@ -1258,7 +1293,7 @@ namespace ProSystemMonitor
             Snap s = _snap;
             if (s == null)
             {
-                Txt("Veriler okunuyor…", F(48, false, true), t.Dim, 0, 0, _cw, _ch, 1);
+                Txt(L.T("Veriler okunuyor…", "Reading sensors…"), F(48, false, true), t.Dim, 0, 0, _cw, _ch, 1);
             }
             else
             {
@@ -1300,28 +1335,31 @@ namespace ProSystemMonitor
         private static Snap _demoSnap;
         internal static Snap DemoSnap()
         {
-            if (_demoSnap != null) return _demoSnap;
-            var cores = new CoreTelemetry[8];
-            for (int i = 0; i < 8; i++)
-                cores[i] = new CoreTelemetry { Index = i + 1, ClockMhz = 4850 + (i % 3) * 100, LoadPct = 22 + (i * 9) % 55 };
-            _demoSnap = new Snap
+            if (_demoSnap == null)
             {
-                Brand = "ASUS", MoboModel = "ROG Strix B650E-E", Chipset = "AMD B650E", Bios = "3024",
-                CpuModel = "AMD Ryzen 7 7800X3D", GpuModel = "GeForce RTX 4080", GpuBus = "PCI-E 4.0 x16", MemSpeed = "DDR5-6000",
-                Uptime = "04:12:30", Ip = "192.168.1.42", Game = "", Throttle = "", Source = "Önizleme",
-                Sound = 64, Procs = 185, Ping = 14,
-                MemTotal = 32768, MemUsed = 15728, MemFree = 17040, MemLoad = 48, MoboTemp = 34, DimmTemp = 31,
-                CpuLoad = 36, CpuTemp = 54, CpuDiode = 51, CpuClock = 5050, CpuFan = 1180, Cha1 = 1050, Cha2 = 1020, Pump = 2400,
-                CpuW = 62.5, CpuV = 1.142, SocV = 1.18, V12 = 12.04,
-                GpuLoad = 78, GpuTemp = 63, GpuHot = 74, GpuClock = 2745, VramUsed = 6420, VramTotal = 16376, GpuFan = 1450, GpuW = 248.0, GpuV = 1.035,
-                Fps = 144, FrameMs = 6.9, Low1 = 118,
-                NetUp = 420, NetDown = 3850, NetUpTot = 1240, NetDownTot = 8420, DiskR = 145.2, DiskW = 32.8,
-                Cores = cores,
-                Drives = new[] { new DriveTelemetry { Name = "NVMe SSD", Mount = "C:", TempC = 36, TotalGb = 1000, FreeGb = 540, UsedPct = 46 } },
-                TopProcs = new[] { new ProcItem { Name = "Game.exe", MemMb = 4200, Cpu = 28 }, new ProcItem { Name = "msedge", MemMb = 920, Cpu = 4 }, new ProcItem { Name = "Discord", MemMb = 310, Cpu = 2 } },
-                TopCpu = new[] { new ProcItem { Name = "Game.exe", MemMb = 4200, Cpu = 28 }, new ProcItem { Name = "obs64", MemMb = 450, Cpu = 6 }, new ProcItem { Name = "msedge", MemMb = 920, Cpu = 4 } },
-                SelfMb = 38, SelfCpu = 0.2
-            };
+                var cores = new CoreTelemetry[8];
+                for (int i = 0; i < 8; i++)
+                    cores[i] = new CoreTelemetry { Index = i + 1, ClockMhz = 4850 + (i % 3) * 100, LoadPct = 22 + (i * 9) % 55 };
+                _demoSnap = new Snap
+                {
+                    Brand = "SYSTEM", MoboModel = "PRO GAMING", Chipset = "PCIe 5.0", Bios = "3024",
+                    CpuModel = "Ryzen 7 7800X3D", GpuModel = "GeForce RTX 4080", GpuBus = "PCI-E 4.0 x16", MemSpeed = "DDR5-6000",
+                    Uptime = "04:12:30", Ip = "192.168.1.42", Game = "", Throttle = "", Source = "Preview",
+                    Sound = 64, Procs = 185, Ping = 14, SysBat = double.NaN, SysBatChg = false,
+                    MemTotal = 32768, MemUsed = 15728, MemFree = 17040, MemLoad = 48, MoboTemp = 34, DimmTemp = 31,
+                    CpuLoad = 36, CpuTemp = 54, CpuDiode = 51, CpuClock = 5050, CpuFan = 1180, Cha1 = 1050, Cha2 = 1020, Pump = 2400,
+                    CpuW = 62.5, CpuV = 1.142, SocV = 1.18, V12 = 12.04,
+                    GpuLoad = 78, GpuTemp = 63, GpuHot = 74, GpuClock = 2745, VramUsed = 6420, VramTotal = 16376, GpuFan = 1450, GpuW = 248.0, GpuV = 1.035,
+                    Fps = 144, FrameMs = 6.9, Low1 = 118,
+                    NetUp = 420, NetDown = 3850, NetUpTot = 1240, NetDownTot = 8420, DiskR = 145.2, DiskW = 32.8,
+                    Cores = cores,
+                    Drives = new[] { new DriveTelemetry { Name = "NVMe SSD", Mount = "C:", TempC = 36, TotalGb = 1000, FreeGb = 540, UsedPct = 46 } },
+                    TopProcs = new[] { new ProcItem { Name = "Game.exe", MemMb = 4200, Cpu = 28 }, new ProcItem { Name = "Browser", MemMb = 920, Cpu = 4 }, new ProcItem { Name = "Discord", MemMb = 310, Cpu = 2 } },
+                    TopCpu = new[] { new ProcItem { Name = "Game.exe", MemMb = 4200, Cpu = 28 }, new ProcItem { Name = "obs64", MemMb = 450, Cpu = 6 }, new ProcItem { Name = "Browser", MemMb = 920, Cpu = 4 } },
+                    SelfMb = 38, SelfCpu = 0.2
+                };
+            }
+            _demoSnap.Source = L.T("Önizleme", "Preview");
             return _demoSnap;
         }
 
@@ -1437,10 +1475,10 @@ namespace ProSystemMonitor
         {
             RectangleF c = Card(r, "CPU", ShortHw(s.CpuModel), Tc(s.CpuTemp));
             float dsz = Math.Min(c.Height, c.Width * 0.42f);
-            Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.CpuLoad, I0(s.CpuLoad), "%", "YÜK", dsz * 0.30f);
+            Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.CpuLoad, I0(s.CpuLoad), "%", L.T("YÜK", "LOAD"), dsz * 0.30f);
             float sx = c.X + dsz + 24, sw = c.Right - sx;
             StatColumn(sx, c.Y, sw, c.Height,
-                new[] { "Saat", "Güç", "Fan" },
+                new[] { L.T("Saat", "Clock"), L.T("Güç", "Power"), "Fan" },
                 new[] { Mhz(s.CpuClock), Wt(s.CpuW), Rpm(s.CpuFan) },
                 new[] { Ratio(s.CpuClock, 6000), Ratio(s.CpuW, 250), Ratio(s.CpuFan, 3000) },
                 new[] { false, false, false });
@@ -1450,10 +1488,10 @@ namespace ProSystemMonitor
         {
             RectangleF c = Card(r, "GPU", ShortHw(s.GpuModel), Tc(s.GpuTemp));
             float dsz = Math.Min(c.Height, c.Width * 0.42f);
-            Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.GpuLoad, I0(s.GpuLoad), "%", "YÜK", dsz * 0.30f);
+            Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.GpuLoad, I0(s.GpuLoad), "%", L.T("YÜK", "LOAD"), dsz * 0.30f);
             float sx = c.X + dsz + 24, sw = c.Right - sx;
             StatColumn(sx, c.Y, sw, c.Height,
-                new[] { "Saat", "Güç", "VRAM" },
+                new[] { L.T("Saat", "Clock"), L.T("Güç", "Power"), "VRAM" },
                 new[] { Mhz(s.GpuClock), Wt(s.GpuW), s.VramTotal > 0 ? I0(s.VramUsed) + " / " + I0(s.VramTotal) + " MB" : Mb(s.VramUsed) },
                 new[] { Ratio(s.GpuClock, 3000), Ratio(s.GpuW, 450), Ratio(s.VramUsed, s.VramTotal) },
                 new[] { false, false, Ratio(s.VramUsed, s.VramTotal) > 92 });
@@ -1463,10 +1501,10 @@ namespace ProSystemMonitor
         {
             RectangleF c = Card(r, "RAM", s.MemSpeed, Gb(s.MemUsed / 1024.0));
             float dsz = Math.Min(c.Height, c.Width * 0.42f);
-            Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.MemLoad, I0(s.MemLoad), "%", "DOLU", dsz * 0.30f);
+            Dial(c.X + dsz / 2, c.Y + c.Height / 2, dsz, s.MemLoad, I0(s.MemLoad), "%", L.T("DOLU", "USED"), dsz * 0.30f);
             float sx = c.X + dsz + 24, sw = c.Right - sx;
             StatColumn(sx, c.Y, sw, c.Height,
-                new[] { "Kullanılan", "Boş", "Toplam" },
+                new[] { L.T("Kullanılan", "Used"), L.T("Boş", "Free"), L.T("Toplam", "Total") },
                 new[] { Gb(s.MemUsed / 1024.0), Gb(s.MemFree / 1024.0), Gb(s.MemTotal / 1024.0) },
                 new[] { s.MemLoad, 100 - s.MemLoad, 100.0 },
                 new[] { s.MemLoad > 90, false, false });
@@ -1474,57 +1512,58 @@ namespace ProSystemMonitor
 
         private void PFps(RectangleF r, Snap s, bool big)
         {
-            string g = string.IsNullOrEmpty(s.Game) ? "Oyun algılanmadı" : s.Game;
+            string g = string.IsNullOrEmpty(s.Game) ? L.T("Oyun algılanmadı", "No game detected") : s.Game;
             RectangleF c = Card(r, "FPS", g, s.FrameMs > 0 ? D1(s.FrameMs) + " ms" : null);
             float dsz = Math.Min(c.Height * (big ? 1f : 0.62f), c.Width * 0.5f);
-            Dial(c.X + dsz / 2, c.Y + dsz / 2 + (big ? 0 : 0), dsz, Ratio(s.Fps, 240), s.Fps > 0 ? I0(s.Fps) : "0", "", "FPS", dsz * 0.34f);
+            Dial(c.X + dsz / 2, c.Y + dsz / 2, dsz, Ratio(s.Fps, 240), s.Fps > 0 ? I0(s.Fps) : "0", "", "FPS", dsz * 0.34f);
             float sx = c.X + dsz + 20, sw = c.Right - sx;
+            string lowLbl = L.T("%1 Düşük ", "1% Low ") + (double.IsNaN(s.Low1) ? "--" : I0(s.Low1));
             if (big)
             {
-                Txt("%1 Düşük " + (double.IsNaN(s.Low1) ? "--" : I0(s.Low1)), F(30, true, false), _th.Tx, sx, c.Y + 8, sw, 38, 0);
+                Txt(lowLbl, F(30, true, false), _th.Tx, sx, c.Y + 8, sw, 38, 0);
                 Graph(new RectangleF(sx, c.Y + 54, sw, c.Height - 54), "fps", 60, 0, true, true);
             }
             else
             {
-                Txt("%1 Düşük " + (double.IsNaN(s.Low1) ? "--" : I0(s.Low1)), F(26, true, false), _th.Tx, sx, c.Y, sw, 34, 0);
+                Txt(lowLbl, F(26, true, false), _th.Tx, sx, c.Y, sw, 34, 0);
                 Graph(new RectangleF(sx, c.Y + 40, sw, c.Height - 40), "fps", 60, 0, true, true);
             }
         }
 
         private void PNet(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "AĞ", s.Ip, double.IsNaN(s.Ping) ? null : I0(s.Ping) + " ms");
+            RectangleF c = Card(r, L.T("AĞ", "NETWORK"), s.Ip, double.IsNaN(s.Ping) ? null : I0(s.Ping) + " ms");
             float half = (c.Width - 20) / 2;
             Caption(c.X, c.Y, half, "▲", Spd(s.NetUp), null, null);
             Caption(c.X + half + 20, c.Y, half, "▼", Spd(s.NetDown), null, null);
             float gh = c.Height - 62;
             Graph(new RectangleF(c.X, c.Y + 30, half, gh), "netUp", 100, 0, false, true);
             Graph(new RectangleF(c.X + half + 20, c.Y + 30, half, gh), "netDown", 100, 0, false, true);
-            Txt("Toplam ▲ " + Tot(s.NetUpTot) + "   ▼ " + Tot(s.NetDownTot), F(20, false, false), _th.Dim, c.X, c.Bottom - 26, c.Width, 26, 0);
+            Txt(L.T("Toplam ▲ ", "Total ▲ ") + Tot(s.NetUpTot) + "   ▼ " + Tot(s.NetDownTot), F(20, false, false), _th.Dim, c.X, c.Bottom - 26, c.Width, 26, 0);
         }
 
         private void PDisks(RectangleF r, Snap s)
         {
             string rw = (double.IsNaN(s.DiskR) ? "--" : D1(s.DiskR)) + " / " + (double.IsNaN(s.DiskW) ? "--" : D1(s.DiskW)) + " MB/s";
-            RectangleF c = Card(r, "DİSK", "O/Y", rw);
+            RectangleF c = Card(r, L.T("DİSK", "DISKS"), L.T("O/Y", "R/W"), rw);
             int n = Math.Min(s.Drives.Length, 5);
-            if (n == 0) { Txt("Disk bilgisi yok", F(26, false, true), _th.Dim, c.X, c.Y, c.Width, 40, 0); return; }
-            string[] L = new string[n], V = new string[n]; double[] P = new double[n]; bool[] Hh = new bool[n];
+            if (n == 0) { Txt(L.T("Disk bilgisi yok", "No disk data"), F(26, false, true), _th.Dim, c.X, c.Y, c.Width, 40, 0); return; }
+            string[] Lb = new string[n], V = new string[n]; double[] P = new double[n]; bool[] Hh = new bool[n];
             for (int i = 0; i < n; i++)
             {
                 DriveTelemetry d = s.Drives[i];
                 string nm = !string.IsNullOrEmpty(d.Mount) ? d.Mount : (!string.IsNullOrEmpty(d.Letter) ? d.Letter : d.Name);
-                L[i] = nm;
+                Lb[i] = nm;
                 bool hasSpace = d.TotalGb > 0;
-                V[i] = hasSpace ? D1(d.FreeGb) + " GB boş" : (double.IsNaN(d.TempC) ? "--" : Tc(d.TempC));
+                V[i] = hasSpace ? D1(d.FreeGb) + L.T(" GB boş", " GB free") : (double.IsNaN(d.TempC) ? "--" : Tc(d.TempC));
                 P[i] = hasSpace ? d.UsedPct : (double.IsNaN(d.TempC) ? 0 : Ratio(d.TempC, 100)); Hh[i] = hasSpace ? d.UsedPct > 92 : Hot(d.TempC, 70);
             }
-            StatColumn(c.X, c.Y, c.Width, c.Height, L, V, P, Hh);
+            StatColumn(c.X, c.Y, c.Width, c.Height, Lb, V, P, Hh);
         }
 
         private void PCores(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "ÇEKİRDEKLER", s.Cores.Length + " thread", null);
+            RectangleF c = Card(r, L.T("ÇEKİRDEKLER", "CORES"), s.Cores.Length + " " + L.T("iş parçacığı", "threads"), null);
             int n = s.Cores.Length;
             if (n == 0) return;
             int cols = n > 16 ? 8 : (n > 8 ? 8 : 4);
@@ -1542,7 +1581,7 @@ namespace ProSystemMonitor
 
         private void PProcs(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "İŞLEMLER", double.IsNaN(s.Procs) ? null : I0(s.Procs) + " adet", null);
+            RectangleF c = Card(r, L.T("İŞLEMLER", "PROCESSES"), double.IsNaN(s.Procs) ? null : I0(s.Procs) + L.T(" adet", " running"), null);
             int n = Math.Min(s.TopProcs.Length, 6);
             float rh = Math.Min(48f, c.Height / Math.Max(1, n));
             for (int i = 0; i < n; i++)
@@ -1556,17 +1595,16 @@ namespace ProSystemMonitor
         private void PClock(RectangleF r, Snap s)
         {
             DateTime now = DateTime.Now;
-            var tr = new CultureInfo("tr-TR");
-            RectangleF c = Card(r, "SAAT", now.ToString("d MMMM dddd", tr), Extras.WxTemp);
+            CultureInfo ci = L.Culture;
+            RectangleF c = Card(r, L.T("SAAT", "CLOCK"), now.ToString("d MMMM dddd", ci), Extras.WxTemp);
             bool narrow = c.Width < 700;
-            string tm = now.ToString("HH:mm", tr);
+            string tm = now.ToString("HH:mm", ci);
             float areaW = narrow ? c.Width * 0.62f : c.Width * 0.5f;
             float fs = Math.Min(150, narrow ? c.Height * 0.3f : c.Height * 0.62f);
             Font ft = F(fs, true, false);
             while (fs > 30 && TW(tm, ft) > areaW) { fs -= 4; ft = F(fs, true, false); }
             float th = narrow ? c.Height * 0.42f : c.Height * 0.8f;
             Txt(tm, ft, _th.Tx, c.X, c.Y, areaW + 10, th, 0);
-            float sw = TW(tm, ft);
             Txt(Extras.WxDesc, F(24, false, true), _th.Dim, c.X, narrow ? c.Y + th : c.Bottom - 40, c.Width * 0.5f, 36, 0);
             int next = NextPrayer(now);
             if (narrow)
@@ -1576,7 +1614,7 @@ namespace ProSystemMonitor
                 {
                     float x = c.X + (i % 2) * cw, y = py + (i / 2) * ph;
                     Color col = i == next ? _th.A1 : _th.Tx;
-                    Txt(Extras.PrayerNames[i], F(22, i == next, false), col, x, y, cw * 0.5f, ph, 0);
+                    Txt(Extras.GetPrayerName(i), F(22, i == next, false), col, x, y, cw * 0.5f, ph, 0);
                     Txt(Extras.Prayer[i], F(22, true, false), col, x + cw * 0.35f, y, cw * 0.55f, ph, 2);
                 }
             }
@@ -1586,7 +1624,7 @@ namespace ProSystemMonitor
                 for (int i = 0; i < 6; i++)
                 {
                     Color col = i == next ? _th.A1 : _th.Tx;
-                    Txt(Extras.PrayerNames[i], F(24, i == next, false), col, px, c.Y + i * ph, pw / 2, ph, 0);
+                    Txt(Extras.GetPrayerName(i), F(24, i == next, false), col, px, c.Y + i * ph, pw / 2, ph, 0);
                     Txt(Extras.Prayer[i], F(24, true, false), col, px + pw / 2, c.Y + i * ph, pw / 2, ph, 2);
                 }
             }
@@ -1595,31 +1633,52 @@ namespace ProSystemMonitor
         private void DrawInfoBar(Snap s, float top)
         {
             Theme t = _th;
-            var tr = new CultureInfo("tr-TR");
+            CultureInfo ci = L.Culture;
             DateTime now = DateTime.Now;
             float y = top + 2, h = 30;
             Font fb = F(20, true, false), fd = F(20, false, true);
-            string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(tr);
+            string brand = (s == null || string.IsNullOrEmpty(s.Brand)) ? "PC" : s.Brand.ToUpper(ci);
             _brRect = new RectangleF(10, y, 30, 30);
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(6, y - 4, 38, 38), "bright:next"));
             G.FillRectangle(Br(t.A1), 52, y + 4, 4, h - 8);
             Txt(brand, fb, t.Tx, 64, y, 300, h, 0);
             _infoBtn = new RectangleF(50, y - 2, TW(brand, fb) + 26, h + 4);
             _hits.Add(new KeyValuePair<RectangleF, string>(_infoBtn, "info:toggle"));
-            float boff = 0;
-            if (Extras.WxTemp != "--") Txt(Extras.WxTemp + "  " + Extras.WxDesc, fd, t.Dim, 64 + TW(brand, fb) + 18, y, 500, h, 0);
+            float bx = 64 + TW(brand, fb) + 18;
+            if (Extras.WxTemp != "--")
+            {
+                string wx = Extras.WxTemp + "  " + Extras.WxDesc;
+                Txt(wx, fd, t.Dim, bx, y, 500, h, 0);
+                bx += TW(wx, fd) + 22;
+            }
+            Font fbat = F(18, true, false);
+            if (s != null && !double.IsNaN(s.SysBat))
+            {
+                string btxt = L.T("Pil ", "Bat ") + I0(s.SysBat) + "%" + (s.SysBatChg ? " ⚡" : "");
+                float bbw = TW(btxt, fbat) + 22;
+                if (bx + bbw <= 1120)
+                {
+                    var bbr = new RectangleF(bx, y + 2, bbw, h - 4);
+                    bool lowB = !s.SysBatChg && s.SysBat <= 18;
+                    using (GraphicsPath bp = RR(bbr, (h - 4) / 2f))
+                    {
+                        G.FillPath(Br(lowB ? Al(t.Crit, 90) : (s.SysBatChg ? Al(t.A1, 65) : t.Tile)), bp);
+                        G.DrawPath(Pn(lowB ? t.Crit : (s.SysBatChg ? t.A1 : t.Line), 1.4f), bp);
+                    }
+                    Txt(btxt, fbat, lowB ? Color.White : t.Tx, bbr.X, bbr.Y, bbr.Width, bbr.Height, 1);
+                    bx += bbw + 8;
+                }
+            }
             KeyValuePair<string, int>[] bat = Peripherals.Items;
             if (bat.Length > 0)
             {
-                float bx = 64 + TW(brand, fb) + 18 + boff + (Extras.WxTemp != "--" ? TW(Extras.WxTemp + "  " + Extras.WxDesc, fd) + 24 : 0);
-                Font fbat = F(18, true, false);
                 foreach (var kv in bat)
                 {
                     string nm = kv.Key; int sp = nm.IndexOf('(');
                     if (sp > 3) nm = nm.Substring(0, sp).Trim();
                     string txt = Shorten(nm, 16) + " " + kv.Value + "%";
                     float bw = TW(txt, fbat) + 22;
-                    if (bx + bw > 1100) break;
+                    if (bx + bw > 1120) break;
                     var br = new RectangleF(bx, y + 2, bw, h - 4);
                     bool off = Peripherals.RogOffline && kv.Key.StartsWith("Cetra");
                     bool low = !off && kv.Value <= 15;
@@ -1629,8 +1688,8 @@ namespace ProSystemMonitor
                     bx += bw + 8;
                 }
             }
-            string clock = now.ToString("HH:mm", tr);
-            string date = now.ToString("d MMMM dddd", tr);
+            string clock = now.ToString("HH:mm", ci);
+            string date = now.ToString("d MMMM dddd", ci);
             string pr = PrayerLeft(now);
             float x = _cw - 14;
             Font fc = F(28, true, false);
@@ -1649,7 +1708,7 @@ namespace ProSystemMonitor
             if (ShutdownTimer.Active)
             {
                 TimeSpan rem = ShutdownTimer.Remaining;
-                string sp2 = (ShutdownTimer.Action == 2 ? "Yeniden başlatma " : "Kapanış ") + ShutdownTimer.Format(rem);
+                string sp2 = (ShutdownTimer.Action == 2 ? L.T("Yeniden başlatma ", "Restart ") : L.T("Kapanış ", "Shutdown ")) + ShutdownTimer.Format(rem);
                 bool soon = rem.TotalMinutes <= 10;
                 float sw2 = TW(sp2, fb) + 28;
                 var sr = new RectangleF(x - sw2, y + 1, sw2, h - 2);
@@ -1658,11 +1717,11 @@ namespace ProSystemMonitor
             }
         }
 
-        // Sonraki vakit (Güneş dahil): "İkindiye 1sa 23dk"
         private static string PrayerLeft(DateTime now)
         {
             int[] idx = { 0, 1, 2, 3, 4, 5 };
-            string[] nm = { "Sabaha", "Güneşe", "Öğleye", "İkindiye", "Akşama", "Yatsıya" };
+            string[] nmTr = { "Sabaha", "Güneşe", "Öğleye", "İkindiye", "Akşama", "Yatsıya" };
+            string[] nmEn = { "Fajr in", "Sunrise in", "Dhuhr in", "Asr in", "Maghrib in", "Isha in" };
             for (int day = 0; day < 2; day++)
                 for (int k = 0; k < idx.Length; k++)
                 {
@@ -1673,7 +1732,9 @@ namespace ProSystemMonitor
                     if (at > now)
                     {
                         int mins = (int)Math.Ceiling((at - now).TotalMinutes);
-                        return nm[k] + " " + (mins >= 60 ? (mins / 60) + "sa " + (mins % 60) + "dk" : mins + "dk");
+                        if (L.IsEn)
+                            return nmEn[k] + " " + (mins >= 60 ? (mins / 60) + "h " + (mins % 60) + "m" : mins + "m");
+                        return nmTr[k] + " " + (mins >= 60 ? (mins / 60) + "sa " + (mins % 60) + "dk" : mins + "dk");
                     }
                 }
             return "";
@@ -1693,66 +1754,77 @@ namespace ProSystemMonitor
 
         private void PSys(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "SİSTEM", s.Uptime, s.Brand);
-            string[] k = { "Anakart", "Yonga seti", "BIOS", "Ses", "Anakart ısı" };
+            RectangleF c = Card(r, L.T("SİSTEM", "SYSTEM"), s.Uptime, s.Brand);
+            string[] k = { L.T("Anakart", "Motherboard"), L.T("Yonga seti", "Chipset"), "BIOS", L.T("Ses", "Volume"), L.T("Anakart ısı", "Board Temp") };
             string[] v = { s.MoboModel, s.Chipset, s.Bios, double.IsNaN(s.Sound) ? "--" : I0(s.Sound) + "%", Tc(s.MoboTemp) };
             float rh = c.Height / k.Length;
             for (int i = 0; i < k.Length; i++)
             {
-                Txt(k[i], F(24, false, true), _th.Dim, c.X, c.Y + i * rh, c.Width * 0.3f, rh, 0);
-                Txt(v[i], F(24, true, false), _th.Tx, c.X + c.Width * 0.3f, c.Y + i * rh, c.Width * 0.7f, rh, 0);
+                Txt(k[i], F(24, false, true), _th.Dim, c.X, c.Y + i * rh, c.Width * 0.34f, rh, 0);
+                Txt(Fit(v[i], F(24, true, false), c.Width * 0.66f), F(24, true, false), _th.Tx, c.X + c.Width * 0.34f, c.Y + i * rh, c.Width * 0.66f, rh, 0);
             }
         }
 
         private void PPower(RectangleF r, Snap s)
         {
             double tot = (double.IsNaN(s.CpuW) ? 0 : s.CpuW) + (double.IsNaN(s.GpuW) ? 0 : s.GpuW);
-            RectangleF c = Card(r, "GÜÇ", "CPU + GPU", I0(tot) + " W");
+            RectangleF c = Card(r, L.T("GÜÇ", "POWER"), "CPU + GPU", I0(tot) + " W");
             Graph(new RectangleF(c.X, c.Y, c.Width, c.Height - 4), "totalW", 100, 0, true, true);
         }
 
         private void PTemps(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "SICAKLIK", "30 sn", Tc(s.CpuTemp));
+            RectangleF c = Card(r, L.T("SICAKLIK", "TEMPS"), L.T("geçmiş", "history"), Tc(s.CpuTemp));
             Graph(new RectangleF(c.X, c.Y, c.Width, c.Height - 4), "cpuTemp", 60, 0, true, true);
         }
 
         private void PGpuGraph(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "GPU YÜK", "geçmiş", Pct(s.GpuLoad));
+            RectangleF c = Card(r, L.T("GPU YÜK", "GPU LOAD"), L.T("geçmiş", "history"), Pct(s.GpuLoad));
             Graph(new RectangleF(c.X, c.Y, c.Width, c.Height - 4), "gpuLoad", 100, 100, true, true);
         }
 
         private void PFans(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "FANLAR", "RPM", null);
+            RectangleF c = Card(r, L.T("FANLAR", "FANS"), "RPM", null);
             StatColumn(c.X, c.Y, c.Width, c.Height,
-                new[] { "CPU", "Kasa 1", "Kasa 2", "Pompa", "GPU" },
+                new[] { "CPU", L.T("Kasa 1", "Chassis 1"), L.T("Kasa 2", "Chassis 2"), L.T("Pompa", "Pump"), "GPU" },
                 new[] { Rpm(s.CpuFan), Rpm(s.Cha1), Rpm(s.Cha2), Rpm(s.Pump), Rpm(s.GpuFan) },
                 new[] { Ratio(s.CpuFan, 3000), Ratio(s.Cha1, 3000), Ratio(s.Cha2, 3000), Ratio(s.Pump, 4000), Ratio(s.GpuFan, 3500) }, null);
         }
 
         private void PVolts(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "GERİLİM", null, null);
-            StatColumn(c.X, c.Y, c.Width, c.Height,
-                new[] { "CPU Vcore", "GPU Volt" },
-                new[] { Vt(s.CpuV), Vt(s.GpuV) },
-                new[] { Ratio(s.CpuV, 1.6), Ratio(s.GpuV, 1.2) }, null);
+            RectangleF c = Card(r, L.T("GERİLİM", "VOLTAGES"), null, null);
+            var lbs = new List<string> { "CPU Vcore", "GPU Volt" };
+            var vls = new List<string> { Vt(s.CpuV), Vt(s.GpuV) };
+            var pcs = new List<double> { Ratio(s.CpuV, 1.6), Ratio(s.GpuV, 1.2) };
+            if (!double.IsNaN(s.SocV)) { lbs.Add("SoC / SA"); vls.Add(Vt(s.SocV)); pcs.Add(Ratio(s.SocV, 1.5)); }
+            if (!double.IsNaN(s.V12)) { lbs.Add("+12V"); vls.Add(s.V12.ToString("0.00", CultureInfo.InvariantCulture) + " V"); pcs.Add(Ratio(s.V12, 12.6)); }
+            StatColumn(c.X, c.Y, c.Width, c.Height, lbs.ToArray(), vls.ToArray(), pcs.ToArray(), null);
         }
 
         private static string ShortHw(string m)
         {
             if (string.IsNullOrEmpty(m)) return "";
             m = m.Replace("(R)", "").Replace("(TM)", "").Replace("(tm)", "");
-            string[] cut = { "NVIDIA GeForce ", "NVIDIA ", "GeForce ", "AMD Radeon ", "AMD ", "Intel Core ", "Intel ", " 8-Core Processor", " 6-Core Processor", " 12-Core Processor", " 16-Core Processor", " 4-Core Processor", " Processor", " CPU" };
+            string[] cut = {
+                "11th Gen ", "12th Gen ", "13th Gen ", "14th Gen ", "15th Gen ",
+                "NVIDIA GeForce ", "NVIDIA ", "GeForce ", "AMD Radeon ", "AMD ",
+                "Intel Core ", "Intel ",
+                " 32-Core Processor", " 24-Core Processor", " 16-Core Processor", " 12-Core Processor", " 8-Core Processor", " 6-Core Processor", " 4-Core Processor",
+                " w/ Radeon 780M Graphics", " w/ Radeon 760M Graphics", " w/ Radeon 890M Graphics", " w/ Radeon 880M Graphics",
+                " with Radeon Graphics", " Processor", " CPU"
+            };
             foreach (string c in cut)
             {
                 int i = m.IndexOf(c, StringComparison.OrdinalIgnoreCase);
                 if (i >= 0) m = m.Remove(i, c.Length);
             }
-            if (m.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) < 0 && m.StartsWith("RX ")) m = "Radeon " + m;
-            return m.Trim().Replace("  ", " ");
+            m = m.Trim();
+            while (m.Contains("  ")) m = m.Replace("  ", " ");
+            if (m.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) < 0 && m.StartsWith("RX ", StringComparison.OrdinalIgnoreCase)) m = "Radeon " + m;
+            return m;
         }
 
         private static string Shorten(string s, int n)
@@ -1819,7 +1891,7 @@ namespace ProSystemMonitor
             }
             Color ic = muted ? Color.White : (avail ? t.A1 : t.Dim);
             SpeakerIcon(x + 9, y + 2, ic, muted, lv);
-            if (!avail) { Txt("Ses yok", F(16, true, false), t.Dim, x + 40, y, w - 50, h, 0); return; }
+            if (!avail) { Txt(L.T("Ses yok", "No audio"), F(16, true, false), t.Dim, x + 40, y, w - 50, h, 0); return; }
             float bx = x + 40, bw = w - 40 - 58;
             var track = new RectangleF(bx, y + h / 2f - 4, bw, 8);
             using (GraphicsPath tp = RR(track, 4)) G.FillPath(Br(muted ? Al(Color.White, 70) : t.Track), tp);
@@ -1831,7 +1903,7 @@ namespace ProSystemMonitor
             }
             float kx = bx + bw * (muted ? 0 : lv);
             G.FillEllipse(Br(muted ? Color.White : t.Tx), kx - 6, y + h / 2f - 6, 12, 12);
-            Txt(muted ? "KAPALI" : I0(lv * 100) + "%", F(16, true, false), muted ? Color.White : t.Tx, x + w - 58, y, 50, h, 2);
+            Txt(muted ? L.T("KAPALI", "MUTE") : I0(lv * 100) + "%", F(16, true, false), muted ? Color.White : t.Tx, x + w - 58, y, 50, h, 2);
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(x, y, 36, h), "vol:mute"));
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(bx - 6, y, bw + 12, h), "vol:bar"));
         }
@@ -1856,10 +1928,10 @@ namespace ProSystemMonitor
             G.DrawLine(Pn(ic, 1.6f), x + 11, y + 21, x + 18, y + 21);
             if (muted) G.DrawLine(Pn(Color.White, 2.4f), x + 7, y + 22, x + 22, y + 4);
             Font f = F(16, true, false);
-            if (!avail) { Txt("Mikrofon yok", f, t.Dim, x + 32, y, w - 40, h, 0); }
+            if (!avail) { Txt(L.T("Mikrofon yok", "No microphone"), f, t.Dim, x + 32, y, w - 40, h, 0); }
             else
             {
-                string lab = muted ? "KAPALI" : "AÇIK";
+                string lab = muted ? L.T("KAPALI", "MUTED") : L.T("AÇIK", "LIVE");
                 float lw = 66, nw = 200;
                 Color tc = muted ? Color.White : t.Tx;
                 MTxt(AudioSwitch.MicName, f, tc, x + 32, y, nw, h, 0);
@@ -1890,7 +1962,7 @@ namespace ProSystemMonitor
             Theme t = _th;
             Panel(r);
             DateTime now = DateTime.Now;
-            string brand = string.IsNullOrEmpty(s.Brand) ? "PC" : s.Brand.ToUpper(new CultureInfo("tr-TR"));
+            string brand = string.IsNullOrEmpty(s.Brand) ? "PC" : s.Brand.ToUpper(L.Culture);
             float fs = 56; Font fb = F(fs, true, false);
             while (fs > 24 && TW(brand, fb) > r.Width - 40) { fs -= 4; fb = F(fs, true, false); }
             Txt(brand, fb, t.Tx, r.X, r.Y + 8, r.Width, 70, 1);
@@ -1899,27 +1971,27 @@ namespace ProSystemMonitor
             using (GraphicsPath p = RR(pill, 8)) G.FillPath(Br(t.Tx), p);
             Txt(now.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture), F(26, true, false), t.Bg, pill.X, pill.Y, pill.Width, pill.Height, 1);
             Font fs2 = F(21, false, true), fv = F(21, true, false);
-            Txt("Çalışma", fs2, t.Dim, r.X + 20, r.Y + 202, 90, 30, 0);
-            Txt(s.Uptime, fv, t.Tx, r.X + 112, r.Y + 202, 170, 30, 0);
-            Txt("Ses", fs2, t.Dim, r.X + r.Width - 150, r.Y + 202, 60, 30, 0);
+            Txt(L.T("Çalışma", "Uptime"), fs2, t.Dim, r.X + 20, r.Y + 202, 96, 30, 0);
+            Txt(s.Uptime, fv, t.Tx, r.X + 116, r.Y + 202, 166, 30, 0);
+            Txt(L.T("Ses", "Vol"), fs2, t.Dim, r.X + r.Width - 150, r.Y + 202, 60, 30, 0);
             Txt(double.IsNaN(s.Sound) ? "--" : I0(s.Sound), fv, t.Tx, r.X + r.Width - 100, r.Y + 202, 80, 30, 2);
         }
 
         private void PAMem(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "Bellek", null, null);
+            RectangleF c = Card(r, L.T("Bellek", "Memory"), null, null);
             float rh = c.Height / 4f;
-            MiniRow(c.X, c.Y, c.Width, rh, "Yük", s.MemLoad, Pct(s.MemLoad), s.MemLoad > 90);
-            MiniRow(c.X, c.Y + rh, c.Width, rh, "Hız", 100, string.IsNullOrEmpty(s.MemSpeed) ? "--" : s.MemSpeed, false);
-            MiniRow(c.X, c.Y + rh * 2, c.Width, rh, "Kullanım", s.MemLoad, Gb(s.MemUsed / 1024.0), false);
-            MiniRow(c.X, c.Y + rh * 3, c.Width, rh, "Boş", 100 - s.MemLoad, Gb(s.MemFree / 1024.0), false);
+            MiniRow(c.X, c.Y, c.Width, rh, L.T("Yük", "Load"), s.MemLoad, Pct(s.MemLoad), s.MemLoad > 90);
+            MiniRow(c.X, c.Y + rh, c.Width, rh, L.T("Hız", "Speed"), 100, string.IsNullOrEmpty(s.MemSpeed) ? "--" : s.MemSpeed, false);
+            MiniRow(c.X, c.Y + rh * 2, c.Width, rh, L.T("Kullanım", "Used"), s.MemLoad, Gb(s.MemUsed / 1024.0), false);
+            MiniRow(c.X, c.Y + rh * 3, c.Width, rh, L.T("Boş", "Free"), 100 - s.MemLoad, Gb(s.MemFree / 1024.0), false);
         }
 
         private void PAMobo(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "ANAKART", s.MoboModel, null);
+            RectangleF c = Card(r, L.T("ANAKART", "MOTHERBOARD"), s.MoboModel, null);
             Theme t = _th;
-            string[] k = { "Yonga seti", "BIOS", "Yol tipi", "İşlemler" };
+            string[] k = { L.T("Yonga seti", "Chipset"), "BIOS", L.T("Yol tipi", "Bus"), L.T("İşlemler", "Processes") };
             string[] v = { s.Chipset, s.Bios, s.GpuBus, double.IsNaN(s.Procs) ? "--" : I0(s.Procs) };
             float rh = c.Height / 4f, lw = 150, vw = c.Width * 0.62f - lw;
             Font fk = F(22, false, true), fv = F(22, true, false);
@@ -1930,7 +2002,7 @@ namespace ProSystemMonitor
             }
             float rx = c.X + c.Width * 0.66f, rw = c.Width * 0.34f;
             BarAt(rx, c.Y + 22, rw, Ratio(s.MoboTemp, 100), false, 15);
-            Txt("Sıcaklık", F(26, false, true), t.Tx, rx, c.Y + 50, rw * 0.5f, 44, 0);
+            Txt(L.T("Sıcaklık", "Temp"), F(26, false, true), t.Tx, rx, c.Y + 50, rw * 0.5f, 44, 0);
             Txt(Tc(s.MoboTemp), F(38, true, false), t.Tx, rx + rw * 0.3f, c.Y + 50, rw * 0.7f, 44, 2);
         }
 
@@ -1938,12 +2010,12 @@ namespace ProSystemMonitor
         {
             RectangleF c = Card(r, "CPU", ShortHw(s.CpuModel), null);
             Theme t = _th;
-            Dial(c.X + 160, c.Y + 150, 290, s.CpuLoad, I0(s.CpuLoad), "%", "YÜK", 96);
+            Dial(c.X + 160, c.Y + 150, 290, s.CpuLoad, I0(s.CpuLoad), "%", L.T("YÜK", "LOAD"), 96);
             Graph(new RectangleF(c.X, c.Y + 316, 320, c.Height - 316), "cpuTemp", 60, 0, true, true);
             float rx = c.X + 350, rw = c.Width - 350;
             bool pump = !double.IsNaN(s.Pump);
             StatColumn(rx, c.Y, rw, 300,
-                new[] { "Sıcaklık", "Saat", "Fan", pump ? "AIO Pompa" : "Kasa Fan" },
+                new[] { L.T("Sıcaklık", "Temp"), L.T("Saat", "Clock"), "Fan", pump ? L.T("AIO Pompa", "AIO Pump") : L.T("Kasa Fan", "Case Fan") },
                 new[] { Tc(s.CpuTemp), Mhz(s.CpuClock), Rpm(s.CpuFan), Rpm(pump ? s.Pump : s.Cha1) },
                 new[] { Ratio(s.CpuTemp, 100), Ratio(s.CpuClock, 6000), Ratio(s.CpuFan, 3000), Ratio(pump ? s.Pump : s.Cha1, 3500) },
                 new[] { Hot(s.CpuTemp, 90), false, false, false });
@@ -1954,7 +2026,7 @@ namespace ProSystemMonitor
             {
                 CoreTelemetry k = s.Cores[i];
                 float x = rx + (i / 4) * (cw + 16), y = c.Y + 316 + (i % 4) * ch;
-                Txt((i + 1) + ". CPU", fl, t.Tx, x, y, 90, ch - 8, 0);
+                Txt((L.IsEn ? "CPU #" + (i + 1) : (i + 1) + ". CPU"), fl, t.Tx, x, y, 90, ch - 8, 0);
                 Txt(I0(k.ClockMhz) + " MHz", fv, t.Tx, x + cw - 130, y, 130, ch - 8, 2);
                 BarAt(x, y + ch - 14, cw, k.LoadPct, k.LoadPct > 92, 7);
             }
@@ -1964,13 +2036,13 @@ namespace ProSystemMonitor
         {
             RectangleF c = Card(r, "GPU", ShortHw(s.GpuModel), null);
             Theme t = _th;
-            Dial(c.X + 160, c.Y + 150, 290, s.GpuLoad, I0(s.GpuLoad), "%", "YÜK", 96);
+            Dial(c.X + 160, c.Y + 150, 290, s.GpuLoad, I0(s.GpuLoad), "%", L.T("YÜK", "LOAD"), 96);
             var gr = new RectangleF(c.X, c.Y + 316, 320, c.Height - 316);
             Graph(gr, "fps", 60, 0, true, true);
             Txt("FPS " + (s.Fps > 0 ? I0(s.Fps) : "--"), F(46, true, false), Al(t.Tx, 70), gr.X, gr.Y, gr.Width, gr.Height, 1);
             float rx = c.X + 350, rw = c.Width - 350;
             StatColumn(rx, c.Y, rw, 300,
-                new[] { "Sıcaklık", "Güç", "Saat", "VRAM", "Fan" },
+                new[] { L.T("Sıcaklık", "Temp"), L.T("Güç", "Power"), L.T("Saat", "Clock"), "VRAM", "Fan" },
                 new[] { Tc(s.GpuTemp), Wt(s.GpuW), Mhz(s.GpuClock), s.VramTotal > 0 ? I0(s.VramUsed) + " / " + I0(s.VramTotal) + " MB" : Mb(s.VramUsed), Rpm(s.GpuFan) },
                 new[] { Ratio(s.GpuTemp, 100), Ratio(s.GpuW, 450), Ratio(s.GpuClock, 3000), Ratio(s.VramUsed, s.VramTotal), Ratio(s.GpuFan, 3500) },
                 new[] { Hot(s.GpuTemp, 85), false, false, Ratio(s.VramUsed, s.VramTotal) > 92, false });
@@ -1979,10 +2051,10 @@ namespace ProSystemMonitor
 
         private void PAStorage(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "Depolama", null, null);
+            RectangleF c = Card(r, L.T("Depolama", "Storage"), null, null);
             Theme t = _th;
             int n = Math.Min(4, s.Drives.Length);
-            if (n == 0) { Txt("Disk bilgisi yok", F(24, false, true), t.Dim, c.X, c.Y, c.Width, 40, 0); return; }
+            if (n == 0) { Txt(L.T("Disk bilgisi yok", "No disk data"), F(24, false, true), t.Dim, c.X, c.Y, c.Width, 40, 0); return; }
             float rh = Math.Min(46f, c.Height / n);
             Font fn = F(24, false, false), fv = F(24, true, false);
             for (int i = 0; i < n; i++)
@@ -2000,7 +2072,7 @@ namespace ProSystemMonitor
 
         private void PAPower(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "Güç", null, null);
+            RectangleF c = Card(r, L.T("Güç", "Power"), null, null);
             Theme t = _th;
             string[] k = { "CPU", "", "GPU", "" };
             string[] v = { Wt(s.CpuW), Vt(s.CpuV), Wt(s.GpuW), Vt(s.GpuV) };
@@ -2014,9 +2086,9 @@ namespace ProSystemMonitor
 
         private void PANet(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, "Ağ", null, s.Ip);
+            RectangleF c = Card(r, L.T("Ağ", "Network"), null, s.Ip);
             Theme t = _th;
-            string[] k = { "Gönderim", "Toplam", "İndirme", "Toplam" };
+            string[] k = { L.T("Gönderim", "Upload"), L.T("Toplam", "Total"), L.T("İndirme", "Download"), L.T("Toplam", "Total") };
             string[] v = { Spd(s.NetUp), Tot(s.NetUpTot), Spd(s.NetDown), Tot(s.NetDownTot) };
             float rh = c.Height / 4f, lw = 270;
             Font fk = F(20, false, true), fv = F(22, true, false);
@@ -2096,7 +2168,7 @@ namespace ProSystemMonitor
         {
             Theme t = _th;
             bool vm = AudioSwitch.VolMuted, mm = AudioSwitch.MicMuted;
-            RectangleF c = Card(r, "SES", AudioSwitch.DefaultName, AudioSwitch.VolAvailable ? (vm ? "KAPALI" : I0(AudioSwitch.VolLevel * 100) + "%") : null);
+            RectangleF c = Card(r, L.T("SES", "AUDIO"), AudioSwitch.DefaultName, AudioSwitch.VolAvailable ? (vm ? L.T("KAPALI", "MUTED") : I0(AudioSwitch.VolLevel * 100) + "%") : null);
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(r.X, r.Y, r.Width * 0.75f, 56), "out:next"));
             _hits.Add(new KeyValuePair<RectangleF, string>(new RectangleF(r.X + r.Width * 0.75f, r.Y, r.Width * 0.25f, 56), "vol:mute"));
             float y = c.Y + 2, rowH = 36;
@@ -2129,7 +2201,7 @@ namespace ProSystemMonitor
             G.DrawLine(Pn(ic, 1.6f), mr.X + 15.5f, mr.Y + 22.5f, mr.X + 15.5f, mr.Y + 26);
             if (mm) G.DrawLine(Pn(Color.White, 2.4f), mr.X + 8, mr.Y + 27, mr.X + 24, mr.Y + 6);
             float nw = mr.Width * 0.42f;
-            MTxt(AudioSwitch.MicAvailable ? AudioSwitch.MicName : "Mikrofon yok", f, tc, mr.X + 34, mr.Y, nw, mr.Height, 0);
+            MTxt(AudioSwitch.MicAvailable ? AudioSwitch.MicName : L.T("Mikrofon yok", "No microphone"), f, tc, mr.X + 34, mr.Y, nw, mr.Height, 0);
             if (AudioSwitch.MicAvailable)
             {
                 if (!mm)
@@ -2137,7 +2209,7 @@ namespace ProSystemMonitor
                     float lvm = (float)Math.Sqrt(Math.Max(0, Math.Min(1, AudioSwitch.MicLevel)));
                     BarAt(mr.X + 34 + nw + 14, mr.Y + mr.Height / 2f - 4, mr.Width - 34 - nw - 14 - 84, lvm * 100, lvm > 0.92f, 8);
                 }
-                Txt(mm ? "KAPALI" : "AÇIK", f, tc, mr.Right - 84, mr.Y, 74, mr.Height, 2);
+                Txt(mm ? L.T("KAPALI", "MUTED") : L.T("AÇIK", "LIVE"), f, tc, mr.Right - 84, mr.Y, 74, mr.Height, 2);
                 _hits.Add(new KeyValuePair<RectangleF, string>(mr, "mic:toggle"));
             }
             y += mr.Height + 8;
@@ -2153,7 +2225,7 @@ namespace ProSystemMonitor
                 HashSet<string> fav = col == 0 ? _favs : _micFavs;
                 AudioDevice[] list = list0 == null ? new AudioDevice[0] : list0.Where(d0 => fav.Count == 0 || fav.Contains(d0.Id) || d0.IsDefault).ToArray();
                 float cx = c.X + col * (colW + 14);
-                Txt(col == 0 ? "ÇIKIŞ" : "GİRİŞ", fl, t.Dim, cx, y, colW, 18, 0);
+                Txt(col == 0 ? L.T("ÇIKIŞ", "OUTPUT") : L.T("GİRİŞ", "INPUT"), fl, t.Dim, cx, y, colW, 18, 0);
                 if (list == null || list.Length == 0 || maxRows < 1) continue;
                 var order = new List<AudioDevice>(list);
                 int di = order.FindIndex(d => d.IsDefault);
@@ -2177,7 +2249,7 @@ namespace ProSystemMonitor
             {
                 var profs = new List<Chip>();
                 for (int i2 = 0; i2 < AudioProfiles.All.Count; i2++) profs.Add(new Chip { Text = AudioProfiles.All[i2].Name, Id = "prof:" + i2, Prof = true });
-                FlowRow("PROFİL", profs, c.X, c.Bottom - 32, c.Width, c.Bottom + 4, 1);
+                FlowRow(L.T("PROFİL", "PROFILE"), profs, c.X, c.Bottom - 32, c.Width, c.Bottom + 4, 1);
             }
         }
 
@@ -2237,20 +2309,19 @@ namespace ProSystemMonitor
             Theme t = _th;
             Panel(r);
             bool on = GameSession.Active;
-            // durum noktası + oyun adı
             Color dot = on ? t.A1 : t.Dim;
             if (on && DateTime.Now.Millisecond < 500) G.FillEllipse(Br(Al(t.A1, 70)), r.X + 16, r.Y + 26, 34, 34);
             G.FillEllipse(Br(dot), r.X + 24, r.Y + 34, 18, 18);
-            string game = on ? GameSession.Game : "Oyun bekleniyor";
+            string game = on ? GameSession.Game : L.T("Oyun bekleniyor", "Waiting for game");
             Font fg = F(40, true, false);
             Txt(Fit(game, fg, 430), fg, t.Tx, r.X + 56, r.Y + 6, 440, 50, 0);
-            Txt(on ? "OYUNDA  " + Dur(GameSession.Elapsed) : "BEKLEMEDE", F(19, true, false), t.A1, r.X + 58, r.Y + 54, 440, 26, 0);
+            Txt(on ? L.T("OYUNDA  ", "IN GAME  ") + Dur(GameSession.Elapsed) : L.T("BEKLEMEDE", "STANDBY"), F(19, true, false), t.A1, r.X + 58, r.Y + 54, 440, 26, 0);
             float x = r.X + 480, w = (r.Right - 20 - x) / 7f;
             string avg = on ? I0(GameSession.AvgFps) : "--";
             string low = double.IsNaN(s.Low1) ? "--" : I0(s.Low1);
             Color hc = Hot(s.CpuTemp, 85) ? t.Crit : t.Tx, hg = Hot(s.GpuTemp, 80) ? t.Crit : t.Tx;
             double pw = (double.IsNaN(s.CpuW) ? 0 : s.CpuW) + (double.IsNaN(s.GpuW) ? 0 : s.GpuW);
-            string[] lab = { "ORT FPS", "%1 DÜŞÜK", "KARE", "PING", "CPU", "GPU", "GÜÇ" };
+            string[] lab = { L.T("ORT FPS", "AVG FPS"), L.T("%1 DÜŞÜK", "1% LOW"), L.T("KARE", "FRAME"), "PING", "CPU", "GPU", L.T("GÜÇ", "POWER") };
             string[] val = { avg, low, s.FrameMs > 0 ? D1(s.FrameMs) + " ms" : "--", double.IsNaN(s.Ping) ? "--" : I0(s.Ping) + " ms", Tc(s.CpuTemp), Tc(s.GpuTemp), I0(pw) + " W" };
             Color[] col = { t.Tx, t.Tx, t.Tx, t.Tx, hc, hg, t.Tx };
             for (int i = 0; i < 7; i++)
@@ -2264,18 +2335,18 @@ namespace ProSystemMonitor
         {
             Theme t = _th;
             bool on = GameSession.Active;
-            RectangleF c = Card(r, "FPS", on ? Shorten(GameSession.Game, 26) : "Oyun algılanmadı", s.FrameMs > 0 ? D1(s.FrameMs) + " ms" : null);
+            RectangleF c = Card(r, "FPS", on ? Shorten(GameSession.Game, 26) : L.T("Oyun algılanmadı", "No game detected"), s.FrameMs > 0 ? D1(s.FrameMs) + " ms" : null);
             float dsz = Math.Min(c.Width * 0.5f, 330f);
             Dial(c.X + dsz / 2, c.Y + dsz / 2 + 6, dsz, Ratio(s.Fps, 240), s.Fps > 0 ? I0(s.Fps) : "0", "", "FPS", dsz * 0.40f);
             float sx = c.X + dsz + 26, sw = c.Right - sx;
-            string[] lb = { "Ortalama", "%1 Düşük", "En düşük", "En yüksek", "Süre" };
+            string[] lb = { L.T("Ortalama", "Average"), L.T("%1 Düşük", "1% Low"), L.T("En düşük", "Min"), L.T("En yüksek", "Max"), L.T("Süre", "Session") };
             string[] vl = { on ? I0(GameSession.AvgFps) : "--", double.IsNaN(s.Low1) ? "--" : I0(s.Low1), on && !double.IsNaN(GameSession.MinFps) ? I0(GameSession.MinFps) : "--", on ? I0(GameSession.MaxFps) : "--", on ? Dur(GameSession.Elapsed) : "--" };
             double[] pc = { on ? Ratio(GameSession.AvgFps, 240) : 0, Ratio(s.Low1, 240), on ? Ratio(GameSession.MinFps, 240) : 0, on ? Ratio(GameSession.MaxFps, 240) : 0, 0 };
             StatColumn(sx, c.Y, sw, dsz + 6, lb, vl, pc, null);
             float gy = c.Y + dsz + 62, gh = c.Bottom - gy;
             float half = (c.Width - 20) / 2f;
-            Txt("FPS GEÇMİŞİ", F(17, true, false), t.Dim, c.X, gy - 28, half, 24, 0);
-            Txt("KARE SÜRESİ", F(17, true, false), t.Dim, c.X + half + 20, gy - 28, half, 24, 0);
+            Txt(L.T("FPS GEÇMİŞİ", "FPS HISTORY"), F(17, true, false), t.Dim, c.X, gy - 28, half, 24, 0);
+            Txt(L.T("KARE SÜRESİ", "FRAMETIME"), F(17, true, false), t.Dim, c.X + half + 20, gy - 28, half, 24, 0);
             Graph(new RectangleF(c.X, gy, half, gh), "fps", 60, 0, true, true);
             Graph(new RectangleF(c.X + half + 20, gy, half, gh), "frame", 20, 0, true, true);
         }
@@ -2283,11 +2354,10 @@ namespace ProSystemMonitor
         private void PApps(RectangleF r, Snap s)
         {
             Theme t = _th;
-            RectangleF c = Card(r, "UYGULAMALAR", null, null);
+            RectangleF c = Card(r, L.T("UYGULAMALAR", "APPLICATIONS"), null, null);
             Font f = F(20, true, false), fd = F(15, true, false), fv = F(20, true, false);
             float rowH = Math.Min(30f, (c.Height - 56f) / 7f), y = c.Y - 4;
-            // en çok CPU
-            Txt("EN ÇOK CPU", fd, t.Dim, c.X, y, 200, 20, 0); y += 20;
+            Txt(L.T("EN ÇOK CPU", "TOP CPU"), fd, t.Dim, c.X, y, 200, 20, 0); y += 20;
             for (int i = 0; i < 3; i++, y += rowH)
             {
                 ProcItem p = i < s.TopCpu.Length ? s.TopCpu[i] : null;
@@ -2297,8 +2367,7 @@ namespace ProSystemMonitor
                 Txt(p.Cpu.ToString("0.0", CultureInfo.InvariantCulture) + "%", fv, t.A1, c.Right - 66, y, 66, rowH, 2);
             }
             y += 4;
-            // en çok RAM
-            Txt("EN ÇOK RAM", fd, t.Dim, c.X, y, 200, 20, 0); y += 20;
+            Txt(L.T("EN ÇOK RAM", "TOP MEMORY"), fd, t.Dim, c.X, y, 200, 20, 0); y += 20;
             for (int i = 0; i < 3 && i < s.TopProcs.Length; i++, y += rowH)
             {
                 ProcItem p = s.TopProcs[i];
@@ -2306,7 +2375,6 @@ namespace ProSystemMonitor
                 BarAt(c.X + c.Width * 0.5f + 8, y + rowH / 2f - 4, c.Width * 0.5f - 112, Ratio(p.MemMb, Math.Max(1, s.MemTotal)) * 4, false, 8);
                 Txt(I0(p.MemMb) + " MB", fv, t.A1, c.Right - 90, y, 90, rowH, 2);
             }
-            // bu uygulama
             y += 6;
             var sr = new RectangleF(c.X, y, c.Width, Math.Min(34f, c.Bottom - y + 4));
             using (GraphicsPath sp = RR(sr, 10)) { G.FillPath(Br(Al(t.A1, 35)), sp); G.DrawPath(Pn(t.A1, 1.2f), sp); }
@@ -2325,6 +2393,245 @@ namespace ProSystemMonitor
             PNet(new RectangleF(b[2].X, b[2].Y + 235, b[2].Width, 225), s);
             RectangleF[] c = Row(790, 280, 561, 467.5f, 374, 467.5f);
             PDisks(c[0], s); PFans(c[1], s); PVolts(c[2], s); PClock(c[3], s);
+        }
+
+        // ---------------- yeni nesil modern & sade widget'lar ----------------
+        private void PHero(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            DateTime now = DateTime.Now;
+            CultureInfo ci = L.Culture;
+            float pad = 22f, innerH = r.Height - 24f, y0 = r.Y + 12f;
+            G.FillRectangle(Br(t.A1), r.X + pad, y0 + 4, 5f, Math.Max(16f, innerH - 8f));
+
+            string brand = string.IsNullOrEmpty(s.Brand) ? "SYSTEM" : s.Brand.ToUpper(ci);
+            string mobo = string.IsNullOrEmpty(s.MoboModel) ? s.Chipset : s.MoboModel;
+            string topTitle = string.IsNullOrEmpty(mobo) ? brand : (brand + "  ·  " + mobo);
+            string hwLine = ShortHw(s.CpuModel);
+            string gShort = ShortHw(s.GpuModel);
+            if (!string.IsNullOrEmpty(gShort)) hwLine = string.IsNullOrEmpty(hwLine) ? gShort : (hwLine + "   ·   " + gShort);
+            if (!string.IsNullOrEmpty(s.MemSpeed)) hwLine += "   ·   " + s.MemSpeed;
+
+            float leftW = r.Width * (r.Width >= 1100 ? 0.50f : 0.62f);
+            Font fBrand = F(Math.Min(30f, r.Height * 0.34f), true, false);
+            Font fHw = F(Math.Min(21f, r.Height * 0.24f), false, true);
+            Txt(Fit(topTitle, fBrand, leftW - 24), fBrand, t.Tx, r.X + pad + 16, y0, leftW - 24, innerH * 0.54f, 0);
+            Txt(Fit(hwLine, fHw, leftW - 24), fHw, t.Dim, r.X + pad + 16, y0 + innerH * 0.52f, leftW - 24, innerH * 0.48f, 0);
+
+            if (r.Width >= 1100)
+            {
+                float mx = r.X + leftW + 12, mw = r.Width * 0.23f;
+                G.DrawLine(Pn(Al(t.Line, 160), 1f), mx - 8, y0 + 6, mx - 8, r.Bottom - 18);
+                bool inGame = GameSession.Active || !string.IsNullOrEmpty(s.Game);
+                string midTop = inGame ? ("▶ " + Shorten(GameSession.Active ? GameSession.Game : s.Game, 22)) : (L.T("AÇIK SÜRE  ", "UPTIME  ") + s.Uptime);
+                string midBot;
+                if (!double.IsNaN(s.SysBat))
+                    midBot = L.T("PİL ", "BATTERY ") + I0(s.SysBat) + "%" + (s.SysBatChg ? " ⚡" : "");
+                else if (s.Fps > 0)
+                    midBot = I0(s.Fps) + " FPS" + (!double.IsNaN(s.Low1) ? "  ·  1% " + I0(s.Low1) : "");
+                else if (!double.IsNaN(s.Ping))
+                    midBot = "PING " + I0(s.Ping) + " ms  ·  " + s.Ip;
+                else
+                    midBot = "OnMon v" + Updater.AppVersion;
+                Txt(Fit(midTop, F(21, true, false), mw - 12), F(21, true, false), inGame ? t.A1 : t.Tx, mx + 6, y0 + 2, mw - 12, innerH * 0.52f, 0);
+                Txt(Fit(midBot, F(18, false, true), mw - 12), F(18, false, true), t.Dim, mx + 6, y0 + innerH * 0.52f, mw - 12, innerH * 0.46f, 0);
+            }
+
+            float rightW = r.Width * 0.25f;
+            string clk = now.ToString("HH:mm", ci);
+            string dt = now.ToString("d MMM dddd", ci) + (Extras.WxTemp != "--" ? "  ·  " + Extras.WxTemp : "");
+            Font fClk = F(Math.Min(40f, r.Height * 0.44f), true, false);
+            Font fDt = F(Math.Min(19f, r.Height * 0.22f), false, true);
+            Txt(clk, fClk, t.A1, r.Right - pad - rightW, y0 - 2, rightW, innerH * 0.58f, 2);
+            Txt(Fit(dt, fDt, rightW), fDt, t.Dim, r.Right - pad - rightW, y0 + innerH * 0.55f, rightW, innerH * 0.45f, 2);
+        }
+
+        private void PDualRing(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            float pad = 22f, halfW = (r.Width - pad * 2 - 28f) / 2f;
+            float midX = r.X + r.Width / 2f;
+            G.DrawLine(Pn(Al(t.Line, 170), 1.2f), midX, r.Y + 18, midX, r.Bottom - 18);
+
+            for (int side = 0; side < 2; side++)
+            {
+                bool isCpu = side == 0;
+                float x = isCpu ? (r.X + pad) : (midX + 14f);
+                float y = r.Y + 16f, h = r.Height - 32f;
+                string tag = isCpu ? "CPU" : "GPU";
+                string model = ShortHw(isCpu ? s.CpuModel : s.GpuModel);
+                double load = isCpu ? s.CpuLoad : s.GpuLoad;
+                double temp = isCpu ? s.CpuTemp : s.GpuTemp;
+                bool hot = Hot(temp, isCpu ? 85 : 83);
+
+                G.FillRectangle(Br(t.A1), x, y + 4, 4f, 26f);
+                Font fTag = F(26, true, false), fMod = F(20, false, true), fTmp = F(26, true, false);
+                Txt(tag, fTag, t.Tx, x + 12, y, 80, 32, 0);
+                float tmpW = TW(Tc(temp), fTmp) + 10;
+                Txt(Tc(temp), fTmp, hot ? t.Crit : t.A1, x + halfW - tmpW, y, tmpW, 32, 2);
+                float modX = x + 82, modW = Math.Max(20f, halfW - 88f - tmpW);
+                Txt(Fit(model, fMod, modW), fMod, t.Dim, modX, y + 2, modW, 30, 0);
+
+                float bodyY = y + 44f, bodyH = Math.Max(60f, h - 44f);
+                string[] lbs = isCpu
+                    ? new[] { L.T("Saat", "Clock"), L.T("Güç", "Power"), "Fan" }
+                    : new[] { L.T("Saat", "Clock"), L.T("Güç", "Power"), "VRAM" };
+                string[] vls = isCpu
+                    ? new[] { Mhz(s.CpuClock), Wt(s.CpuW), Rpm(s.CpuFan) }
+                    : new[] { Mhz(s.GpuClock), Wt(s.GpuW), s.VramTotal > 0 ? Gb(s.VramUsed / 1024.0) + " / " + Gb(s.VramTotal / 1024.0) : Mb(s.VramUsed) };
+                double[] pcs = isCpu
+                    ? new[] { Ratio(s.CpuClock, 6000), Ratio(s.CpuW, 250), Ratio(s.CpuFan, 3000) }
+                    : new[] { Ratio(s.GpuClock, 3000), Ratio(s.GpuW, 450), Ratio(s.VramUsed, s.VramTotal) };
+
+                if (halfW >= 380f && bodyH < halfW * 0.95f)
+                {
+                    float dsz = Math.Min(bodyH, halfW * 0.44f);
+                    Dial(x + dsz / 2f, bodyY + bodyH / 2f, dsz, load, I0(load), "%", L.T("YÜK", "LOAD"), dsz * 0.30f);
+                    float sx = x + dsz + 20f, sw = Math.Max(60f, x + halfW - sx);
+                    StatColumn(sx, bodyY, sw, bodyH, lbs, vls, pcs, null);
+                }
+                else
+                {
+                    float dsz = Math.Min(halfW * 0.78f, bodyH * 0.54f);
+                    Dial(x + halfW / 2f, bodyY + dsz / 2f, dsz, load, I0(load), "%", L.T("YÜK", "LOAD"), dsz * 0.30f);
+                    float sy = bodyY + dsz + 12f, sh = Math.Max(50f, bodyH - dsz - 12f);
+                    StatColumn(x, sy, halfW, sh, lbs, vls, pcs, null);
+                }
+            }
+        }
+
+        private void PMiniCpu(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            float pad = 20f, x = r.X + pad, w = r.Width - pad * 2;
+            if (r.Height >= 150)
+                Graph(new RectangleF(x, r.Bottom - r.Height * 0.42f, w, r.Height * 0.26f), "cpuTemp", 60, 0, false, true);
+
+            Font fTag = F(22, true, false), fSub = F(18, false, true), fTmp = F(28, true, false);
+            Txt("CPU", fTag, t.A1, x, r.Y + 14, 70, 28, 0);
+            bool hot = Hot(s.CpuTemp, 85);
+            string tmp = Tc(s.CpuTemp);
+            float tw = TW(tmp, fTmp) + 8;
+            Txt(tmp, fTmp, hot ? t.Crit : t.Tx, r.Right - pad - tw, r.Y + 12, tw, 32, 2);
+            Txt(Fit(ShortHw(s.CpuModel), fSub, Math.Max(20f, w - 76 - tw)), fSub, t.Dim, x + 66, r.Y + 16, Math.Max(20f, w - 76 - tw), 26, 0);
+
+            float bigSz = Math.Max(34f, Math.Min(68f, r.Height * 0.30f));
+            Txt(Pct(s.CpuLoad), F(bigSz, true, false), t.Tx, x, r.Y + 46, w * 0.65f, bigSz * 1.15f, 0);
+            BarAt(x, r.Bottom - 48, w, s.CpuLoad, s.CpuLoad > 92, 9f);
+            Font fFoot = F(19, true, false);
+            Txt(Mhz(s.CpuClock), fFoot, t.Dim, x, r.Bottom - 34, w * 0.55f, 24, 0);
+            Txt(Wt(s.CpuW), fFoot, t.A1, x + w * 0.45f, r.Bottom - 34, w * 0.55f, 24, 2);
+        }
+
+        private void PMiniGpu(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            float pad = 20f, x = r.X + pad, w = r.Width - pad * 2;
+            if (r.Height >= 150)
+                Graph(new RectangleF(x, r.Bottom - r.Height * 0.42f, w, r.Height * 0.26f), "gpuLoad", 100, 100, false, true);
+
+            Font fTag = F(22, true, false), fSub = F(18, false, true), fTmp = F(28, true, false);
+            Txt("GPU", fTag, t.A1, x, r.Y + 14, 70, 28, 0);
+            bool hot = Hot(s.GpuTemp, 83);
+            string tmp = Tc(s.GpuTemp);
+            float tw = TW(tmp, fTmp) + 8;
+            Txt(tmp, fTmp, hot ? t.Crit : t.Tx, r.Right - pad - tw, r.Y + 12, tw, 32, 2);
+            Txt(Fit(ShortHw(s.GpuModel), fSub, Math.Max(20f, w - 76 - tw)), fSub, t.Dim, x + 66, r.Y + 16, Math.Max(20f, w - 76 - tw), 26, 0);
+
+            float bigSz = Math.Max(34f, Math.Min(68f, r.Height * 0.30f));
+            Txt(Pct(s.GpuLoad), F(bigSz, true, false), t.Tx, x, r.Y + 46, w * 0.65f, bigSz * 1.15f, 0);
+            BarAt(x, r.Bottom - 48, w, s.GpuLoad, s.GpuLoad > 95, 9f);
+            Font fFoot = F(19, true, false);
+            string vram = s.VramTotal > 0 ? Gb(s.VramUsed / 1024.0) + " VRAM" : Mhz(s.GpuClock);
+            Txt(vram, fFoot, t.Dim, x, r.Bottom - 34, w * 0.60f, 24, 0);
+            Txt(Wt(s.GpuW), fFoot, t.A1, x + w * 0.40f, r.Bottom - 34, w * 0.60f, 24, 2);
+        }
+
+        private void PMiniRam(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            float pad = 20f, x = r.X + pad, w = r.Width - pad * 2;
+            Font fTag = F(22, true, false), fSub = F(18, false, true), fR = F(24, true, false);
+            Txt("RAM", fTag, t.A1, x, r.Y + 14, 74, 28, 0);
+            string rTop = !double.IsNaN(s.DimmTemp) ? Tc(s.DimmTemp) : Gb(s.MemTotal / 1024.0);
+            float tw = TW(rTop, fR) + 8;
+            Txt(rTop, fR, t.Tx, r.Right - pad - tw, r.Y + 14, tw, 28, 2);
+            string spd = string.IsNullOrEmpty(s.MemSpeed) ? L.T("BELLEK", "MEMORY") : s.MemSpeed;
+            Txt(Fit(spd, fSub, Math.Max(20f, w - 80 - tw)), fSub, t.Dim, x + 70, r.Y + 16, Math.Max(20f, w - 80 - tw), 26, 0);
+
+            float bigSz = Math.Max(32f, Math.Min(60f, r.Height * 0.28f));
+            Txt(Gb(s.MemUsed / 1024.0), F(bigSz, true, false), t.Tx, x, r.Y + 48, w * 0.72f, bigSz * 1.15f, 0);
+            Txt(Pct(s.MemLoad), F(26, true, false), s.MemLoad > 90 ? t.Crit : t.A1, x + w * 0.65f, r.Y + 58, w * 0.35f, 34, 2);
+
+            BarAt(x, r.Bottom - 48, w, s.MemLoad, s.MemLoad > 90, 9f);
+            Font fFoot = F(19, true, false);
+            Txt(L.T("Boş ", "Free ") + Gb(s.MemFree / 1024.0), fFoot, t.Dim, x, r.Bottom - 34, w * 0.52f, 24, 0);
+            double io = (double.IsNaN(s.DiskR) ? 0 : s.DiskR) + (double.IsNaN(s.DiskW) ? 0 : s.DiskW);
+            Txt("I/O " + (double.IsNaN(s.DiskR) && double.IsNaN(s.DiskW) ? "--" : D1(io) + " MB/s"), fFoot, t.A1, x + w * 0.45f, r.Bottom - 34, w * 0.55f, 24, 2);
+        }
+
+        private void PThermals(RectangleF r, Snap s)
+        {
+            RectangleF c = Card(r, L.T("TERMAL & SOĞUTMA", "THERMALS & COOLING"), L.T("Sensör Matrisi", "Sensor Matrix"), Tc(s.CpuTemp) + " · " + Tc(s.GpuTemp));
+            Theme t = _th;
+            float colW = (c.Width - 28f) / 2f;
+            G.DrawLine(Pn(Al(t.Line, 150), 1f), c.X + colW + 14f, c.Y + 4, c.X + colW + 14f, c.Bottom - 4);
+
+            double auxTemp = !double.IsNaN(s.DimmTemp) ? s.DimmTemp : (s.Drives.Length > 0 ? s.Drives[0].TempC : double.NaN);
+            string auxName = !double.IsNaN(s.DimmTemp) ? "RAM DIMM" : L.T("NVMe / Disk", "NVMe / Drive");
+
+            string[] tL = { L.T("CPU Paket", "CPU Package"), L.T("CPU Diyot", "CPU Diode"), L.T("GPU Çekirdek", "GPU Core"), "GPU Hotspot", L.T("Anakart", "Motherboard"), auxName };
+            string[] tV = { Tc(s.CpuTemp), Tc(s.CpuDiode), Tc(s.GpuTemp), Tc(s.GpuHot), Tc(s.MoboTemp), Tc(auxTemp) };
+            double[] tP = { Ratio(s.CpuTemp, 100), Ratio(s.CpuDiode, 100), Ratio(s.GpuTemp, 100), Ratio(s.GpuHot, 110), Ratio(s.MoboTemp, 90), Ratio(auxTemp, 85) };
+            bool[] tH = { Hot(s.CpuTemp, 85), Hot(s.CpuDiode, 88), Hot(s.GpuTemp, 83), Hot(s.GpuHot, 95), Hot(s.MoboTemp, 75), Hot(auxTemp, 70) };
+
+            double totW = (double.IsNaN(s.CpuW) ? 0 : s.CpuW) + (double.IsNaN(s.GpuW) ? 0 : s.GpuW);
+            string[] fL = { "CPU Fan", L.T("Kasa 1", "Chassis 1"), L.T("Kasa 2", "Chassis 2"), L.T("AIO Pompa", "AIO Pump"), "GPU Fan", L.T("Toplam Güç", "Total Power") };
+            string[] fV = { Rpm(s.CpuFan), Rpm(s.Cha1), Rpm(s.Cha2), Rpm(s.Pump), Rpm(s.GpuFan), I0(totW) + " W" };
+            double[] fP = { Ratio(s.CpuFan, 3000), Ratio(s.Cha1, 3000), Ratio(s.Cha2, 3000), Ratio(s.Pump, 4000), Ratio(s.GpuFan, 3500), Ratio(totW, 650) };
+
+            StatColumn(c.X, c.Y, colW, c.Height, tL, tV, tP, tH);
+            StatColumn(c.X + colW + 28f, c.Y, colW, c.Height, fL, fV, fP, null);
+        }
+
+        private void PPerfStrip(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            Panel(r);
+            float pad = 18f, colW = (r.Width - pad * 2) / 5f;
+            string[] tags = { "CPU", "GPU", "RAM", "FPS", L.T("AĞ", "NET") };
+            string[] bigs = {
+                Pct(s.CpuLoad),
+                Pct(s.GpuLoad),
+                Pct(s.MemLoad),
+                s.Fps > 0 ? I0(s.Fps) : "--",
+                Spd(s.NetDown)
+            };
+            string[] subs = {
+                Tc(s.CpuTemp) + "  ·  " + Wt(s.CpuW),
+                Tc(s.GpuTemp) + "  ·  " + Wt(s.GpuW),
+                Gb(s.MemUsed / 1024.0) + " / " + Gb(s.MemTotal / 1024.0),
+                s.FrameMs > 0 ? D1(s.FrameMs) + " ms" + (!double.IsNaN(s.Low1) ? " · 1% " + I0(s.Low1) : "") : L.T("Masaüstü", "Desktop"),
+                "▲ " + Spd(s.NetUp) + (!double.IsNaN(s.Ping) ? " · " + I0(s.Ping) + " ms" : "")
+            };
+            double[] pcts = { s.CpuLoad, s.GpuLoad, s.MemLoad, Ratio(s.Fps, 240), Ratio(s.NetDown, 12800) };
+            bool[] hots = { Hot(s.CpuTemp, 85), Hot(s.GpuTemp, 83), s.MemLoad > 90, false, false };
+
+            for (int i = 0; i < 5; i++)
+            {
+                float x = r.X + pad + i * colW;
+                if (i > 0) G.DrawLine(Pn(Al(t.Line, 160), 1f), x - 8, r.Y + 14, x - 8, r.Bottom - 14);
+                float iw = colW - 18f;
+                Txt(tags[i], F(18, true, false), t.A1, x, r.Y + 10, iw * 0.4f, 24, 0);
+                Txt(Fit(bigs[i], F(30, true, false), iw * 0.65f), F(30, true, false), hots[i] ? t.Crit : t.Tx, x + iw * 0.35f, r.Y + 6, iw * 0.65f, 34, 2);
+                BarAt(x, r.Y + r.Height * 0.54f, iw, pcts[i], hots[i], 7f);
+                Txt(Fit(subs[i], F(17, false, true), iw), F(17, false, true), t.Dim, x, r.Bottom - 30, iw, 24, 0);
+            }
         }
     }
 }

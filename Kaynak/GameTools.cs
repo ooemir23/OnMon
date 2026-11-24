@@ -192,7 +192,12 @@ namespace ProSystemMonitor
     internal static class Peripherals
     {
         public static volatile KeyValuePair<string, int>[] Items = new KeyValuePair<string, int>[0];
-        public static volatile string Status = "Henüz okunmadı";
+        private static string _statusRaw = "";
+        public static string Status
+        {
+            get { return string.IsNullOrEmpty(_statusRaw) ? L.T("Henüz okunmadı", "Not polled yet") : _statusRaw; }
+            set { _statusRaw = value; }
+        }
         private static int _started;
         private static volatile bool _busy;
 
@@ -204,12 +209,12 @@ namespace ProSystemMonitor
         private static void RogPublish()
         {
             bool known = _inMask >= 0 && !RogOffline;
-            string sl = "Cetra Sol" + ((known && (_inMask & 0x01) != 0) ? " \u26A1" : "");
-            string sr = "Cetra Sağ" + ((known && (_inMask & 0x10) != 0) ? " \u26A1" : "");
+            string sl = L.T("Cetra Sol", "Cetra L") + ((known && (_inMask & 0x01) != 0) ? " \u26A1" : "");
+            string sr = L.T("Cetra Sağ", "Cetra R") + ((known && (_inMask & 0x10) != 0) ? " \u26A1" : "");
             _rog = new[] {
                 new KeyValuePair<string, int>(sl, _rl),
                 new KeyValuePair<string, int>(sr, _rr),
-                new KeyValuePair<string, int>("Cetra Kutu", _rc) };
+                new KeyValuePair<string, int>(L.T("Cetra Kutu", "Cetra Case"), _rc) };
             Combine();
         }
         private static void Combine() { Items = _rog.Concat(_pnp).ToArray(); }
@@ -378,9 +383,9 @@ namespace ProSystemMonitor
                         if (bat >= 0) sb.AppendLine("   Battery = " + bat + "%");
                     }
                     File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
-                    Status = "piller.txt yazıldı";
+                    Status = L.T("piller.txt yazıldı", "piller.txt written");
                 }
-                catch (Exception ex) { Status = "Yazılamadı: " + ex.Message; }
+                catch (Exception ex) { Status = L.T("Yazılamadı: ", "Write failed: ") + ex.Message; }
             }) { IsBackground = true };
             t.Start();
         }
@@ -445,9 +450,9 @@ namespace ProSystemMonitor
                             }
                         }
                     }
-                    Status = "hid.txt yazıldı";
+                    Status = L.T("hid.txt yazıldı", "hid.txt written");
                 }
-                catch (Exception ex) { sb.AppendLine("HATA: " + ex); Status = "HID hatası: " + ex.Message; }
+                catch (Exception ex) { sb.AppendLine("HATA: " + ex); Status = L.T("HID hatası: ", "HID error: ") + ex.Message; }
                 try { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hid.txt"), sb.ToString(), Encoding.UTF8); } catch { }
             }) { IsBackground = true };
             t.Start();
@@ -478,9 +483,9 @@ namespace ProSystemMonitor
                         list.Add(new KeyValuePair<string, int>(name, v));
                 }
                 _pnp = list.ToArray(); Combine();
-                Status = list.Count > 0 ? list.Count + " cihaz" : "Pil bilgisi veren cihaz bulunamadı";
+                Status = list.Count > 0 ? list.Count + L.T(" cihaz", " devices") : L.T("Pil bilgisi veren cihaz bulunamadı", "No battery-reporting peripherals found");
             }
-            catch (Exception ex) { Status = "Okunamadı: " + ex.Message; }
+            catch (Exception ex) { Status = L.T("Okunamadı: ", "Read error: ") + ex.Message; }
             finally { _busy = false; }
         }
     }

@@ -38,6 +38,7 @@ namespace ProSystemMonitor
         [STAThread]
         static void Main(string[] args)
         {
+            L.Init();
             if (args != null && args.Contains("--selftest"))
             {
                 int rc = RunSelfTest();
@@ -140,6 +141,7 @@ namespace ProSystemMonitor
 
         private static int RunSelfTest()
         {
+            string prevLang = L.Lang;
             try
             {
                 Application.EnableVisualStyles();
@@ -152,24 +154,72 @@ namespace ProSystemMonitor
                 Console.WriteLine("CfgMgr32_Refresh_Ms=" + sw.ElapsedMilliseconds + " Status=" + Peripherals.Status);
                 if (sw.ElapsedMilliseconds > 5000) throw new Exception("CfgMgr32 slow: " + sw.ElapsedMilliseconds);
 
+                // 2. Universal multi-GPU scoring & brand detection checks
+                if (TelemetryCollector.ScoreGpuName("AMD Radeon RX 7900 XTX") <= TelemetryCollector.ScoreGpuName("AMD Radeon(TM) Graphics"))
+                    throw new Exception("AMD discrete vs iGPU score failed");
+                if (TelemetryCollector.ScoreGpuName("NVIDIA GeForce RTX 4070 Laptop GPU") <= TelemetryCollector.ScoreGpuName("Intel(R) Iris(R) Xe Graphics"))
+                    throw new Exception("NVIDIA discrete vs Intel iGPU score failed");
+                if (TelemetryCollector.ScoreGpuName("Intel(R) Arc(TM) B580 Graphics") <= TelemetryCollector.ScoreGpuName("Intel(R) UHD Graphics 770"))
+                    throw new Exception("Intel Arc discrete vs UHD iGPU score failed");
+                if (TelemetryCollector.ScoreGpuName("Parsec Virtual Display Adapter") >= 0)
+                    throw new Exception("Virtual display adapter not filtered");
+
+                if (TelemetryCollector.ResolveBrandName("LENOVO", "82WQ Legion Pro 7", "LENOVO", "LNVNB161216") != "LENOVO")
+                    throw new Exception("Brand LENOVO failed");
+                if (TelemetryCollector.ResolveBrandName("Micro-Star International Co., Ltd.", "MS-7E16", "Micro-Star International", "MAG X670E TOMAHAWK") != "MSI")
+                    throw new Exception("Brand MSI failed");
+                if (TelemetryCollector.ResolveBrandName("HP", "OMEN by HP Gaming Laptop 16", "HP", "8BCA") != "HP")
+                    throw new Exception("Brand HP failed");
+                if (TelemetryCollector.ResolveBrandName("MONSTER", "Tulpar T7 V20.6", "MONSTER", "Tulpar") != "MONSTER")
+                    throw new Exception("Brand MONSTER failed");
+                if (TelemetryCollector.ResolveBrandName("System manufacturer", "System Product Name", "Gigabyte Technology Co., Ltd.", "B650 AORUS ELITE AX") != "GIGABYTE")
+                    throw new Exception("Brand GIGABYTE failed");
+
                 using (var dash = new DashboardForm())
                 {
                     dash.WReg();
-                    // 2. Thumbnails for 5 built-in layouts
-                    string[] ids = { "classic", "hud", "cockpit", "aida", "studio" };
-                    foreach (string id in ids)
+                    string[] allBuiltIn = {
+                        "zen", "minimalring", "bento", "esports", "extreme", "creator", "panoramic", "vertical",
+                        "classic", "hud", "cockpit", "aida", "studio"
+                    };
+
+                    // 3. Test all 13 built-in layouts + all UI forms in both TR and EN
+                    foreach (string lang in new[] { "tr", "en" })
                     {
-                        var ws = dash.WTemplate(id, 1920, 1080);
-                        using (Bitmap bmp = dash.RenderLayoutThumbnail(ws, 1920, 1080, Themes.All[0], 0, "", 1f, 1f, 240, 135))
+                        L.Lang = lang;
+                        foreach (string id in allBuiltIn)
                         {
-                            if (bmp == null || bmp.Width != 240 || bmp.Height != 135)
-                                throw new Exception("Thumbnail failed for " + id);
+                            var ws = dash.WTemplate(id, 1920, 1080);
+                            int visCount = 0;
+                            foreach (WInst x in ws)
+                            {
+                                if (!x.Vis) continue;
+                                visCount++;
+                                if (x.X < 0 || x.Y < 0 || x.X + x.W > 1920.5f || x.Y + x.H > 1080.5f)
+                                    throw new Exception("Layout " + id + " out of 1920x1080 bounds: " + x.Id + " (" + x.X + "," + x.Y + "," + x.W + "," + x.H + ")");
+                            }
+                            if (visCount == 0) throw new Exception("Layout " + id + " has 0 visible widgets");
+                            using (Bitmap bmp = dash.RenderLayoutThumbnail(ws, 1920, 1080, Themes.All[0], 0, "", 1f, 1f, 240, 135))
+                            {
+                                if (bmp == null || bmp.Width != 240 || bmp.Height != 135)
+                                    throw new Exception("Thumbnail failed for " + id + " (" + lang + ")");
+                            }
+                        }
+
+                        using (var st = new StudioForm(dash))
+                        using (var gl = new GalleryForm(dash))
+                        using (var sf = new SettingsForm(dash))
+                        {
+                            if (st.Controls.Count == 0 || gl.Controls.Count == 0 || sf.Controls.Count == 0)
+                                throw new Exception("Forms empty (" + lang + ")");
+                            for (int pi = 0; pi < sf.PageCount; pi++)
+                                sf.ShowPage(pi);
                         }
                     }
 
-                    // 3. ONMON-SABLON 2 export + round-trip + scale 1920x1080 -> 800x480
-                    var srcWidgets = dash.WTemplate("classic", 1920, 1080);
-                    string txt = dash.BuildTemplateText("TestLayout", "TestUser", "TestDesc", srcWidgets, 1920, 1080, Themes.All[2], 0, "", 1.0f, 1.0f, true, false, 4);
+                    // 4. ONMON-SABLON 2 export + round-trip + scale 1920x1080 -> 800x480
+                    var srcWidgets = dash.WTemplate("bento", 1920, 1080);
+                    string txt = dash.BuildTemplateText("TestBento", "TestUser", "TestDesc", srcWidgets, 1920, 1080, Themes.All[2], 0, "", 1.0f, 1.0f, true, false, 4);
                     if (!txt.StartsWith("ONMON-SABLON 2") || txt.IndexOf("thumb=") < 0)
                         throw new Exception("Invalid ONMON-SABLON 2 header");
 
@@ -178,7 +228,7 @@ namespace ProSystemMonitor
                     {
                         File.WriteAllText(tmp, txt, new UTF8Encoding(false));
                         LayoutMeta meta = dash.ReadTemplateMeta(tmp, true);
-                        if (meta == null || meta.Thumb == null || meta.Name != "TestLayout" || meta.Author != "TestUser" || meta.WidgetCount == 0)
+                        if (meta == null || meta.Thumb == null || meta.Name != "TestBento" || meta.Author != "TestUser" || meta.WidgetCount == 0)
                             throw new Exception("ReadTemplateMeta failed");
                         if (meta.Thumb != null) meta.Thumb.Dispose();
 
@@ -188,7 +238,6 @@ namespace ProSystemMonitor
                         if (cw != 1920 || ch != 1080 || themeId != Themes.All[2].Id || loaded.Count == 0)
                             throw new Exception("Round-trip mismatch");
 
-                        // Scale simulation 1920x1080 -> 800x480 (visible widgets must remain in bounds)
                         float kx = 800f / cw, ky = 480f / ch;
                         foreach (WInst x in loaded)
                         {
@@ -199,14 +248,6 @@ namespace ProSystemMonitor
                         }
                     }
                     finally { try { File.Delete(tmp); } catch { } }
-
-                    // 4. StudioForm & GalleryForm instantiation
-                    using (var st = new StudioForm(dash))
-                    using (var gl = new GalleryForm(dash))
-                    {
-                        if (st.Controls.Count == 0 || gl.Controls.Count == 0)
-                            throw new Exception("Forms empty");
-                    }
                 }
 
                 Console.WriteLine("SELFTEST_OK");
@@ -216,6 +257,10 @@ namespace ProSystemMonitor
             {
                 Console.WriteLine("SELFTEST_FAIL: " + ex);
                 return 1;
+            }
+            finally
+            {
+                L.Lang = prevLang;
             }
         }
 
@@ -664,22 +709,26 @@ namespace ProSystemMonitor
         private static void TrayUpdateCheck()
         {
             if (!Updater.Check()) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Warning); }); return; }
-            if (!Updater.UpdateAvailable) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status + "\r\n\r\nSon değişiklikler:\r\n" + Updater.Changelog, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information); }); return; }
+            if (!Updater.UpdateAvailable) { _ui.BeginInvoke((MethodInvoker)delegate { MessageBox.Show(Updater.Status + "\r\n\r\n" + L.T("Son değişiklikler:\r\n", "Recent changes:\r\n") + Updater.Changelog, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information); }); return; }
             _ui.BeginInvoke((MethodInvoker)delegate
             {
-                string msg = "Yeni sürüm: v" + Updater.LatestVersion + " (şu an v" + Updater.AppVersion + ")\r\n\r\n" + Updater.LatestNotes + "\r\n\r\nŞimdi güncellenip yeniden başlatılsın mı?";
+                string msg = L.T(
+                    "Yeni sürüm: v" + Updater.LatestVersion + " (şu an v" + Updater.AppVersion + ")\r\n\r\n" + Updater.LatestNotes + "\r\n\r\nŞimdi güncellenip yeniden başlatılsın mı?",
+                    "New version: v" + Updater.LatestVersion + " (current v" + Updater.AppVersion + ")\r\n\r\n" + Updater.LatestNotes + "\r\n\r\nUpdate and restart now?");
                 if (MessageBox.Show(msg, "OnMon", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
-                    ThreadPool.QueueUserWorkItem(_ => { string err = Updater.ApplyUpdate(); if (err != null) ShowBalloon("Güncelleme başarısız: " + err); });
+                    ThreadPool.QueueUserWorkItem(_ => { string err = Updater.ApplyUpdate(); if (err != null) ShowBalloon(L.T("Güncelleme başarısız: ", "Update failed: ") + err); });
             });
         }
 
         public static void RequestSensorDump() { if (_collector != null) _collector.RequestSensorDump(); }
-        public static string SensorReport() { return _collector != null ? _collector.SensorReportText() : "(toplayıcı hazır değil)"; }
+        public static string SensorReport() { return _collector != null ? _collector.SensorReportText() : L.T("(toplayıcı hazır değil)", "(collector not ready)"); }
 
         /// <summary>Kullanıcı çıkış isterse önce onay sorar.</summary>
         public static void ExitAppAsk()
         {
-            var r = MessageBox.Show("OnMon'dan çıkılsın mı?\n\nPano ve tepsi simgesi kapanır.", "Çıkış", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2, MessageBoxOptions.DefaultDesktopOnly);
+            var r = MessageBox.Show(
+                L.T("OnMon'dan çıkılsın mı?\n\nPano ve tepsi simgesi kapanır.", "Exit OnMon?\n\nDashboard and tray icon will close."),
+                L.T("Çıkış", "Exit"), MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2, MessageBoxOptions.DefaultDesktopOnly);
             if (r == DialogResult.Yes) ExitApp();
         }
 
@@ -741,85 +790,111 @@ namespace ProSystemMonitor
                 Icon = CreateRogTrayIcon(),
                 Visible = true
             };
-
-            var menu = new ContextMenuStrip();
-            var open2ndItem = new ToolStripMenuItem("Panoyu Aç (yerel, 2. monitör)");
-            open2ndItem.Font = new Font(open2ndItem.Font, FontStyle.Bold);
-            open2ndItem.Click += (s, e) => LaunchDashboardOnSecondMonitor();
-
-            var studioItem = new ToolStripMenuItem("🎨 Düzen Stüdyosu…");
-            studioItem.Click += (s, e) => { if (Dash != null && !Dash.IsDisposed) _ui.BeginInvoke((MethodInvoker)delegate { Dash.OpenStudio(); }); };
-
-            var galleryItem = new ToolStripMenuItem("📁 Düzen Galerisi / Düzen Ekle…");
-            galleryItem.Click += (s, e) => { if (Dash != null && !Dash.IsDisposed) _ui.BeginInvoke((MethodInvoker)delegate { Dash.OpenGallery(); }); };
-
-            var openBrowserItem = new ToolStripMenuItem("Tarayıcıda Aç (127.0.0.1:" + Port + ")");
-            openBrowserItem.Click += (s, e) => LaunchBrowserDashboard();
-
-            var dumpItem = new ToolStripMenuItem("Sensör Listesini Kaydet (sensorler.txt)");
-            dumpItem.Click += (s, e) => { if (_collector != null) _collector.RequestSensorDump(); };
-
-            try { AlertsEnabled = !File.Exists(AlertFlagPath); } catch { }
-            var alertItem = new ToolStripMenuItem("Isı Uyarıları (CPU 90° / GPU 85° / Disk 70°)") { Checked = AlertsEnabled };
-            alertItem.Click += (s, e) => { SetAlertsEnabled(!AlertsEnabled); alertItem.Checked = AlertsEnabled; };
-
-            var autoItem = new ToolStripMenuItem("Windows ile Başlat");
-            autoItem.Click += (s, e) =>
-            {
-                bool want = !autoItem.Checked;
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    bool ok = SetAutostart(want);
-                    ShowBalloon(ok ? (want ? "Windows ile başlatma açıldı." : "Windows ile başlatma kapatıldı.") : "İşlem başarısız (yönetici izni gerekli).");
-                });
-                autoItem.Checked = want;
-            };
-            menu.Opening += (s, e) => { try { autoItem.Checked = IsAutostartEnabled(); } catch { } };
-
-            menu.Items.Add(open2ndItem);
-            menu.Items.Add(studioItem);
-            menu.Items.Add(galleryItem);
-            menu.Items.Add("Edge ile Aç (daha çok RAM)", null, (s, e) => LaunchEdgeDashboard());
-            menu.Items.Add(openBrowserItem);
-            var sndItem = new ToolStripMenuItem("Ses Cihazı");
-            sndItem.DropDownOpening += (s, e) =>
-            {
-                sndItem.DropDownItems.Clear();
-                AudioSwitch.Refresh();
-                foreach (AudioDevice d in AudioSwitch.Devices)
-                {
-                    AudioDevice dd = d;
-                    var it = new ToolStripMenuItem(d.Name) { Checked = d.IsDefault };
-                    it.Click += (s2, e2) => ThreadPool.QueueUserWorkItem(x => AudioSwitch.SetDefault(dd.Id));
-                    sndItem.DropDownItems.Add(it);
-                }
-                if (sndItem.DropDownItems.Count == 0) sndItem.DropDownItems.Add(new ToolStripMenuItem("Cihaz bulunamadı") { Enabled = false });
-            };
-            sndItem.DropDownItems.Add("...");
-            menu.Items.Add(sndItem);
-            menu.Items.Add(new ToolStripSeparator());
-            var updItem = new ToolStripMenuItem("Güncellemeleri Denetle…");
-            updItem.Click += (s, e) => ThreadPool.QueueUserWorkItem(_ => TrayUpdateCheck());
-            menu.Items.Add(updItem);
-            menu.Items.Add(autoItem);
-            menu.Items.Add(alertItem);
-            menu.Items.Add(dumpItem);
-
-            if (!IsAdministrator())
-            {
-                var adminItem = new ToolStripMenuItem("Yönetici Olarak Yeniden Başlat (tam sensör erişimi)");
-                adminItem.Click += (s, e) => RestartAsAdmin();
-                menu.Items.Add(adminItem);
-            }
-
-            var exitItem = new ToolStripMenuItem("Çıkış");
-            exitItem.Click += (s, e) => ExitAppAsk();
-
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(exitItem);
-
-            _trayIcon.ContextMenuStrip = menu;
             _trayIcon.DoubleClick += (s, e) => LaunchDashboardOnSecondMonitor();
+            RebuildTrayMenu();
+        }
+
+        public static void RebuildTrayMenu()
+        {
+            if (_trayIcon == null) return;
+            Action build = delegate
+            {
+                if (_trayIcon == null) return;
+                ContextMenuStrip oldMenu = _trayIcon.ContextMenuStrip;
+                var menu = new ContextMenuStrip();
+
+                var open2ndItem = new ToolStripMenuItem(L.T("Panoyu Aç (yerel, 2. monitör)", "Open Dashboard (local, 2nd monitor)"));
+                open2ndItem.Font = new Font(open2ndItem.Font, FontStyle.Bold);
+                open2ndItem.Click += (s, e) => LaunchDashboardOnSecondMonitor();
+
+                var studioItem = new ToolStripMenuItem(L.T("🎨 Düzen Stüdyosu…", "🎨 Layout Studio…"));
+                studioItem.Click += (s, e) => { if (Dash != null && !Dash.IsDisposed) _ui.BeginInvoke((MethodInvoker)delegate { Dash.OpenStudio(); }); };
+
+                var galleryItem = new ToolStripMenuItem(L.T("📁 Düzen Galerisi / Düzen Ekle…", "📁 Layout Gallery / Import…"));
+                galleryItem.Click += (s, e) => { if (Dash != null && !Dash.IsDisposed) _ui.BeginInvoke((MethodInvoker)delegate { Dash.OpenGallery(); }); };
+
+                var openBrowserItem = new ToolStripMenuItem(L.T("Tarayıcıda Aç (127.0.0.1:" + Port + ")", "Open in Browser (127.0.0.1:" + Port + ")"));
+                openBrowserItem.Click += (s, e) => LaunchBrowserDashboard();
+
+                var dumpItem = new ToolStripMenuItem(L.T("Sensör Listesini Kaydet (sensorler.txt)", "Save Sensor Dump (sensorler.txt)"));
+                dumpItem.Click += (s, e) => { if (_collector != null) _collector.RequestSensorDump(); };
+
+                try { AlertsEnabled = !File.Exists(AlertFlagPath); } catch { }
+                var alertItem = new ToolStripMenuItem(L.T("Isı Uyarıları (CPU 90° / GPU 85° / Disk 70°)", "Thermal Alerts (CPU 90° / GPU 85° / Disk 70°)")) { Checked = AlertsEnabled };
+                alertItem.Click += (s, e) => { SetAlertsEnabled(!AlertsEnabled); alertItem.Checked = AlertsEnabled; };
+
+                var autoItem = new ToolStripMenuItem(L.T("Windows ile Başlat", "Start with Windows"));
+                autoItem.Click += (s, e) =>
+                {
+                    bool want = !autoItem.Checked;
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        bool ok = SetAutostart(want);
+                        ShowBalloon(ok
+                            ? (want ? L.T("Windows ile başlatma açıldı.", "Autostart enabled.") : L.T("Windows ile başlatma kapatıldı.", "Autostart disabled."))
+                            : L.T("İşlem başarısız (yönetici izni gerekli).", "Failed (administrator privileges required)."));
+                    });
+                    autoItem.Checked = want;
+                };
+                menu.Opening += (s, e) => { try { autoItem.Checked = IsAutostartEnabled(); } catch { } };
+
+                var langItem = new ToolStripMenuItem("🌐 Dil / Language");
+                var trIt = new ToolStripMenuItem("Türkçe") { Checked = !L.IsEn };
+                var enIt = new ToolStripMenuItem("English") { Checked = L.IsEn };
+                trIt.Click += (s, e) => L.Set("tr", Dash);
+                enIt.Click += (s, e) => L.Set("en", Dash);
+                langItem.DropDownItems.Add(trIt);
+                langItem.DropDownItems.Add(enIt);
+
+                menu.Items.Add(open2ndItem);
+                menu.Items.Add(studioItem);
+                menu.Items.Add(galleryItem);
+                menu.Items.Add(L.T("Edge ile Aç (daha çok RAM)", "Open in Edge App (higher RAM)"), null, (s, e) => LaunchEdgeDashboard());
+                menu.Items.Add(openBrowserItem);
+
+                var sndItem = new ToolStripMenuItem(L.T("Ses Cihazı", "Audio Output"));
+                sndItem.DropDownOpening += (s, e) =>
+                {
+                    sndItem.DropDownItems.Clear();
+                    AudioSwitch.Refresh();
+                    foreach (AudioDevice d in AudioSwitch.Devices)
+                    {
+                        AudioDevice dd = d;
+                        var it = new ToolStripMenuItem(d.Name) { Checked = d.IsDefault };
+                        it.Click += (s2, e2) => ThreadPool.QueueUserWorkItem(x => AudioSwitch.SetDefault(dd.Id));
+                        sndItem.DropDownItems.Add(it);
+                    }
+                    if (sndItem.DropDownItems.Count == 0) sndItem.DropDownItems.Add(new ToolStripMenuItem(L.T("Cihaz bulunamadı", "No device found")) { Enabled = false });
+                };
+                sndItem.DropDownItems.Add("...");
+                menu.Items.Add(sndItem);
+                menu.Items.Add(langItem);
+                menu.Items.Add(new ToolStripSeparator());
+                var updItem = new ToolStripMenuItem(L.T("Güncellemeleri Denetle…", "Check for Updates…"));
+                updItem.Click += (s, e) => ThreadPool.QueueUserWorkItem(_ => TrayUpdateCheck());
+                menu.Items.Add(updItem);
+                menu.Items.Add(autoItem);
+                menu.Items.Add(alertItem);
+                menu.Items.Add(dumpItem);
+
+                if (!IsAdministrator())
+                {
+                    var adminItem = new ToolStripMenuItem(L.T("Yönetici Olarak Yeniden Başlat (tam sensör erişimi)", "Restart as Administrator (full sensor access)"));
+                    adminItem.Click += (s, e) => RestartAsAdmin();
+                    menu.Items.Add(adminItem);
+                }
+
+                var exitItem = new ToolStripMenuItem(L.T("Çıkış", "Exit"));
+                exitItem.Click += (s, e) => ExitAppAsk();
+
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add(exitItem);
+
+                _trayIcon.ContextMenuStrip = menu;
+                if (oldMenu != null) { try { oldMenu.Dispose(); } catch { } }
+            };
+            if (_ui != null && _ui.IsHandleCreated && _ui.InvokeRequired) _ui.BeginInvoke(build);
+            else build();
         }
 
         public static Icon TrayIcon() { return CreateRogTrayIcon(); }
@@ -840,7 +915,7 @@ namespace ProSystemMonitor
                 using (Font f = new Font("Segoe UI", 11, FontStyle.Bold))
                 using (Brush txt = new SolidBrush(Color.FromArgb(255, 255, 130, 0)))
                 {
-                    g.DrawString("P", f, txt, 8, 5);
+                    g.DrawString("O", f, txt, 7, 5);
                 }
                 IntPtr hIcon = bmp.GetHicon();
                 try { return (Icon)Icon.FromHandle(hIcon).Clone(); }
@@ -876,15 +951,16 @@ namespace ProSystemMonitor
 
     public class TelemetryCollector : IDisposable
     {
-        private string _brandName = "ASUS";
-        private string _moboModel = "Anakart Algılanıyor...";
-        private string _moboChipset = "AMD Chipset";
+        private string _brandName = "PC";
+        private string _moboModel = "";
+        private string _moboChipset = "";
         private string _moboBios = "";
-        private string _cpuModel = "CPU Algılanıyor...";
+        private string _cpuModel = "";
         private int _physicalCores = 8;
-        private double _cpuBaseMhz = 4201.0;
-        private string _gpuModel = "GPU Algılanıyor...";
-        private string _memSpeedText = "DDR5";
+        private double _cpuBaseMhz = 4000.0;
+        private string _gpuModel = "";
+        private string _memSpeedText = "DDR";
+        private bool _isLaptop = false;
         private string _ipAddress = "127.0.0.1";
         private List<string> _detectedDriveNames = new List<string>();
 
@@ -974,28 +1050,111 @@ namespace ProSystemMonitor
             });
         }
 
+        private static bool IsJunkOem(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return true;
+            string l = s.Trim().ToLowerInvariant();
+            return l.Length < 2 || l.Contains("to be filled") || l.Contains("system manufacturer") ||
+                   l.Contains("system product") || l.Contains("default string") || l == "oem" ||
+                   l == "undefined" || l == "standard" || l == "not available" || l == "none";
+        }
+
+        internal static string ResolveBrandName(string sysManuf, string sysModel, string boardManuf, string boardProd)
+        {
+            string combined = ((boardManuf ?? "") + " " + (sysManuf ?? "") + " " + (sysModel ?? "") + " " + (boardProd ?? "")).Trim();
+            if (Has(combined, "ALIENWARE")) return "ALIENWARE";
+            if (Has(combined, "ASUS") || Has(combined, "ASUSTeK")) return "ASUS";
+            if (Has(combined, "MSI") || Has(combined, "Micro-Star")) return "MSI";
+            if (Has(combined, "GIGABYTE")) return "GIGABYTE";
+            if (Has(combined, "ASRock")) return "ASROCK";
+            if (Has(combined, "LENOVO") || Has(combined, "Legion") || Has(combined, "ThinkPad")) return "LENOVO";
+            if (Has(combined, "OMEN") || Has(combined, "Victus") || Has(combined, "Hewlett-Packard") || Regex.IsMatch(combined, @"\bHP\b", RegexOptions.IgnoreCase)) return "HP";
+            if (Has(combined, "DELL")) return "DELL";
+            if (Has(combined, "ACER") || Has(combined, "Predator") || Has(combined, "Nitro")) return "ACER";
+            if (Has(combined, "RAZER")) return "RAZER";
+            if (Has(combined, "MONSTER") || Has(combined, "Tulpar") || Has(combined, "Abra")) return "MONSTER";
+            if (Has(combined, "CASPER") || Has(combined, "Excalibur")) return "CASPER";
+            if (Has(combined, "NZXT")) return "NZXT";
+            if (Has(combined, "EVGA")) return "EVGA";
+            if (Has(combined, "BIOSTAR")) return "BIOSTAR";
+            if (Has(combined, "COLORFUL")) return "COLORFUL";
+            if (Has(combined, "MAXSUN")) return "MAXSUN";
+            if (Has(combined, "SAPPHIRE")) return "SAPPHIRE";
+            if (Has(combined, "SAMSUNG")) return "SAMSUNG";
+            if (Has(combined, "HUAWEI")) return "HUAWEI";
+            if (Has(combined, "Surface") || Has(combined, "Microsoft")) return "SURFACE";
+            if (Has(combined, "Apple")) return "APPLE";
+            if (Has(combined, "Framework")) return "FRAMEWORK";
+            if (Has(combined, "Valve") || Has(combined, "Steam Deck")) return "VALVE";
+            if (Has(combined, "SONY") || Has(combined, "VAIO")) return "SONY";
+            if (Has(combined, "Dynabook") || Has(combined, "TOSHIBA")) return "DYNABOOK";
+            if (Has(combined, "FUJITSU")) return "FUJITSU";
+            if (Regex.IsMatch(combined, @"\bLG\b", RegexOptions.IgnoreCase)) return "LG";
+
+            string src = !IsJunkOem(sysManuf) ? sysManuf : (!IsJunkOem(boardManuf) ? boardManuf : "");
+            if (!string.IsNullOrEmpty(src))
+                return src.Trim().Split(new[] { ' ', ',', '.' }, StringSplitOptions.RemoveEmptyEntries)[0].ToUpperInvariant();
+            return "PC";
+        }
+
+        internal static int ScoreGpuName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return -1;
+            string l = name.ToLowerInvariant();
+            if (l.Contains("parsec") || l.Contains("virtual") || l.Contains("microsoft basic") ||
+                l.Contains("remote desktop") || l.Contains("rdp") || l.Contains("citrix") ||
+                l.Contains("anydesk") || l.Contains("luminon") || l.Contains("indirect display") || l.Contains("mirror"))
+                return -1;
+            if (l.Contains("nvidia") || l.Contains("geforce") || l.Contains("rtx") || l.Contains("gtx") || l.Contains("quadro") || l.Contains("tesla"))
+                return 100;
+            if (l.Contains("radeon rx") || l.Contains("radeon pro") || l.Contains("radeon vii") || l.Contains("vega 56") || l.Contains("vega 64") ||
+                Regex.IsMatch(l, @"\b(rx\s*\d{3,4}|r9\s+\d{3}|r7\s+\d{3}|hd\s*7\d{3})"))
+                return 100;
+            if (Regex.IsMatch(l, @"\barc\b"))
+                return 95;
+            if (l.Contains("radeon(tm) graphics") || l.Equals("amd radeon graphics") || l.Contains("radeon graphics") ||
+                Regex.IsMatch(l, @"\bradeon\s+\d{3}m\b") || l.Contains("radeon vega") ||
+                l.Contains("uhd graphics") || l.Contains("iris") || l.Contains("hd graphics") || l.Equals("intel(r) graphics"))
+                return 15;
+            return 50;
+        }
+
         private void DetectStaticHardware()
         {
+            string sysManuf = "", sysModel = "", boardManuf = "", boardProd = "";
+            try
+            {
+                using (var cs = new ManagementObjectSearcher("SELECT Manufacturer, Model, PCSystemType FROM Win32_ComputerSystem"))
+                {
+                    foreach (ManagementObject obj in cs.Get())
+                    {
+                        sysManuf = (obj["Manufacturer"] ?? "").ToString().Trim();
+                        sysModel = (obj["Model"] ?? "").ToString().Trim();
+                        if (obj["PCSystemType"] != null)
+                        {
+                            int pt = Convert.ToInt32(obj["PCSystemType"]);
+                            if (pt == 2 || pt == 8) _isLaptop = true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
             try
             {
                 using (var searcher = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard"))
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        string manuf = (obj["Manufacturer"] ?? "").ToString().Trim();
-                        string prod = (obj["Product"] ?? "").ToString().Trim();
-
-                        if (manuf.IndexOf("ASUS", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "ASUS";
-                        else if (manuf.IndexOf("MSI", StringComparison.OrdinalIgnoreCase) >= 0 || manuf.IndexOf("Micro-Star", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "MSI";
-                        else if (manuf.IndexOf("GIGABYTE", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "GIGABYTE";
-                        else if (manuf.IndexOf("ASRock", StringComparison.OrdinalIgnoreCase) >= 0) _brandName = "ASROCK";
-                        else if (!string.IsNullOrEmpty(manuf)) _brandName = manuf.Split(new[] { ' ' })[0].ToUpperInvariant();
-
-                        _moboModel = FormatMoboName(_brandName, prod);
+                        boardManuf = (obj["Manufacturer"] ?? "").ToString().Trim();
+                        boardProd = (obj["Product"] ?? "").ToString().Trim();
                     }
                 }
             }
             catch { }
+
+            _brandName = ResolveBrandName(sysManuf, sysModel, boardManuf, boardProd);
+            _moboModel = FormatMoboName(_brandName, boardProd, sysModel);
 
             try
             {
@@ -1017,6 +1176,7 @@ namespace ProSystemMonitor
                     {
                         string rawCpu = (obj["Name"] ?? "").ToString().Trim();
                         rawCpu = Regex.Replace(rawCpu, @"\s+\d+-Core Processor.*$", "", RegexOptions.IgnoreCase).Trim();
+                        rawCpu = Regex.Replace(rawCpu, @"\s+w/\s+Radeon.*$", "", RegexOptions.IgnoreCase).Trim();
                         _cpuModel = rawCpu;
 
                         if (obj["NumberOfCores"] != null)
@@ -1027,13 +1187,34 @@ namespace ProSystemMonitor
                             if (maxClk > 500) _cpuBaseMhz = maxClk;
                         }
 
+                        string searchBoard = _moboModel + " " + boardProd;
                         if (_cpuModel.IndexOf("AMD", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            string chipMatch = Regex.Match(_moboModel, @"\b([ABX]\d{3}E?)\b", RegexOptions.IgnoreCase).Groups[1].Value.ToUpperInvariant();
+                            string chipMatch = Regex.Match(searchBoard, @"\b(WRX\d+|TRX\d+|[ABX]\d{3}E?)\b", RegexOptions.IgnoreCase).Groups[1].Value.ToUpperInvariant();
                             if (!string.IsNullOrEmpty(chipMatch))
-                                _moboChipset = string.Format("AMD {0}, AMD K19.6 FCH, AMD K19.6 IMC", chipMatch);
+                                _moboChipset = "AMD " + chipMatch + " Chipset";
+                            else if (_isLaptop || Regex.IsMatch(_cpuModel, @"\b\d{4}[UHSX]{1,2}\b|\bAI\s+\d+", RegexOptions.IgnoreCase))
+                                _moboChipset = "AMD Ryzen SoC";
                             else
-                                _moboChipset = "AMD Chipset, FCH & IMC";
+                                _moboChipset = "AMD Chipset";
+                        }
+                        else if (_cpuModel.IndexOf("Intel", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            string chipMatch = Regex.Match(searchBoard, @"\b([ZBHQW]\d{3}[A-Z]?|X299|X99)\b", RegexOptions.IgnoreCase).Groups[1].Value.ToUpperInvariant();
+                            if (!string.IsNullOrEmpty(chipMatch))
+                                _moboChipset = "Intel " + chipMatch + " Chipset";
+                            else if (_cpuModel.IndexOf("Ultra", StringComparison.OrdinalIgnoreCase) >= 0)
+                                _moboChipset = "Intel Core Ultra SoC";
+                            else if (_isLaptop)
+                                _moboChipset = "Intel Mobile SoC";
+                            else if (Regex.IsMatch(_cpuModel, @"i[3579]-1[234]\d{3}", RegexOptions.IgnoreCase))
+                                _moboChipset = "Intel 600/700 Chipset";
+                            else
+                                _moboChipset = "Intel Chipset";
+                        }
+                        else
+                        {
+                            _moboChipset = "System SoC";
                         }
                     }
                 }
@@ -1134,18 +1315,20 @@ namespace ProSystemMonitor
             }
         }
 
-        private string FormatMoboName(string brand, string product)
+        private string FormatMoboName(string brand, string product, string sysModel)
         {
-            if (string.IsNullOrEmpty(product)) return brand;
-            string p = product;
+            bool crypticBoard = IsJunkOem(product) || (product.IndexOf(' ') < 0 && product.IndexOf('-') < 0 && product.Length <= 12);
+            string p = (crypticBoard && !IsJunkOem(sysModel)) ? sysModel : (!IsJunkOem(product) ? product : (!IsJunkOem(sysModel) ? sysModel : brand));
             p = Regex.Replace(p, @"\bROG\b", "ROG", RegexOptions.IgnoreCase);
             p = Regex.Replace(p, @"\bSTRIX\b", "Strix", RegexOptions.IgnoreCase);
             p = Regex.Replace(p, @"\bGAMING\b", "Gaming", RegexOptions.IgnoreCase);
             p = Regex.Replace(p, @"\bWIFI\b", "WiFi", RegexOptions.IgnoreCase);
             p = Regex.Replace(p, @"\bTUF\b", "TUF", RegexOptions.IgnoreCase);
-            if (brand.Equals("ASUS", StringComparison.OrdinalIgnoreCase) && !p.StartsWith("Asus", StringComparison.OrdinalIgnoreCase))
+            p = Regex.Replace(p, @"\bAORUS\b", "AORUS", RegexOptions.IgnoreCase);
+            if (!string.IsNullOrEmpty(brand) && brand != "PC" && p.IndexOf(brand, StringComparison.OrdinalIgnoreCase) < 0)
             {
-                return "Asus " + p;
+                string prettyBrand = brand.Equals("ASUS", StringComparison.OrdinalIgnoreCase) ? "ASUS" : brand;
+                return prettyBrand + " " + p;
             }
             return p;
         }
@@ -1172,53 +1355,78 @@ namespace ProSystemMonitor
             }
             catch { _nvmlAvailable = false; }
 
-            if (string.IsNullOrEmpty(_gpuModel) || _gpuModel.StartsWith("GPU ") || _gpuModel.StartsWith("NVIDIA "))
+            try
             {
-                try
+                using (var s = new ManagementObjectSearcher("SELECT Name, PNPDeviceID, AdapterRAM FROM Win32_VideoController"))
                 {
-                    using (var s = new ManagementObjectSearcher("SELECT Name, PNPDeviceID FROM Win32_VideoController"))
+                    int bestScore = -1;
+                    long bestRam = -1;
+                    string bestModel = "";
+                    foreach (ManagementObject o in s.Get())
                     {
-                        foreach (ManagementObject o in s.Get())
+                        string name = (o["Name"] ?? "").ToString().Trim();
+                        string pnp = (o["PNPDeviceID"] ?? "").ToString().ToUpperInvariant();
+                        long ram = 0;
+                        try { if (o["AdapterRAM"] != null) ram = Convert.ToInt64(o["AdapterRAM"]); } catch { }
+
+                        int sc = ScoreGpuName(name);
+                        if (sc < 0) continue;
+                        if (_nvmlAvailable && pnp.IndexOf("VEN_10DE", StringComparison.OrdinalIgnoreCase) < 0)
+                            continue;
+                        if (ram >= 3000000000L && sc < 90) sc = 90;
+
+                        string candidate = name;
+                        Match subMatch = Regex.Match(pnp, @"SUBSYS_([0-9A-F]{8})");
+                        if (subMatch.Success && sc >= 50)
                         {
-                            string name = (o["Name"] ?? "GPU").ToString().Trim();
-                            string pnp = (o["PNPDeviceID"] ?? "").ToString().ToUpperInvariant();
-                            Match subMatch = Regex.Match(pnp, @"SUBSYS_([0-9A-F]{8})");
-                            if (subMatch.Success)
-                            {
-                                uint subsysId = Convert.ToUInt32(subMatch.Groups[1].Value, 16);
-                                _gpuModel = ResolveSubvendorGpuName(name, subsysId);
-                            }
-                            else if (_gpuModel.StartsWith("GPU "))
-                            {
-                                _gpuModel = name;
-                            }
-                            break;
+                            uint subsysId = Convert.ToUInt32(subMatch.Groups[1].Value, 16);
+                            candidate = ResolveSubvendorGpuName(string.IsNullOrEmpty(_gpuModel) || !_nvmlAvailable ? name : _gpuModel, subsysId);
+                        }
+
+                        if (sc > bestScore || (sc == bestScore && ram > bestRam))
+                        {
+                            bestScore = sc;
+                            bestRam = ram;
+                            bestModel = candidate;
                         }
                     }
+                    if (!string.IsNullOrEmpty(bestModel))
+                        _gpuModel = bestModel;
                 }
-                catch { }
             }
+            catch { }
         }
 
         private string ResolveSubvendorGpuName(string baseName, uint subsysId)
         {
-            if (subsysId == 0xF29910B0)
-                return "Gainward GeForce RTX 4080 Phoenix";
-
             ushort vendorId = (ushort)(subsysId & 0xFFFF);
-            string cleanBase = baseName.Replace("NVIDIA ", "").Trim();
+            string cleanBase = baseName.Replace("NVIDIA ", "").Replace("AMD ", "").Trim();
+            string prefix = "";
             switch (vendorId)
             {
-                case 0x10B0: return "Gainward " + cleanBase;
-                case 0x1043: return "ASUS ROG " + cleanBase;
-                case 0x1462: return "MSI " + cleanBase;
-                case 0x1458: return "Gigabyte " + cleanBase;
-                case 0x1569: return "Palit " + cleanBase;
-                case 0x19DA: return "Zotac " + cleanBase;
-                case 0x3842: return "EVGA " + cleanBase;
-                case 0x196E: return "PNY " + cleanBase;
+                case 0x1043: prefix = "ASUS"; break;
+                case 0x1462: prefix = "MSI"; break;
+                case 0x1458: prefix = "Gigabyte"; break;
+                case 0x1849: prefix = "ASRock"; break;
+                case 0x1DA2: prefix = "Sapphire"; break;
+                case 0x148C: prefix = "PowerColor"; break;
+                case 0x1682: prefix = "XFX"; break;
+                case 0x10B0: prefix = "Gainward"; break;
+                case 0x1569: prefix = "Palit"; break;
+                case 0x19DA: prefix = "Zotac"; break;
+                case 0x3842: prefix = "EVGA"; break;
+                case 0x196E: prefix = "PNY"; break;
+                case 0x1771: prefix = "Inno3D"; break;
+                case 0x172F: prefix = "Sparkle"; break;
+                case 0x17AA: prefix = "Lenovo"; break;
+                case 0x103C: prefix = "HP"; break;
+                case 0x1028: prefix = "Dell"; break;
+                case 0x1025: prefix = "Acer"; break;
                 default: return baseName;
             }
+            if (cleanBase.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                return cleanBase;
+            return prefix + " " + cleanBase;
         }
 
         private void InitPdhCounters()
@@ -1523,9 +1731,9 @@ namespace ProSystemMonitor
                     catch (EntryPointNotFoundException) { rcT = NvmlNative.nvmlDeviceGetCurrentClocksEventReasons(_nvmlDevice, out reasons); }
                     if (rcT == 0)
                     {
-                        if ((reasons & (0x4UL | 0x80UL)) != 0) gpuThrottle.Add("GPU güç sınırı");
-                        if ((reasons & (0x20UL | 0x40UL)) != 0) gpuThrottle.Add("GPU ısı sınırı");
-                        else if ((reasons & 0x8UL) != 0) gpuThrottle.Add("GPU donanım yavaşlatma");
+                        if ((reasons & (0x4UL | 0x80UL)) != 0) gpuThrottle.Add(L.T("GPU güç sınırı", "GPU power limit"));
+                        if ((reasons & (0x20UL | 0x40UL)) != 0) gpuThrottle.Add(L.T("GPU ısı sınırı", "GPU thermal limit"));
+                        else if ((reasons & 0x8UL) != 0) gpuThrottle.Add(L.T("GPU donanım yavaşlatma", "GPU HW slowdown"));
                     }
                 }
                 catch { }
@@ -1538,7 +1746,9 @@ namespace ProSystemMonitor
                 }
             }
 
-            string sensorSource = "Yerleşik: LHM + NVML | " + _fps.StatusText + (Program.IsAdministrator() ? "" : " | YÖNETİCİ DEĞİL") + (string.IsNullOrEmpty(LhmError) ? "" : " | LHM HATA: " + LhmError);
+            string sensorSource = L.T("Yerleşik: LHM + NVML | ", "Built-in: LHM + NVML | ") + _fps.StatusText +
+                                  (Program.IsAdministrator() ? "" : L.T(" | YÖNETİCİ DEĞİL", " | NOT ADMIN")) +
+                                  (string.IsNullOrEmpty(LhmError) ? "" : L.T(" | LHM HATA: ", " | LHM ERR: ") + LhmError);
 
             // Okunamayan sensörler NaN kalır; uydurma/tahmini değer gösterilmez.
             LhmReading lhm = GetLhmCached();
@@ -1551,7 +1761,7 @@ namespace ProSystemMonitor
             double cpuFanRpm = lhm.CpuFan, chaFan1Rpm = lhm.Cha1, chaFan2Rpm = lhm.Cha2, aioPumpRpm = lhm.Pump;
             double cpuPowerW = lhm.CpuPower, cpuVolt = lhm.CpuVolt, socVolt = lhm.SocVolt, v12Volt = lhm.V12;
 
-            // GPU: NVML varsa öncelikli, eksik kalanlar (ve NVIDIA dışı kartlar) LHM'den tamamlanır.
+            // GPU: NVML varsa öncelikli, eksik kalanlar (ve AMD/Intel/hibrit kartlar) LHM'den tamamlanır.
             if (double.IsNaN(gpuTemp)) gpuTemp = lhm.GpuTemp;
             gpuHotspotTemp = lhm.GpuHot;
             if (double.IsNaN(gpuPowerW)) gpuPowerW = lhm.GpuPower;
@@ -1559,6 +1769,9 @@ namespace ProSystemMonitor
             gpuVolt = lhm.GpuVolt;
             if (!_nvmlAvailable)
             {
+                if (!string.IsNullOrEmpty(lhm.GpuHwName) && ScoreGpuName(lhm.GpuHwName) > ScoreGpuName(_gpuModel))
+                    _gpuModel = lhm.GpuHwName;
+                gpuBusType = (lhm.GpuScore > 0 && lhm.GpuScore <= 20) ? L.T("Dahili GPU", "Integrated GPU") : "PCI-E";
                 if (!double.IsNaN(lhm.GpuLoad)) gpuLoadPct = lhm.GpuLoad;
                 if (!double.IsNaN(lhm.GpuClock)) gpuClockMhz = lhm.GpuClock;
                 if (!double.IsNaN(lhm.GpuMemClock)) gpuMemClockMhz = lhm.GpuMemClock;
@@ -1566,8 +1779,18 @@ namespace ProSystemMonitor
                 if (!double.IsNaN(lhm.VramTotalMb)) gpuVramTotalMb = lhm.VramTotalMb;
             }
 
-            // CPU çekirdek saatleri ve yükleri: LHM gerçek sensörü öncelikli, yoksa PDH yedeği
-            if (cores.Count == 0 && lhm.CoreClocks.Count > 0)
+            // CPU çekirdek saatleri ve yükleri: Intel P/E hibrit veya AMD çekirdeklerinin tamamını eşle
+            if (lhm.CoreClocks.Count > cores.Count)
+            {
+                cores.Clear();
+                foreach (var kv in lhm.CoreClocks.OrderBy(k => k.Key))
+                {
+                    double cl = cpuLoadPct;
+                    lhm.CoreLoads.TryGetValue(kv.Key, out cl);
+                    cores.Add(new CoreTelemetry { Index = kv.Key, ClockMhz = Math.Round(kv.Value), LoadPct = cl });
+                }
+            }
+            else if (cores.Count == 0 && lhm.CoreClocks.Count > 0)
             {
                 foreach (var kv in lhm.CoreClocks.OrderBy(k => k.Key))
                 {
@@ -1633,17 +1856,30 @@ namespace ProSystemMonitor
             double fpsLow1;
             double fps = _fps.Read(out activeGame, out frameTimeMs, out fpsLow1);
 
-            if (!double.IsNaN(cpuTemp) && cpuTemp >= 93) gpuThrottle.Add("CPU ısı sınırı");
+            if (!double.IsNaN(cpuTemp) && cpuTemp >= 93) gpuThrottle.Add(L.T("CPU ısı sınırı", "CPU thermal limit"));
             string throttleText = string.Join(", ", gpuThrottle);
 
             // Uyarılar (tray bildirimi, 5 dk bekleme süresiyle)
-            if (cpuTemp >= 90) Program.Alert("cpu", "CPU sıcaklığı yüksek: " + Math.Round(cpuTemp) + "°C");
-            if (gpuTemp >= 85) Program.Alert("gpu", "GPU sıcaklığı yüksek: " + Math.Round(gpuTemp) + "°C");
+            if (cpuTemp >= 90) Program.Alert("cpu", L.T("CPU sıcaklığı yüksek: ", "High CPU temperature: ") + Math.Round(cpuTemp) + "°C");
+            if (gpuTemp >= 85) Program.Alert("gpu", L.T("GPU sıcaklığı yüksek: ", "High GPU temperature: ") + Math.Round(gpuTemp) + "°C");
             foreach (var dr in drives)
-                if (dr.TempC >= 70) Program.Alert("disk" + dr.Name, dr.Name + " sıcaklığı yüksek: " + Math.Round(dr.TempC) + "°C");
+                if (dr.TempC >= 70) Program.Alert("disk" + dr.Name, dr.Name + L.T(" sıcaklığı yüksek: ", " high temperature: ") + Math.Round(dr.TempC) + "°C");
 
             double netUpKbs = 0, netDownKbs = 0, netUpTotalMb = 0, netDownTotalMb = 0;
             ReadNetworkStats(out netUpKbs, out netDownKbs, out netUpTotalMb, out netDownTotalMb);
+
+            double sysBat = double.NaN;
+            bool sysBatChg = false;
+            try
+            {
+                PowerStatus ps = System.Windows.Forms.SystemInformation.PowerStatus;
+                if ((ps.BatteryChargeStatus & BatteryChargeStatus.NoSystemBattery) == 0 && ps.BatteryChargeStatus != BatteryChargeStatus.Unknown && ps.BatteryLifePercent >= 0f && ps.BatteryLifePercent <= 1.0f)
+                {
+                    sysBat = Math.Round(ps.BatteryLifePercent * 100.0);
+                    sysBatChg = ps.PowerLineStatus == PowerLineStatus.Online || (ps.BatteryChargeStatus & BatteryChargeStatus.Charging) != 0;
+                }
+            }
+            catch { }
 
             _lastGpuMemClockMhz = gpuMemClockMhz;
             _lastGpuFanPct = gpuFanPct;
@@ -1665,7 +1901,8 @@ namespace ProSystemMonitor
                 Fps = fps, FrameMs = frameTimeMs, Low1 = fpsLow1,
                 NetUp = netUpKbs, NetDown = netDownKbs, NetUpTot = netUpTotalMb, NetDownTot = netDownTotalMb, DiskR = diskReadMBs, DiskW = diskWriteMBs,
                 Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray(), TopCpu = _cachedTopCpu.ToArray(), SelfMb = _selfMb, SelfCpu = _selfCpu,
-                GpuHot = gpuHotspotTemp, CpuDiode = cpuDiodeTemp, DimmTemp = dimmTemp, SocV = socVolt, V12 = v12Volt
+                GpuHot = gpuHotspotTemp, CpuDiode = cpuDiodeTemp, DimmTemp = dimmTemp, SocV = socVolt, V12 = v12Volt,
+                SysBat = sysBat, SysBatChg = sysBatChg
             };
         }
 
@@ -1773,6 +2010,8 @@ namespace ProSystemMonitor
             AppendJsonNum(sb, "gpuVolt", s.GpuV);
 
             AppendJsonStr(sb, "ipAddress", s.Ip);
+            AppendJsonNum(sb, "batteryPct", s.SysBat);
+            sb.Append("\"batteryCharging\":").Append(s.SysBatChg ? "true" : "false").Append(',');
             AppendJsonNum(sb, "netUpKbs", s.NetUp);
             AppendJsonNum(sb, "netDownKbs", s.NetDown);
             AppendJsonNum(sb, "netUpTotalMb", s.NetUpTot);
@@ -1794,6 +2033,8 @@ namespace ProSystemMonitor
             public double VramUsedMb = double.NaN, VramTotalMb = double.NaN;
             public HardwareType GpuType = HardwareType.Motherboard;
             public bool GpuChosen;
+            public int GpuScore = -1;
+            public string GpuHwName = "";
             public readonly Dictionary<int, double> CoreClocks = new Dictionary<int, double>();
             public readonly Dictionary<int, double> CoreEffClocks = new Dictionary<int, double>();
             public readonly Dictionary<int, double> CoreLoads = new Dictionary<int, double>();
@@ -2055,22 +2296,23 @@ namespace ProSystemMonitor
                         if (n.Equals("CPU Total", StringComparison.OrdinalIgnoreCase)) r.CpuTotalLoad = v;
                         else
                         {
-                            Match ml = Regex.Match(n, @"^(?:CPU )?Core #(\d+)$", RegexOptions.IgnoreCase);
-                            if (ml.Success)
+                            Match ml = Regex.Match(n, @"^(?:CPU |P-|E-|LP E-)?Core #(\d+)", RegexOptions.IgnoreCase);
+                            if (ml.Success && !Has(n, "Max") && !Has(n, "Average"))
                             {
                                 int idx = int.Parse(ml.Groups[1].Value, CultureInfo.InvariantCulture);
-                                if (idx >= 1 && idx <= _physicalCores) r.CoreLoads[idx] = v;
+                                if (idx >= 1 && idx <= 64 && (!r.CoreLoads.ContainsKey(idx) || v > r.CoreLoads[idx]))
+                                    r.CoreLoads[idx] = v;
                             }
                         }
                         break;
                     case SensorType.Clock:
                         {
-                            Match me = Regex.Match(n, @"^(?:CPU )?Core #(\d+)\s*\(Effective\)$", RegexOptions.IgnoreCase);
+                            Match me = Regex.Match(n, @"^(?:CPU |P-|E-|LP E-)?Core #(\d+)\s*\(Effective\)$", RegexOptions.IgnoreCase);
                             if (me.Success && v > 100)
                                 r.CoreEffClocks[int.Parse(me.Groups[1].Value, CultureInfo.InvariantCulture)] = v;
-                            else
+                            else if (!Has(n, "Effective") && !Has(n, "Average") && !Has(n, "Max"))
                             {
-                                Match m = Regex.Match(n, @"^(?:CPU )?Core #(\d+)$", RegexOptions.IgnoreCase);
+                                Match m = Regex.Match(n, @"^(?:CPU |P-|E-|LP E-)?Core #(\d+)", RegexOptions.IgnoreCase);
                                 if (m.Success && v > 100)
                                     r.CoreClocks[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)] = v;
                             }
@@ -2086,16 +2328,32 @@ namespace ProSystemMonitor
 
         private void ReadGpu(IHardware hw, LhmReading r)
         {
-            // Birden çok GPU varsa (iGPU + dGPU) NVIDIA'yı, yoksa ilk GPU'yu kullan.
+            int sc = hw.HardwareType == HardwareType.GpuNvidia ? 110 : ScoreGpuName(hw.Name);
+            if (sc < 0) return;
+
+            double candVramTotal = double.NaN;
+            foreach (ISensor s0 in hw.Sensors)
+            {
+                if (s0.SensorType == SensorType.SmallData && ((s0.Name ?? "").Equals("GPU Memory Total", StringComparison.OrdinalIgnoreCase) || (s0.Name ?? "").Equals("D3D Dedicated Memory Total", StringComparison.OrdinalIgnoreCase)))
+                {
+                    double? vt = Val(s0);
+                    if (vt.HasValue) candVramTotal = vt.Value;
+                }
+            }
+            if (!double.IsNaN(candVramTotal) && candVramTotal >= 3072 && sc < 90) sc = 95;
+
             if (r.GpuChosen)
             {
-                if (!(hw.HardwareType == HardwareType.GpuNvidia && r.GpuType != HardwareType.GpuNvidia)) return;
+                bool better = sc > r.GpuScore || (sc == r.GpuScore && !double.IsNaN(candVramTotal) && (double.IsNaN(r.VramTotalMb) || candVramTotal > r.VramTotalMb));
+                if (!better) return;
                 r.ResetGpu();
             }
             r.GpuChosen = true;
             r.GpuType = hw.HardwareType;
+            r.GpuScore = sc;
+            r.GpuHwName = hw.Name ?? "";
 
-            double d3dMax = double.NaN;
+            double d3dMax = double.NaN, sharedUsed = double.NaN;
             foreach (ISensor s in hw.Sensors)
             {
                 double? vn = Val(s);
@@ -2106,11 +2364,11 @@ namespace ProSystemMonitor
                 {
                     case SensorType.Temperature:
                         if (Has(n, "Hot Spot")) r.GpuHot = v;
-                        else if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) r.GpuTemp = v;
-                        else if (double.IsNaN(r.GpuHot) && Has(n, "Memory Junction")) r.GpuHot = v;
+                        else if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase) || (double.IsNaN(r.GpuTemp) && n.Equals("GPU VR SoC", StringComparison.OrdinalIgnoreCase))) r.GpuTemp = v;
+                        else if (double.IsNaN(r.GpuHot) && (Has(n, "Memory Junction") || n.Equals("GPU Memory", StringComparison.OrdinalIgnoreCase))) r.GpuHot = v;
                         break;
                     case SensorType.Power:
-                        if (Has(n, "Package") || n.Equals("GPU Power", StringComparison.OrdinalIgnoreCase)) r.GpuPower = v;
+                        if (Has(n, "Package") || Has(n, "Board") || Has(n, "Total") || Has(n, "PPT") || Has(n, "ASIC") || n.Equals("GPU Power", StringComparison.OrdinalIgnoreCase)) r.GpuPower = v;
                         else if (double.IsNaN(r.GpuPower) && n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) r.GpuPower = v;
                         break;
                     case SensorType.Fan:
@@ -2124,16 +2382,27 @@ namespace ProSystemMonitor
                         else if (n.Equals("D3D 3D", StringComparison.OrdinalIgnoreCase) && (double.IsNaN(d3dMax) || v > d3dMax)) d3dMax = v;
                         break;
                     case SensorType.Clock:
-                        if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) r.GpuClock = v;
+                        if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase) || (double.IsNaN(r.GpuClock) && n.Equals("GPU Shader", StringComparison.OrdinalIgnoreCase))) r.GpuClock = v;
                         else if (n.Equals("GPU Memory", StringComparison.OrdinalIgnoreCase)) r.GpuMemClock = v;
                         break;
                     case SensorType.SmallData:
-                        if (n.Equals("GPU Memory Used", StringComparison.OrdinalIgnoreCase) || n.Equals("D3D Dedicated Memory Used", StringComparison.OrdinalIgnoreCase)) r.VramUsedMb = v;
-                        else if (n.Equals("GPU Memory Total", StringComparison.OrdinalIgnoreCase) || n.Equals("D3D Dedicated Memory Total", StringComparison.OrdinalIgnoreCase)) r.VramTotalMb = v;
+                        if (n.Equals("GPU Memory Used", StringComparison.OrdinalIgnoreCase) || n.Equals("D3D Dedicated Memory Used", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (v > 0 || double.IsNaN(r.VramUsedMb)) r.VramUsedMb = v;
+                        }
+                        else if (n.Equals("D3D Shared Memory Used", StringComparison.OrdinalIgnoreCase))
+                        {
+                            sharedUsed = v;
+                        }
+                        else if (n.Equals("GPU Memory Total", StringComparison.OrdinalIgnoreCase) || n.Equals("D3D Dedicated Memory Total", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (v > 0 || double.IsNaN(r.VramTotalMb)) r.VramTotalMb = v;
+                        }
                         break;
                 }
             }
             if (double.IsNaN(r.GpuLoad) && !double.IsNaN(d3dMax)) r.GpuLoad = d3dMax;
+            if ((double.IsNaN(r.VramUsedMb) || r.VramUsedMb <= 0) && !double.IsNaN(sharedUsed)) r.VramUsedMb = sharedUsed;
         }
 
         private void ReadBoard(IHardware hw, LhmReading r)

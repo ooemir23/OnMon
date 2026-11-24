@@ -58,12 +58,12 @@ namespace ProSystemMonitor
             EdUi.Lbl(p, label, 12, y + 3, 150, false);
             _sw = new Panel { Left = 170, Top = y, Width = 44, Height = 24, BorderStyle = BorderStyle.FixedSingle };
             p.Controls.Add(_sw);
-            EdUi.Btn(p, "Seç…", 222, y - 1, 60, delegate
+            EdUi.Btn(p, L.T("Seç…", "Pick…"), 222, y - 1, 60, delegate
             {
                 using (var cd = new ColorDialog { FullOpen = true, Color = Value != 0 ? Color.FromArgb(Value) : _themeColor() })
                     if (cd.ShowDialog() == DialogResult.OK) { Value = Color.FromArgb(255, cd.Color).ToArgb(); Refresh(); if (Changed != null) Changed(); }
             });
-            EdUi.Btn(p, "Tema", 288, y - 1, 60, delegate { Value = 0; Refresh(); if (Changed != null) Changed(); });
+            EdUi.Btn(p, L.T("Tema", "Theme"), 288, y - 1, 60, delegate { Value = 0; Refresh(); if (Changed != null) Changed(); });
         }
 
         public void Set(int v) { Value = v; Refresh(); }
@@ -85,70 +85,81 @@ namespace ProSystemMonitor
         private Button _browse;
 
         private static readonly string[] FrameIds = { "", "flat", "glass", "neon", "blueprint", "crt", "hud", "brutal", "clip", "mono", "none" };
-        private static readonly string[] FrameNm = { "Tema", "Düz", "Cam", "Neon", "Teknik çizim", "CRT", "HUD köşeleri", "Sert gölge", "Kesik köşe", "Köşeli", "Çerçevesiz" };
+        private static string[] FrameNames()
+        {
+            return L.IsEn
+                ? new[] { "Theme", "Flat", "Glass", "Neon", "Blueprint", "CRT", "HUD Corners", "Hard Shadow", "Cut Corner", "Sharp", "Borderless" }
+                : new[] { "Tema", "Düz", "Cam", "Neon", "Teknik çizim", "CRT", "HUD köşeleri", "Sert gölge", "Kesik köşe", "Köşeli", "Çerçevesiz" };
+        }
         private static readonly string[] BarIds = { "", "round", "thin", "chunk", "seg" };
-        private static readonly string[] BarNm = { "Tema", "Yuvarlak", "İnce", "Kalın blok", "Parçalı" };
+        private static string[] BarNames()
+        {
+            return L.IsEn
+                ? new[] { "Theme", "Rounded", "Thin", "Chunky", "Segmented" }
+                : new[] { "Tema", "Yuvarlak", "İnce", "Kalın blok", "Parçalı" };
+        }
 
         public WidgetPropsForm(DashboardForm d)
         {
             _d = d;
-            Text = "Widget özellikleri"; FormBorderStyle = FormBorderStyle.FixedToolWindow; TopMost = true; ShowInTaskbar = false;
+            ModernUi.ApplyDarkTitleBar(this);
+            Text = L.T("Widget özellikleri", "Widget Properties"); FormBorderStyle = FormBorderStyle.FixedToolWindow; TopMost = true; ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual; ClientSize = new Size(372, 680); BackColor = EdUi.Bg; ForeColor = EdUi.Tx; AutoScroll = true;
             Font = new Font("Segoe UI", 9f);
             int y = 8;
             _title = EdUi.Lbl(this, "", 12, y, 340, true); y += 30;
 
-            EdUi.Lbl(this, "KONUM VE BOYUT", 12, y, 300, true); y += 26;
+            EdUi.Lbl(this, L.T("KONUM VE BOYUT", "POSITION & SIZE"), 12, y, 300, true); y += 26;
             EdUi.Lbl(this, "X", 12, y + 2, 20, false); _x = EdUi.Num(this, 34, y, 70, 0, 10000, 1, 0);
             EdUi.Lbl(this, "Y", 120, y + 2, 20, false); _y = EdUi.Num(this, 142, y, 70, 0, 10000, 1, 0); y += 30;
-            EdUi.Lbl(this, "Genişlik", 12, y + 2, 60, false); _wd = EdUi.Num(this, 74, y, 70, 20, 10000, 1, 0);
-            EdUi.Lbl(this, "Yükseklik", 160, y + 2, 70, false); _h = EdUi.Num(this, 232, y, 70, 20, 10000, 1, 0); y += 30;
-            _lock = EdUi.Chk(this, "Kilitli (taşınamaz / boyutlanamaz)", 12, y, 340); y += 30;
+            EdUi.Lbl(this, L.T("Genişlik", "Width"), 12, y + 2, 60, false); _wd = EdUi.Num(this, 74, y, 70, 20, 10000, 1, 0);
+            EdUi.Lbl(this, L.T("Yükseklik", "Height"), 160, y + 2, 70, false); _h = EdUi.Num(this, 232, y, 70, 20, 10000, 1, 0); y += 30;
+            _lock = EdUi.Chk(this, L.T("Kilitli (taşınamaz / boyutlanamaz)", "Locked (prevent move / resize)"), 12, y, 340); y += 30;
 
-            EdUi.Lbl(this, "YAZI", 12, y, 300, true); y += 26;
-            EdUi.Lbl(this, "Yazı ölçeği (%)", 12, y + 2, 120, false); _fs = EdUi.Num(this, 140, y, 70, 30, 300, 5, 0); y += 30;
-            EdUi.Lbl(this, "İçerik ölçeği (%)", 12, y + 2, 125, false); _zoom = EdUi.Num(this, 140, y, 70, 20, 500, 5, 0);
-            EdUi.Lbl(this, "(yazı + boşluklar)", 218, y + 2, 130, false); y += 30;
-            _a1 = new ColorField(this, "Yazı rengi", y, delegate { return _d._th.Tx; }); _tx = _a1; y += 30;
+            EdUi.Lbl(this, L.T("YAZI", "TYPOGRAPHY"), 12, y, 300, true); y += 26;
+            EdUi.Lbl(this, L.T("Yazı ölçeği (%)", "Font scale (%)"), 12, y + 2, 120, false); _fs = EdUi.Num(this, 140, y, 70, 30, 300, 5, 0); y += 30;
+            EdUi.Lbl(this, L.T("İçerik ölçeği (%)", "Content scale (%)"), 12, y + 2, 125, false); _zoom = EdUi.Num(this, 140, y, 70, 20, 500, 5, 0);
+            EdUi.Lbl(this, L.T("(yazı + boşluklar)", "(font + padding)"), 218, y + 2, 130, false); y += 30;
+            _a1 = new ColorField(this, L.T("Yazı rengi", "Text color"), y, delegate { return _d._th.Tx; }); _tx = _a1; y += 30;
 
-            EdUi.Lbl(this, "RENKLER", 12, y, 300, true); y += 26;
-            _a1 = new ColorField(this, "Vurgu rengi (çizgi, grafik)", y, delegate { return _d._th.A1; }); y += 30;
-            _a2 = new ColorField(this, "İkinci vurgu (geçiş)", y, delegate { return _d._th.A2; }); y += 30;
+            EdUi.Lbl(this, L.T("RENKLER", "COLORS"), 12, y, 300, true); y += 26;
+            _a1 = new ColorField(this, L.T("Vurgu rengi", "Accent 1"), y, delegate { return _d._th.A1; }); y += 30;
+            _a2 = new ColorField(this, L.T("İkinci vurgu", "Accent 2"), y, delegate { return _d._th.A2; }); y += 30;
 
-            EdUi.Lbl(this, "ÇERÇEVE VE PANEL", 12, y, 300, true); y += 26;
-            EdUi.Lbl(this, "Çerçeve stili", 12, y + 2, 120, false); _frame = EdUi.Combo(this, 140, y, 200, FrameNm); y += 30;
-            _pc = new ColorField(this, "Panel dolgu rengi", y, delegate { return _d._th.Panel; }); y += 30;
-            _fc = new ColorField(this, "Çerçeve rengi", y, delegate { return _d._th.Line; }); y += 30;
-            EdUi.Lbl(this, "Panel opaklığı", 12, y + 4, 110, false);
+            EdUi.Lbl(this, L.T("ÇERÇEVE VE PANEL", "FRAME & PANEL"), 12, y, 300, true); y += 26;
+            EdUi.Lbl(this, L.T("Çerçeve stili", "Frame style"), 12, y + 2, 120, false); _frame = EdUi.Combo(this, 140, y, 200, FrameNames()); y += 30;
+            _pc = new ColorField(this, L.T("Panel dolgu rengi", "Panel fill"), y, delegate { return _d._th.Panel; }); y += 30;
+            _fc = new ColorField(this, L.T("Çerçeve rengi", "Border color"), y, delegate { return _d._th.Line; }); y += 30;
+            EdUi.Lbl(this, L.T("Panel opaklığı", "Panel opacity"), 12, y + 4, 110, false);
             _pa = new TrackBar { Left = 120, Top = y - 2, Width = 190, Minimum = 0, Maximum = 100, TickFrequency = 25, SmallChange = 5, LargeChange = 10 }; Controls.Add(_pa);
             _paL = EdUi.Lbl(this, "100%", 314, y + 4, 50, false); y += 36;
-            EdUi.Lbl(this, "Çerçeve kalınlığı", 12, y + 2, 120, false); _fw = EdUi.Num(this, 140, y, 70, 0, 12, 0.5m, 1);
-            EdUi.Lbl(this, "(0 = tema)", 218, y + 2, 80, false); y += 30;
-            EdUi.Lbl(this, "Köşe yuvarlaklığı", 12, y + 2, 120, false); _rad = EdUi.Num(this, 140, y, 70, -1, 100, 1, 0);
-            EdUi.Lbl(this, "(-1 = tema)", 218, y + 2, 80, false); y += 30;
-            _notitle = EdUi.Chk(this, "Başlığı gizle (CPU, GPU… yazısı ve vurgu çubuğu)", 12, y, 350); y += 30;
+            EdUi.Lbl(this, L.T("Çerçeve kalınlığı", "Border width"), 12, y + 2, 120, false); _fw = EdUi.Num(this, 140, y, 70, 0, 12, 0.5m, 1);
+            EdUi.Lbl(this, L.T("(0 = tema)", "(0 = theme)"), 218, y + 2, 80, false); y += 30;
+            EdUi.Lbl(this, L.T("Köşe yuvarlaklığı", "Corner radius"), 12, y + 2, 120, false); _rad = EdUi.Num(this, 140, y, 70, -1, 100, 1, 0);
+            EdUi.Lbl(this, L.T("(-1 = tema)", "(-1 = theme)"), 218, y + 2, 80, false); y += 30;
+            _notitle = EdUi.Chk(this, L.T("Başlığı gizle (CPU, GPU… yazısı)", "Hide card header / title"), 12, y, 350); y += 30;
 
-            EdUi.Lbl(this, "GÖSTERGE VE ÇUBUKLAR", 12, y, 300, true); y += 26;
-            EdUi.Lbl(this, "Daire uç stili", 12, y + 2, 120, false); _cap = EdUi.Combo(this, 140, y, 200, "Tema", "Yuvarlak uç", "Düz uç"); y += 30;
-            EdUi.Lbl(this, "Daire kalınlığı (%)", 12, y + 2, 125, false); _gw = EdUi.Num(this, 140, y, 70, 0, 300, 10, 0);
-            EdUi.Lbl(this, "(0 = tema)", 218, y + 2, 80, false); y += 30;
-            EdUi.Lbl(this, "Parlama (glow)", 12, y + 2, 120, false); _glow = EdUi.Combo(this, 140, y, 200, "Tema", "Açık", "Kapalı"); y += 30;
-            EdUi.Lbl(this, "Çubuk stili", 12, y + 2, 120, false); _bars = EdUi.Combo(this, 140, y, 200, BarNm); y += 34;
+            EdUi.Lbl(this, L.T("GÖSTERGE VE ÇUBUKLAR", "GAUGES & BARS"), 12, y, 300, true); y += 26;
+            EdUi.Lbl(this, L.T("Daire uç stili", "Ring cap"), 12, y + 2, 120, false); _cap = EdUi.Combo(this, 140, y, 200, L.T("Tema", "Theme"), L.T("Yuvarlak uç", "Round"), L.T("Düz uç", "Flat")); y += 30;
+            EdUi.Lbl(this, L.T("Daire kalınlığı (%)", "Ring width (%)"), 12, y + 2, 125, false); _gw = EdUi.Num(this, 140, y, 70, 0, 300, 10, 0);
+            EdUi.Lbl(this, L.T("(0 = tema)", "(0 = theme)"), 218, y + 2, 80, false); y += 30;
+            EdUi.Lbl(this, L.T("Parlama (glow)", "Glow"), 12, y + 2, 120, false); _glow = EdUi.Combo(this, 140, y, 200, L.T("Tema", "Theme"), L.T("Açık", "On"), L.T("Kapalı", "Off")); y += 30;
+            EdUi.Lbl(this, L.T("Çubuk stili", "Bar style"), 12, y + 2, 120, false); _bars = EdUi.Combo(this, 140, y, 200, BarNames()); y += 34;
 
-            _lText = EdUi.Lbl(this, "METİN  ({saat} {tarih} {cpu} {gpu} {cpusic} {gpusic} {ram} {fps} {ping})", 12, y, 350, true); y += 26;
+            _lText = EdUi.Lbl(this, L.T("METİN  ({saat} {tarih} {cpu} {gpu} {ram} {fps})", "TEXT  ({time} {date} {cpu} {gpu} {ram} {fps})"), 12, y, 350, true); y += 26;
             _text = new TextBox { Left = 12, Top = y, Width = 340, Height = 54, Multiline = true, BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle }; Controls.Add(_text); y += 60;
-            EdUi.Lbl(this, "Hizalama", 12, y + 2, 120, false); _align = EdUi.Combo(this, 140, y, 120, "Sol", "Orta", "Sağ"); y += 34;
-            _lPath = EdUi.Lbl(this, "RESİM / LOGO DOSYASI", 12, y, 300, true); y += 26;
+            EdUi.Lbl(this, L.T("Hizalama", "Alignment"), 12, y + 2, 120, false); _align = EdUi.Combo(this, 140, y, 120, L.T("Sol", "Left"), L.T("Orta", "Center"), L.T("Sağ", "Right")); y += 34;
+            _lPath = EdUi.Lbl(this, L.T("RESİM / LOGO DOSYASI", "IMAGE / LOGO FILE"), 12, y, 300, true); y += 26;
             _path = new TextBox { Left = 12, Top = y, Width = 270, BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle }; Controls.Add(_path);
-            _browse = EdUi.Btn(this, "Gözat…", 288, y - 1, 64, delegate
+            _browse = EdUi.Btn(this, L.T("Gözat…", "Browse…"), 288, y - 1, 64, delegate
             {
-                using (var od = new OpenFileDialog { Filter = "Resimler|*.png;*.jpg;*.jpeg;*.bmp;*.gif|Tümü|*.*" })
+                using (var od = new OpenFileDialog { Filter = L.T("Resimler|*.png;*.jpg;*.jpeg;*.bmp;*.gif|Tümü|*.*", "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All|*.*") })
                     if (od.ShowDialog() == DialogResult.OK) _path.Text = od.FileName;
             });
             y += 40;
-            EdUi.Btn(this, "Kapat", 12, y, 100, delegate { Hide(); });
-            EdUi.Btn(this, "Çoğalt", 120, y, 90, delegate { _d.DuplicateSelected(); });
-            EdUi.Btn(this, "Varsayılana dön", 218, y, 134, delegate { if (_w != null) { Reset(); } });
+            EdUi.Btn(this, L.T("Kapat", "Close"), 12, y, 100, delegate { Hide(); });
+            EdUi.Btn(this, L.T("Çoğalt", "Duplicate"), 120, y, 90, delegate { _d.DuplicateSelected(); });
+            EdUi.Btn(this, L.T("Varsayılana dön", "Reset"), 218, y, 134, delegate { if (_w != null) { Reset(); } });
             AutoScrollMinSize = new Size(0, y + 50);
 
             _x.ValueChanged += delegate { Apply(); }; _y.ValueChanged += delegate { Apply(); }; _wd.ValueChanged += delegate { Apply(); }; _h.ValueChanged += delegate { Apply(); };
@@ -183,7 +194,7 @@ namespace ProSystemMonitor
             if (w == null) { Hide(); return; }
             _bind = true;
             WDef def = _d.DefOf(w.Id);
-            _title.Text = def.Name + "  (" + w.Id + ")";
+            _title.Text = def.Title + "  (" + w.Id + ")";
             _x.Value = Clamp(_x, (decimal)Math.Round(w.X)); _y.Value = Clamp(_y, (decimal)Math.Round(w.Y)); _wd.Value = Clamp(_wd, (decimal)Math.Round(w.W)); _h.Value = Clamp(_h, (decimal)Math.Round(w.H));
             _lock.Checked = w.Locked;
             _fs.Value = Clamp(_fs, (decimal)Math.Round(w.Fs * 100)); _zoom.Value = Clamp(_zoom, (decimal)Math.Round(w.Zoom * 100));
@@ -197,7 +208,10 @@ namespace ProSystemMonitor
             _glow.SelectedIndex = w.Glow == "on" ? 1 : (w.Glow == "off" ? 2 : 0);
             _bars.SelectedIndex = Math.Max(0, Array.IndexOf(BarIds, w.Bars));
             bool isText = BaseOf(w) == "text", isBox = BaseOf(w) == "box", isImg = BaseOf(w) == "image";
-            _lText.Visible = _text.Visible = isText || isBox; _lText.Text = isBox ? "BAŞLIK (boşsa yok)" : "METİN  ({saat} {tarih} {cpu} {gpu} {cpusic} {gpusic} {ram} {fps} {ping})";
+            _lText.Visible = _text.Visible = isText || isBox;
+            _lText.Text = isBox
+                ? L.T("BAŞLIK (boşsa yok)", "TITLE (leave blank for none)")
+                : L.T("METİN  ({saat} {tarih} {cpu} {gpu} {ram} {fps})", "TEXT  ({time} {date} {cpu} {gpu} {ram} {fps})");
             _align.Visible = isText;
             _lPath.Visible = _path.Visible = _browse.Visible = isImg;
             _text.Text = w.Text; _path.Text = w.Path; _align.SelectedIndex = Math.Max(0, Math.Min(2, w.Align));
@@ -248,35 +262,36 @@ namespace ProSystemMonitor
         public CanvasForm(DashboardForm d)
         {
             _d = d;
-            Text = "Pano ayarları"; FormBorderStyle = FormBorderStyle.FixedToolWindow; TopMost = true; ShowInTaskbar = false;
+            ModernUi.ApplyDarkTitleBar(this);
+            Text = L.T("Pano ayarları", "Canvas Settings"); FormBorderStyle = FormBorderStyle.FixedToolWindow; TopMost = true; ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual; ClientSize = new Size(372, 600); BackColor = EdUi.Bg; ForeColor = EdUi.Tx; Font = new Font("Segoe UI", 9f);
             int y = 10;
-            EdUi.Lbl(this, "ÇÖZÜNÜRLÜK / EKRAN", 12, y, 340, true); y += 28;
-            EdUi.Lbl(this, "Hazır ayar", 12, y + 2, 90, false); _preset = EdUi.Combo(this, 110, y, 240, PNames); y += 32;
-            EdUi.Lbl(this, "Genişlik", 12, y + 2, 60, false); _w = EdUi.Num(this, 74, y, 80, 200, 8000, 10, 0);
-            EdUi.Lbl(this, "Yükseklik", 170, y + 2, 70, false); _h = EdUi.Num(this, 242, y, 80, 120, 8000, 10, 0); y += 32;
-            _scale = EdUi.Chk(this, "Değiştirince widget'ları yeni boyuta ölçekle", 12, y, 340); _scale.Checked = true; y += 26;
-            EdUi.Btn(this, "Uygula", 12, y, 100, delegate { Apply(false); });
-            EdUi.Btn(this, "Yatay ⇄ Dikey çevir", 120, y, 160, delegate { Apply(true); });
+            EdUi.Lbl(this, L.T("ÇÖZÜNÜRLÜK / EKRAN", "RESOLUTION / SCREEN"), 12, y, 340, true); y += 28;
+            EdUi.Lbl(this, L.T("Hazır ayar", "Preset"), 12, y + 2, 90, false); _preset = EdUi.Combo(this, 110, y, 240, PNames); y += 32;
+            EdUi.Lbl(this, L.T("Genişlik", "Width"), 12, y + 2, 60, false); _w = EdUi.Num(this, 74, y, 80, 200, 8000, 10, 0);
+            EdUi.Lbl(this, L.T("Yükseklik", "Height"), 170, y + 2, 70, false); _h = EdUi.Num(this, 242, y, 80, 120, 8000, 10, 0); y += 32;
+            _scale = EdUi.Chk(this, L.T("Değiştirince widget'ları yeni boyuta ölçekle", "Scale widgets to fit new canvas size"), 12, y, 340); _scale.Checked = true; y += 26;
+            EdUi.Btn(this, L.T("Uygula", "Apply"), 12, y, 100, delegate { Apply(false); });
+            EdUi.Btn(this, L.T("Yatay ⇄ Dikey çevir", "Swap Landscape ⇄ Portrait"), 120, y, 170, delegate { Apply(true); });
             y += 34;
-            _bar = EdUi.Chk(this, "Alt bilgi çubuğu ve ses şeridi göster", 12, y, 340); y += 34;
+            _bar = EdUi.Chk(this, L.T("Alt bilgi çubuğu ve ses şeridi göster", "Show bottom info & audio bar"), 12, y, 340); y += 34;
 
-            EdUi.Lbl(this, "IZGARA", 12, y, 340, true); y += 28;
-            EdUi.Lbl(this, "Izgara boyutu (birim)", 12, y + 2, 140, false); _grid = EdUi.Combo(this, 160, y, 80, GridNm); y += 30;
-            _showGrid = EdUi.Chk(this, "Izgarayı göster", 12, y, 160); _snap = EdUi.Chk(this, "Izgaraya yapış", 180, y, 160); y += 34;
+            EdUi.Lbl(this, L.T("IZGARA", "GRID"), 12, y, 340, true); y += 28;
+            EdUi.Lbl(this, L.T("Izgara boyutu", "Grid size"), 12, y + 2, 140, false); _grid = EdUi.Combo(this, 160, y, 80, GridNm); y += 30;
+            _showGrid = EdUi.Chk(this, L.T("Izgarayı göster", "Show grid"), 12, y, 160); _snap = EdUi.Chk(this, L.T("Izgaraya yapış", "Snap to grid"), 180, y, 160); y += 34;
 
-            EdUi.Lbl(this, "ARKA PLAN VE GENEL", 12, y, 340, true); y += 28;
-            _bg = new ColorField(this, "Arka plan rengi", y, delegate { return _d._th.Bg; }); y += 32;
-            EdUi.Lbl(this, "Arka plan resmi", 12, y + 2, 120, false); y += 24;
+            EdUi.Lbl(this, L.T("ARKA PLAN VE GENEL", "BACKGROUND & GLOBAL"), 12, y, 340, true); y += 28;
+            _bg = new ColorField(this, L.T("Arka plan rengi", "Background color"), y, delegate { return _d._th.Bg; }); y += 32;
+            EdUi.Lbl(this, L.T("Arka plan resmi", "Background image"), 12, y + 2, 120, false); y += 24;
             _img = new TextBox { Left = 12, Top = y, Width = 236, BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle }; Controls.Add(_img);
-            EdUi.Btn(this, "Gözat…", 254, y - 1, 60, delegate { using (var od = new OpenFileDialog { Filter = "Resimler|*.png;*.jpg;*.jpeg;*.bmp" }) if (od.ShowDialog() == DialogResult.OK) _img.Text = od.FileName; });
-            EdUi.Btn(this, "Sil", 318, y - 1, 40, delegate { _img.Text = ""; });
+            EdUi.Btn(this, L.T("Gözat…", "Browse…"), 254, y - 1, 60, delegate { using (var od = new OpenFileDialog { Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp" }) if (od.ShowDialog() == DialogResult.OK) _img.Text = od.FileName; });
+            EdUi.Btn(this, L.T("Sil", "Clear"), 318, y - 1, 42, delegate { _img.Text = ""; });
             y += 36;
-            EdUi.Lbl(this, "Tüm yazılar (%)", 12, y + 2, 120, false); _gfs = EdUi.Num(this, 140, y, 70, 30, 300, 5, 0);
-            EdUi.Lbl(this, "(sadece yazı boyu)", 216, y + 2, 140, false); y += 30;
-            EdUi.Lbl(this, "Tüm içerik (%)", 12, y + 2, 120, false); _gz = EdUi.Num(this, 140, y, 70, 20, 400, 5, 0);
-            EdUi.Lbl(this, "(yazı + boşluklar)", 216, y + 2, 140, false); y += 40;
-            EdUi.Btn(this, "Kapat", 12, y, 100, delegate { Hide(); });
+            EdUi.Lbl(this, L.T("Tüm yazılar (%)", "Global font (%)"), 12, y + 2, 120, false); _gfs = EdUi.Num(this, 140, y, 70, 30, 300, 5, 0);
+            EdUi.Lbl(this, L.T("(sadece yazı)", "(font only)"), 216, y + 2, 140, false); y += 30;
+            EdUi.Lbl(this, L.T("Tüm içerik (%)", "Global zoom (%)"), 12, y + 2, 120, false); _gz = EdUi.Num(this, 140, y, 70, 20, 400, 5, 0);
+            EdUi.Lbl(this, L.T("(yazı + boşluk)", "(font + pad)"), 216, y + 2, 140, false); y += 40;
+            EdUi.Btn(this, L.T("Kapat", "Close"), 12, y, 100, delegate { Hide(); });
 
             _preset.SelectedIndexChanged += delegate
             {

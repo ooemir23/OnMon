@@ -19,6 +19,7 @@ namespace ProSystemMonitor
         public string Description = "";
         public int CanvasW = 1920, CanvasH = 1080;
         public string ThemeId = "rog";
+        public string Category = "custom";
         public int WidgetCount;
         public bool BuiltIn;
         public Bitmap Thumb;
@@ -61,9 +62,9 @@ namespace ProSystemMonitor
 
         internal void ExportTemplateFrom(List<WInst> widgets, int cw, int ch, Theme th, int bgCol, string bgImg, float gfs, float gzoom, bool topBar, bool hideStrip, int margin)
         {
-            string def = "sablonum";
+            string def = L.T("sablonum", "my_layout");
             Directory.CreateDirectory(TemplateDir);
-            using (var sd = new SaveFileDialog { Title = "Şablonu kaydet / paylaş", Filter = "OnMon şablonu (*.onmon)|*.onmon", FileName = def, InitialDirectory = TemplateDir, DefaultExt = "onmon", OverwritePrompt = true })
+            using (var sd = new SaveFileDialog { Title = L.T("Şablonu kaydet / paylaş", "Save / Share Layout"), Filter = L.T("OnMon şablonu (*.onmon)|*.onmon", "OnMon Layout (*.onmon)|*.onmon"), FileName = def, InitialDirectory = TemplateDir, DefaultExt = "onmon", OverwritePrompt = true })
             {
                 if (sd.ShowDialog() != DialogResult.OK) return;
                 try
@@ -72,7 +73,7 @@ namespace ProSystemMonitor
                     string txt = BuildTemplateText(name, Environment.UserName, "", widgets, cw, ch, th, bgCol, bgImg, gfs, gzoom, topBar, hideStrip, margin);
                     File.WriteAllText(sd.FileName, txt, new UTF8Encoding(false));
                 }
-                catch (Exception ex) { MessageBox.Show("Kaydedilemedi: " + ex.Message, "OnMon"); }
+                catch (Exception ex) { MessageBox.Show(L.T("Kaydedilemedi: ", "Could not save: ") + ex.Message, "OnMon"); }
             }
         }
 
@@ -138,7 +139,7 @@ namespace ProSystemMonitor
         internal void ImportTemplate()
         {
             Directory.CreateDirectory(TemplateDir);
-            using (var od = new OpenFileDialog { Title = "Şablon dosyası seç", Filter = "OnMon şablonu (*.onmon)|*.onmon|Tümü|*.*", InitialDirectory = TemplateDir })
+            using (var od = new OpenFileDialog { Title = L.T("Şablon dosyası seç", "Select Layout File"), Filter = L.T("OnMon şablonu (*.onmon)|*.onmon|Tümü|*.*", "OnMon Layout (*.onmon)|*.onmon|All|*.*"), InitialDirectory = TemplateDir })
                 if (od.ShowDialog() == DialogResult.OK) ImportAndApplyExternalTemplate(od.FileName, 0);
         }
 
@@ -161,7 +162,7 @@ namespace ProSystemMonitor
                 }
                 ApplyTemplateFile(target, scaleMode);
             }
-            catch (Exception ex) { MessageBox.Show("Şablon eklenemedi: " + ex.Message, "OnMon"); }
+            catch (Exception ex) { MessageBox.Show(L.T("Şablon eklenemedi: ", "Could not import layout: ") + ex.Message, "OnMon"); }
         }
 
         internal void ApplyTemplateFile(string file) { ApplyTemplateFile(file, 0); }
@@ -225,7 +226,7 @@ namespace ProSystemMonitor
                 List<WInst> list; int cw, ch, bgc, margin; float gz, gf; string themeId, bgimg, name, author, desc; bool topBar, hideStrip;
                 if (!LoadTemplateData(file, out list, out cw, out ch, out gz, out gf, out bgc, out themeId, out bgimg, out topBar, out hideStrip, out margin, out name, out author, out desc))
                 {
-                    MessageBox.Show("Bu dosya geçerli bir OnMon şablonu değil veya içinde widget yok.", "OnMon");
+                    MessageBox.Show(L.T("Bu dosya geçerli bir OnMon şablonu değil veya içinde widget yok.", "Invalid OnMon layout file or empty widget list."), "OnMon");
                     return;
                 }
 
@@ -234,10 +235,10 @@ namespace ProSystemMonitor
                 if (mode == 0 && (cw != _cw || ch != _ch))
                 {
                     DialogResult dr = MessageBox.Show(
-                        "Bu şablon " + cw + "×" + ch + " için hazırlanmış (senin tuvalin: " + _cw + "×" + _ch + ").\n\n" +
-                        "Evet: Mevcut tuval boyutuma uyarla (önerilen)\n" +
-                        "Hayır: Şablonun kendi çözünürlüğünü kullan",
-                        "Çözünürlük uyarlama", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                        L.T(
+                            "Bu şablon " + cw + "×" + ch + " için hazırlanmış (senin tuvalin: " + _cw + "×" + _ch + ").\n\nEvet: Mevcut tuval boyutuma uyarla (önerilen)\nHayır: Şablonun kendi çözünürlüğünü kullan",
+                            "This layout was designed for " + cw + "×" + ch + " (your canvas: " + _cw + "×" + _ch + ").\n\nYes: Scale to fit my current canvas (recommended)\nNo: Switch to the layout's original resolution"),
+                        L.T("Çözünürlük uyarlama", "Resolution Scaling"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                     if (dr == DialogResult.Cancel) return;
                     mode = dr == DialogResult.Yes ? 1 : 2;
                 }
@@ -276,7 +277,7 @@ namespace ProSystemMonitor
                 _wd = list; _sel = null;
                 WSave(); SaveSettings(); _dirty = true; Invalidate();
             }
-            catch (Exception ex) { MessageBox.Show("Şablon yüklenemedi: " + ex.Message, "OnMon"); }
+            catch (Exception ex) { MessageBox.Show(L.T("Şablon yüklenemedi: ", "Could not load layout: ") + ex.Message, "OnMon"); }
         }
 
         internal LayoutMeta ReadTemplateMeta(string file, bool loadThumb)

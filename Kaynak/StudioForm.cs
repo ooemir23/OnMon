@@ -74,11 +74,15 @@ namespace ProSystemMonitor
         private Button _wBrowse;
         private Panel _tokenPanel;
 
-        private static readonly string[] ResNames = {
-            "Özel", "1920 × 1080  Full HD", "2560 × 1440  QHD", "3840 × 2160  4K", "1600 × 900", "1280 × 720  HD",
-            "2560 × 1080  Ultrawide", "3440 × 1440  UWQHD", "1080 × 1920  Dikey FHD", "1440 × 2560  Dikey QHD",
-            "1024 × 600  Kasa 7\"", "800 × 480  Kasa 5\"", "1280 × 400  Şerit", "480 × 320  Mini"
-        };
+        private static string[] GetResNames()
+        {
+            return new[]
+            {
+                L.T("Özel", "Custom"), "1920 × 1080  Full HD", "2560 × 1440  QHD", "3840 × 2160  4K", "1600 × 900", "1280 × 720  HD",
+                "2560 × 1080  Ultrawide", "3440 × 1440  UWQHD", L.T("1080 × 1920  Dikey FHD", "1080 × 1920  Portrait FHD"), L.T("1440 × 2560  Dikey QHD", "1440 × 2560  Portrait QHD"),
+                L.T("1024 × 600  Kasa 7\"", "1024 × 600  7\" Sensor"), L.T("800 × 480  Kasa 5\"", "800 × 480  5\" Sensor"), L.T("1280 × 400  Şerit", "1280 × 400  Bar"), "480 × 320  Mini"
+            };
+        }
         private static readonly int[][] ResSizes = {
             null, new[] { 1920, 1080 }, new[] { 2560, 1440 }, new[] { 3840, 2160 }, new[] { 1600, 900 }, new[] { 1280, 720 },
             new[] { 2560, 1080 }, new[] { 3440, 1440 }, new[] { 1080, 1920 }, new[] { 1440, 2560 },
@@ -86,9 +90,19 @@ namespace ProSystemMonitor
         };
         private static readonly string[] GridNm = { "1", "2", "4", "5", "8", "10", "20", "40" };
         private static readonly string[] FrameIds = { "", "flat", "glass", "neon", "blueprint", "crt", "hud", "brutal", "clip", "mono", "none" };
-        private static readonly string[] FrameNm = { "Tema", "Düz", "Cam", "Neon", "Teknik çizim", "CRT", "HUD köşeleri", "Sert gölge", "Kesik köşe", "Köşeli", "Çerçevesiz" };
+        private static string[] GetFrameNm()
+        {
+            return L.IsEn
+                ? new[] { "Theme", "Flat", "Glass", "Neon", "Blueprint", "CRT", "HUD Corners", "Hard Shadow", "Cut Corner", "Sharp", "Borderless" }
+                : new[] { "Tema", "Düz", "Cam", "Neon", "Teknik çizim", "CRT", "HUD köşeleri", "Sert gölge", "Kesik köşe", "Köşeli", "Çerçevesiz" };
+        }
         private static readonly string[] BarIds = { "", "round", "thin", "chunk", "seg" };
-        private static readonly string[] BarNm = { "Tema", "Yuvarlak", "İnce", "Kalın blok", "Parçalı" };
+        private static string[] GetBarNm()
+        {
+            return L.IsEn
+                ? new[] { "Theme", "Rounded", "Thin", "Chunky", "Segmented" }
+                : new[] { "Tema", "Yuvarlak", "İnce", "Kalın blok", "Parçalı" };
+        }
 
         private static readonly Color[] QuickSwatches = {
             Color.Empty, Color.FromArgb(255, 74, 0), Color.FromArgb(0, 200, 255), Color.FromArgb(16, 185, 129),
@@ -99,7 +113,8 @@ namespace ProSystemMonitor
         {
             _d = d;
             _d.WReg();
-            Text = "OnMon — Düzen Stüdyosu";
+            ModernUi.ApplyDarkTitleBar(this);
+            Text = L.T("OnMon — Düzen Stüdyosu", "OnMon — Layout Studio");
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1380, 820);
             MinimumSize = new Size(1100, 640);
@@ -147,29 +162,29 @@ namespace ProSystemMonitor
             Controls.Add(top);
 
             int x = 10, y1 = 6, y2 = 42;
-            x = TBtn(top, "↩ Geri", x, y1, 72, delegate { Undo(); });
-            x = TBtn(top, "↪ İleri", x, y1, 72, delegate { Redo(); });
+            x = TBtn(top, L.T("↩ Geri", "↩ Undo"), x, y1, 72, delegate { Undo(); });
+            x = TBtn(top, L.T("↪ İleri", "↪ Redo"), x, y1, 72, delegate { Redo(); });
             x += 8;
-            x = TBtn(top, "◧ Sol", x, y1, 56, delegate { AlignSelected("L"); });
-            x = TBtn(top, "◫ Y.Ort", x, y1, 64, delegate { AlignSelected("HC"); });
-            x = TBtn(top, "◨ Sağ", x, y1, 56, delegate { AlignSelected("R"); });
-            x = TBtn(top, "⬒ Üst", x, y1, 56, delegate { AlignSelected("T"); });
-            x = TBtn(top, "⬓ D.Ort", x, y1, 64, delegate { AlignSelected("VC"); });
-            x = TBtn(top, "⬔ Alt", x, y1, 56, delegate { AlignSelected("B"); });
-            x = TBtn(top, "⫼ Dağıt", x, y1, 66, delegate { DistributeSelected(); });
-            x = TBtn(top, "⊞ Boyut", x, y1, 68, delegate { MatchSizeSelected(); });
-            x += 10;
-            _ckLive = new CheckBox { Text = "Canlı yansıt", Left = x, Top = y1 + 3, Width = 100, Height = 24, Checked = true, ForeColor = AccC, BackColor = Color.Transparent };
+            x = TBtn(top, L.T("◧ Sol", "◧ Left"), x, y1, 58, delegate { AlignSelected("L"); });
+            x = TBtn(top, L.T("◫ Y.Ort", "◫ H.Ctr"), x, y1, 64, delegate { AlignSelected("HC"); });
+            x = TBtn(top, L.T("◨ Sağ", "◨ Right"), x, y1, 60, delegate { AlignSelected("R"); });
+            x = TBtn(top, L.T("⬒ Üst", "⬒ Top"), x, y1, 58, delegate { AlignSelected("T"); });
+            x = TBtn(top, L.T("⬓ D.Ort", "⬓ V.Ctr"), x, y1, 64, delegate { AlignSelected("VC"); });
+            x = TBtn(top, L.T("⬔ Alt", "⬔ Bot"), x, y1, 58, delegate { AlignSelected("B"); });
+            x = TBtn(top, L.T("⫼ Dağıt", "⫼ Dist"), x, y1, 66, delegate { DistributeSelected(); });
+            x = TBtn(top, L.T("⊞ Boyut", "⊞ Size"), x, y1, 68, delegate { MatchSizeSelected(); });
+            x += 8;
+            _ckLive = new CheckBox { Text = L.T("Canlı yansıt", "Live Sync"), Left = x, Top = y1 + 3, Width = 100, Height = 24, Checked = true, ForeColor = AccC, BackColor = Color.Transparent };
             top.Controls.Add(_ckLive); x += 104;
-            x = TBtn(top, "📁 Galeri…", x, y1, 90, delegate { _d.OpenGallery(); });
-            x = TBtn(top, "💾 Galeriye Kaydet", x, y1, 130, delegate { SaveToGalleryDialog(); });
-            x = TBtn(top, "📤 Paylaş (.onmon)", x, y1, 132, delegate { _d.ExportTemplateFrom(_wd, _cw, _ch, _th, _bgCol, _bgImg, _gfs, _gzoom, _topBar, _hideStrip, _margin); });
+            x = TBtn(top, L.T("📁 Galeri…", "📁 Gallery…"), x, y1, 92, delegate { _d.OpenGallery(); });
+            x = TBtn(top, L.T("💾 Galeriye Kaydet", "💾 Save to Gallery"), x, y1, 134, delegate { SaveToGalleryDialog(); });
+            x = TBtn(top, L.T("📤 Paylaş (.onmon)", "📤 Export (.onmon)"), x, y1, 134, delegate { _d.ExportTemplateFrom(_wd, _cw, _ch, _th, _bgCol, _bgImg, _gfs, _gzoom, _topBar, _hideStrip, _margin); });
 
             // Row 2
             x = 10;
-            top.Controls.Add(new Label { Text = "Ekran:", Left = x, Top = y2 + 4, Width = 44, ForeColor = DimC }); x += 46;
+            top.Controls.Add(new Label { Text = L.T("Ekran:", "Screen:"), Left = x, Top = y2 + 4, Width = 48, ForeColor = DimC }); x += 50;
             _cbRes = new ComboBox { Left = x, Top = y2 + 1, Width = 172, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = CardBg, ForeColor = TxC, FlatStyle = FlatStyle.Flat };
-            _cbRes.Items.AddRange(ResNames);
+            _cbRes.Items.AddRange(GetResNames());
             _cbRes.SelectedIndexChanged += delegate
             {
                 if (_bind || _cbRes.SelectedIndex <= 0) return;
@@ -179,9 +194,9 @@ namespace ProSystemMonitor
             top.Controls.Add(_cbRes); x += 176;
             x = TBtn(top, "⇄", x, y2, 32, delegate { ResizeCanvas(_ch, _cw, true); });
             x += 8;
-            top.Controls.Add(new Label { Text = "Tema:", Left = x, Top = y2 + 4, Width = 42, ForeColor = DimC }); x += 44;
+            top.Controls.Add(new Label { Text = L.T("Tema:", "Theme:"), Left = x, Top = y2 + 4, Width = 46, ForeColor = DimC }); x += 48;
             _cbTheme = new ComboBox { Left = x, Top = y2 + 1, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = CardBg, ForeColor = TxC, FlatStyle = FlatStyle.Flat };
-            foreach (Theme t in Themes.All) _cbTheme.Items.Add(t.Name);
+            foreach (Theme t in Themes.All) _cbTheme.Items.Add(t.Title);
             _cbTheme.SelectedIndexChanged += delegate
             {
                 if (_bind || _cbTheme.SelectedIndex < 0) return;
@@ -190,19 +205,19 @@ namespace ProSystemMonitor
                 ApplyAndRedraw(true);
             };
             top.Controls.Add(_cbTheme); x += 166;
-            top.Controls.Add(new Label { Text = "Izgara:", Left = x, Top = y2 + 4, Width = 46, ForeColor = DimC }); x += 48;
+            top.Controls.Add(new Label { Text = L.T("Izgara:", "Grid:"), Left = x, Top = y2 + 4, Width = 46, ForeColor = DimC }); x += 48;
             _cbGrid = new ComboBox { Left = x, Top = y2 + 1, Width = 54, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = CardBg, ForeColor = TxC, FlatStyle = FlatStyle.Flat };
             _cbGrid.Items.AddRange(GridNm);
             _cbGrid.SelectedIndexChanged += delegate { if (_bind || _cbGrid.SelectedIndex < 0) return; _grid = float.Parse(GridNm[_cbGrid.SelectedIndex], CultureInfo.InvariantCulture); _d._grid = _grid; _d.SaveSettings(); _canvas.Invalidate(); };
             top.Controls.Add(_cbGrid); x += 60;
-            _ckGrid = new CheckBox { Text = "Göster", Left = x, Top = y2 + 3, Width = 68, Height = 24, ForeColor = TxC };
+            _ckGrid = new CheckBox { Text = L.T("Göster", "Show"), Left = x, Top = y2 + 3, Width = 68, Height = 24, ForeColor = TxC };
             _ckGrid.CheckedChanged += delegate { if (_bind) return; _showGrid = _ckGrid.Checked; _d._showGrid = _showGrid; _d.SaveSettings(); _canvas.Invalidate(); };
             top.Controls.Add(_ckGrid); x += 70;
-            _ckSnap = new CheckBox { Text = "Mıknatıs", Left = x, Top = y2 + 3, Width = 78, Height = 24, ForeColor = TxC };
+            _ckSnap = new CheckBox { Text = L.T("Mıknatıs", "Snap"), Left = x, Top = y2 + 3, Width = 78, Height = 24, ForeColor = TxC };
             _ckSnap.CheckedChanged += delegate { if (_bind) return; _snapOn = _ckSnap.Checked; _d._snapOn = _snapOn; _d.SaveSettings(); };
             top.Controls.Add(_ckSnap); x += 82;
 
-            x = TBtn(top, "Sığdır", x, y2, 56, delegate { _canvas.FitToView(); UpdateZoomLabel(); });
+            x = TBtn(top, L.T("Sığdır", "Fit"), x, y2, 56, delegate { _canvas.FitToView(); UpdateZoomLabel(); });
             x = TBtn(top, "−", x, y2, 30, delegate { _canvas.ZoomStep(0.85f); UpdateZoomLabel(); });
             _lblZoom = new Label { Text = "100%", Left = x, Top = y2 + 4, Width = 48, TextAlign = ContentAlignment.MiddleCenter, ForeColor = TxC };
             top.Controls.Add(_lblZoom); x += 50;
@@ -215,7 +230,7 @@ namespace ProSystemMonitor
             left.Paint += delegate (object s, PaintEventArgs e) { using (var p = new Pen(LineC)) e.Graphics.DrawLine(p, left.Width - 1, 0, left.Width - 1, left.Height); };
             Controls.Add(left);
 
-            var lblPal = new Label { Text = "WİDGET EKLE (Çift tıkla)", Dock = DockStyle.Top, Height = 22, ForeColor = AccC, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+            var lblPal = new Label { Text = L.T("WİDGET EKLE (Çift tıkla)", "ADD WIDGET (Double-click)"), Dock = DockStyle.Top, Height = 22, ForeColor = AccC, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
             _txtSearch = new TextBox { Dock = DockStyle.Top, BackColor = CardBg, ForeColor = TxC, BorderStyle = BorderStyle.FixedSingle };
             _txtSearch.TextChanged += delegate { RefreshPalette(); };
 
@@ -232,13 +247,13 @@ namespace ProSystemMonitor
             };
 
             var layerHdr = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = PanelBg, Padding = new Padding(0, 6, 0, 2) };
-            layerHdr.Controls.Add(new Label { Text = "KATMANLAR (Sıra / Seçim)", Left = 0, Top = 6, Width = 250, Height = 20, ForeColor = AccC, Font = new Font("Segoe UI", 9f, FontStyle.Bold) });
+            layerHdr.Controls.Add(new Label { Text = L.T("KATMANLAR (Sıra / Seçim)", "LAYERS (Order / Select)"), Left = 0, Top = 6, Width = 250, Height = 20, ForeColor = AccC, Font = new Font("Segoe UI", 9f, FontStyle.Bold) });
             int lx = 0;
             lx = TBtn(layerHdr, "▲", lx, 28, 34, delegate { MoveLayer(true); });
             lx = TBtn(layerHdr, "▼", lx, 28, 34, delegate { MoveLayer(false); });
             lx = TBtn(layerHdr, "🔒", lx, 28, 34, delegate { ToggleLockSelected(); });
-            lx = TBtn(layerHdr, "Çoğalt", lx, 28, 62, delegate { DuplicateSelected(); });
-            lx = TBtn(layerHdr, "Sil/Gizle", lx, 28, 72, delegate { DeleteSelected(); });
+            lx = TBtn(layerHdr, L.T("Çoğalt", "Dup"), lx, 28, 62, delegate { DuplicateSelected(); });
+            lx = TBtn(layerHdr, L.T("Sil/Gizle", "Remove"), lx, 28, 72, delegate { DeleteSelected(); });
 
             _layerList = new ListBox
             {
@@ -286,28 +301,28 @@ namespace ProSystemMonitor
             // Canvas inspector
             _pCanvasInsp = new Panel { Dock = DockStyle.Top, Height = 640, BackColor = PanelBg };
             int y = 10;
-            EdUi.Lbl(_pCanvasInsp, "TUVAL VE GENEL AYARLAR", 12, y, 310, true); y += 28;
-            EdUi.Lbl(_pCanvasInsp, "Genişlik", 12, y + 2, 60, false); _cW = EdUi.Num(_pCanvasInsp, 74, y, 76, 200, 8000, 10, 0);
-            EdUi.Lbl(_pCanvasInsp, "Yükseklik", 162, y + 2, 66, false); _cH = EdUi.Num(_pCanvasInsp, 230, y, 76, 120, 8000, 10, 0); y += 32;
-            EdUi.Btn(_pCanvasInsp, "Ölçekleyerek Uygula", 12, y, 152, delegate { ResizeCanvas((int)_cW.Value, (int)_cH.Value, true); });
-            EdUi.Btn(_pCanvasInsp, "Sadece Tuvali Değiştir", 170, y, 152, delegate { ResizeCanvas((int)_cW.Value, (int)_cH.Value, false); }); y += 36;
-            _cBar = EdUi.Chk(_pCanvasInsp, "Alt bilgi çubuğu ve ses şeridi göster", 12, y, 310); y += 30;
+            EdUi.Lbl(_pCanvasInsp, L.T("TUVAL VE GENEL AYARLAR", "CANVAS & GLOBAL SETTINGS"), 12, y, 310, true); y += 28;
+            EdUi.Lbl(_pCanvasInsp, L.T("Genişlik", "Width"), 12, y + 2, 60, false); _cW = EdUi.Num(_pCanvasInsp, 74, y, 76, 200, 8000, 10, 0);
+            EdUi.Lbl(_pCanvasInsp, L.T("Yükseklik", "Height"), 162, y + 2, 66, false); _cH = EdUi.Num(_pCanvasInsp, 230, y, 76, 120, 8000, 10, 0); y += 32;
+            EdUi.Btn(_pCanvasInsp, L.T("Ölçekleyerek Uygula", "Scale & Apply"), 12, y, 152, delegate { ResizeCanvas((int)_cW.Value, (int)_cH.Value, true); });
+            EdUi.Btn(_pCanvasInsp, L.T("Sadece Tuvali Değiştir", "Resize Canvas Only"), 170, y, 152, delegate { ResizeCanvas((int)_cW.Value, (int)_cH.Value, false); }); y += 36;
+            _cBar = EdUi.Chk(_pCanvasInsp, L.T("Alt bilgi çubuğu ve ses şeridi göster", "Show bottom info bar & audio strip"), 12, y, 310); y += 30;
             _cBar.CheckedChanged += delegate { if (_bind) return; PushUndo(); _topBar = _cBar.Checked; _hideStrip = !_cBar.Checked; ApplyAndRedraw(true); };
 
-            EdUi.Lbl(_pCanvasInsp, "ARKA PLAN", 12, y, 310, true); y += 26;
-            _cBg = new ColorField(_pCanvasInsp, "Arka plan rengi", y, delegate { return _th.Bg; });
+            EdUi.Lbl(_pCanvasInsp, L.T("ARKA PLAN", "BACKGROUND"), 12, y, 310, true); y += 26;
+            _cBg = new ColorField(_pCanvasInsp, L.T("Arka plan rengi", "Background color"), y, delegate { return _th.Bg; });
             _cBg.Changed = delegate { if (_bind) return; PushUndo(); _bgCol = _cBg.Value; ApplyAndRedraw(true); }; y += 32;
-            EdUi.Lbl(_pCanvasInsp, "Arka plan resmi", 12, y + 2, 120, false); y += 22;
+            EdUi.Lbl(_pCanvasInsp, L.T("Arka plan resmi", "Wallpaper image"), 12, y + 2, 140, false); y += 22;
             _cBgImg = new TextBox { Left = 12, Top = y, Width = 200, BackColor = CardBg, ForeColor = TxC, BorderStyle = BorderStyle.FixedSingle };
             _cBgImg.TextChanged += delegate { if (_bind) return; _bgImg = _cBgImg.Text; ApplyAndRedraw(true); };
             _pCanvasInsp.Controls.Add(_cBgImg);
-            EdUi.Btn(_pCanvasInsp, "Gözat…", 218, y - 1, 60, delegate { using (var od = new OpenFileDialog { Filter = "Resimler|*.png;*.jpg;*.jpeg;*.bmp" }) if (od.ShowDialog() == DialogResult.OK) _cBgImg.Text = od.FileName; });
-            EdUi.Btn(_pCanvasInsp, "Sil", 282, y - 1, 40, delegate { _cBgImg.Text = ""; }); y += 36;
+            EdUi.Btn(_pCanvasInsp, L.T("Gözat…", "Browse…"), 218, y - 1, 60, delegate { using (var od = new OpenFileDialog { Filter = L.T("Resimler|*.png;*.jpg;*.jpeg;*.bmp", "Images|*.png;*.jpg;*.jpeg;*.bmp") }) if (od.ShowDialog() == DialogResult.OK) _cBgImg.Text = od.FileName; });
+            EdUi.Btn(_pCanvasInsp, L.T("Sil", "Clear"), 282, y - 1, 44, delegate { _cBgImg.Text = ""; }); y += 36;
 
-            EdUi.Lbl(_pCanvasInsp, "GENEL ÖLÇEK", 12, y, 310, true); y += 26;
-            EdUi.Lbl(_pCanvasInsp, "Tüm yazılar (%)", 12, y + 2, 130, false); _cGfs = EdUi.Num(_pCanvasInsp, 150, y, 76, 30, 300, 5, 0); y += 30;
-            EdUi.Lbl(_pCanvasInsp, "Tüm içerik (%)", 12, y + 2, 130, false); _cGz = EdUi.Num(_pCanvasInsp, 150, y, 76, 20, 400, 5, 0); y += 30;
-            EdUi.Lbl(_pCanvasInsp, "Kenar boşluğu (px)", 12, y + 2, 130, false); _cMargin = EdUi.Num(_pCanvasInsp, 150, y, 76, 0, 48, 2, 0); y += 36;
+            EdUi.Lbl(_pCanvasInsp, L.T("GENEL ÖLÇEK", "GLOBAL SCALE"), 12, y, 310, true); y += 26;
+            EdUi.Lbl(_pCanvasInsp, L.T("Tüm yazılar (%)", "All fonts (%)"), 12, y + 2, 130, false); _cGfs = EdUi.Num(_pCanvasInsp, 150, y, 76, 30, 300, 5, 0); y += 30;
+            EdUi.Lbl(_pCanvasInsp, L.T("Tüm içerik (%)", "All content (%)"), 12, y + 2, 130, false); _cGz = EdUi.Num(_pCanvasInsp, 150, y, 76, 20, 400, 5, 0); y += 30;
+            EdUi.Lbl(_pCanvasInsp, L.T("Kenar boşluğu (px)", "Outer margin (px)"), 12, y + 2, 130, false); _cMargin = EdUi.Num(_pCanvasInsp, 150, y, 76, 0, 48, 2, 0); y += 36;
             _cGfs.ValueChanged += delegate { if (_bind) return; _gfs = (float)_cGfs.Value / 100f; ApplyAndRedraw(true); };
             _cGz.ValueChanged += delegate { if (_bind) return; _gzoom = (float)_cGz.Value / 100f; ApplyAndRedraw(true); };
             _cMargin.ValueChanged += delegate { if (_bind) return; _margin = (int)_cMargin.Value; ApplyAndRedraw(true); };
@@ -316,29 +331,29 @@ namespace ProSystemMonitor
             // Widget inspector
             _pWidgetInsp = new Panel { Dock = DockStyle.Top, Height = 820, BackColor = PanelBg, Visible = false };
             y = 8;
-            _wTitle = EdUi.Lbl(_pWidgetInsp, "WİDGET", 12, y, 316, true); y += 26;
+            _wTitle = EdUi.Lbl(_pWidgetInsp, "WIDGET", 12, y, 316, true); y += 26;
 
             // Quick style presets
             int qx = 12;
-            qx = TBtn(_pWidgetInsp, "Tema", qx, y, 52, delegate { ApplyQuickPreset(""); });
-            qx = TBtn(_pWidgetInsp, "Cam", qx, y, 48, delegate { ApplyQuickPreset("glass"); });
+            qx = TBtn(_pWidgetInsp, L.T("Tema", "Theme"), qx, y, 52, delegate { ApplyQuickPreset(""); });
+            qx = TBtn(_pWidgetInsp, L.T("Cam", "Glass"), qx, y, 50, delegate { ApplyQuickPreset("glass"); });
             qx = TBtn(_pWidgetInsp, "Neon", qx, y, 52, delegate { ApplyQuickPreset("neon"); });
             qx = TBtn(_pWidgetInsp, "HUD", qx, y, 48, delegate { ApplyQuickPreset("hud"); });
-            TBtn(_pWidgetInsp, "Çerçevesiz", qx, y, 80, delegate { ApplyQuickPreset("none"); }); y += 34;
+            TBtn(_pWidgetInsp, L.T("Çerçevesiz", "Borderless"), qx, y, 80, delegate { ApplyQuickPreset("none"); }); y += 34;
 
-            EdUi.Lbl(_pWidgetInsp, "KONUM VE BOYUT", 12, y, 300, true); y += 24;
+            EdUi.Lbl(_pWidgetInsp, L.T("KONUM VE BOYUT", "POSITION & SIZE"), 12, y, 300, true); y += 24;
             EdUi.Lbl(_pWidgetInsp, "X", 12, y + 2, 18, false); _wX = EdUi.Num(_pWidgetInsp, 34, y, 68, 0, 8000, 1, 0);
             EdUi.Lbl(_pWidgetInsp, "Y", 112, y + 2, 18, false); _wY = EdUi.Num(_pWidgetInsp, 134, y, 68, 0, 8000, 1, 0); y += 28;
-            EdUi.Lbl(_pWidgetInsp, "Gen", 12, y + 2, 32, false); _wW = EdUi.Num(_pWidgetInsp, 46, y, 68, 20, 8000, 1, 0);
-            EdUi.Lbl(_pWidgetInsp, "Yük", 122, y + 2, 32, false); _wH = EdUi.Num(_pWidgetInsp, 156, y, 68, 20, 8000, 1, 0); y += 28;
-            _wLock = EdUi.Chk(_pWidgetInsp, "Kilitli", 12, y, 80);
-            _wNoTitle = EdUi.Chk(_pWidgetInsp, "Başlığı gizle", 104, y, 160); y += 28;
+            EdUi.Lbl(_pWidgetInsp, L.T("Gen", "W"), 12, y + 2, 32, false); _wW = EdUi.Num(_pWidgetInsp, 46, y, 68, 20, 8000, 1, 0);
+            EdUi.Lbl(_pWidgetInsp, L.T("Yük", "H"), 122, y + 2, 32, false); _wH = EdUi.Num(_pWidgetInsp, 156, y, 68, 20, 8000, 1, 0); y += 28;
+            _wLock = EdUi.Chk(_pWidgetInsp, L.T("Kilitli", "Locked"), 12, y, 86);
+            _wNoTitle = EdUi.Chk(_pWidgetInsp, L.T("Başlığı gizle", "Hide header"), 104, y, 160); y += 28;
 
-            EdUi.Lbl(_pWidgetInsp, "ÖLÇEK", 12, y, 300, true); y += 24;
-            EdUi.Lbl(_pWidgetInsp, "Yazı (%)", 12, y + 2, 68, false); _wFs = EdUi.Num(_pWidgetInsp, 82, y, 66, 30, 300, 5, 0);
-            EdUi.Lbl(_pWidgetInsp, "İçerik (%)", 160, y + 2, 74, false); _wZoom = EdUi.Num(_pWidgetInsp, 238, y, 66, 20, 500, 5, 0); y += 32;
+            EdUi.Lbl(_pWidgetInsp, L.T("ÖLÇEK", "SCALE"), 12, y, 300, true); y += 24;
+            EdUi.Lbl(_pWidgetInsp, L.T("Yazı (%)", "Font (%)"), 12, y + 2, 68, false); _wFs = EdUi.Num(_pWidgetInsp, 82, y, 66, 30, 300, 5, 0);
+            EdUi.Lbl(_pWidgetInsp, L.T("İçerik (%)", "Zoom (%)"), 160, y + 2, 74, false); _wZoom = EdUi.Num(_pWidgetInsp, 238, y, 66, 20, 500, 5, 0); y += 32;
 
-            EdUi.Lbl(_pWidgetInsp, "RENK PALETİ (Hızlı Vurgu)", 12, y, 300, true); y += 24;
+            EdUi.Lbl(_pWidgetInsp, L.T("RENK PALETİ (Hızlı Vurgu)", "COLOR SWATCHES (Accent)"), 12, y, 300, true); y += 24;
             for (int i = 0; i < QuickSwatches.Length; i++)
             {
                 Color swc = QuickSwatches[i];
@@ -349,30 +364,32 @@ namespace ProSystemMonitor
             }
             y += 30;
 
-            _wA1 = new ColorField(_pWidgetInsp, "Vurgu 1", y, delegate { return _th.A1; }); y += 28;
-            _wA2 = new ColorField(_pWidgetInsp, "Vurgu 2", y, delegate { return _th.A2; }); y += 28;
-            _wTx = new ColorField(_pWidgetInsp, "Yazı rengi", y, delegate { return _th.Tx; }); y += 28;
-            _wPc = new ColorField(_pWidgetInsp, "Panel dolgu", y, delegate { return _th.Panel; }); y += 28;
-            _wFc = new ColorField(_pWidgetInsp, "Çerçeve rengi", y, delegate { return _th.Line; }); y += 30;
+            _wA1 = new ColorField(_pWidgetInsp, L.T("Vurgu 1", "Accent 1"), y, delegate { return _th.A1; }); y += 28;
+            _wA2 = new ColorField(_pWidgetInsp, L.T("Vurgu 2", "Accent 2"), y, delegate { return _th.A2; }); y += 28;
+            _wTx = new ColorField(_pWidgetInsp, L.T("Yazı rengi", "Text color"), y, delegate { return _th.Tx; }); y += 28;
+            _wPc = new ColorField(_pWidgetInsp, L.T("Panel dolgu", "Panel fill"), y, delegate { return _th.Panel; }); y += 28;
+            _wFc = new ColorField(_pWidgetInsp, L.T("Çerçeve rengi", "Border color"), y, delegate { return _th.Line; }); y += 30;
 
-            EdUi.Lbl(_pWidgetInsp, "Opaklık", 12, y + 4, 60, false);
+            EdUi.Lbl(_pWidgetInsp, L.T("Opaklık", "Opacity"), 12, y + 4, 60, false);
             _wPa = new TrackBar { Left = 76, Top = y - 2, Width = 190, Minimum = 0, Maximum = 100, TickFrequency = 25, SmallChange = 5 };
             _pWidgetInsp.Controls.Add(_wPa);
             _wPaL = EdUi.Lbl(_pWidgetInsp, "100%", 270, y + 4, 50, false); y += 34;
 
-            EdUi.Lbl(_pWidgetInsp, "Çerçeve stili", 12, y + 2, 100, false); _wFrame = EdUi.Combo(_pWidgetInsp, 120, y, 194, FrameNm); y += 28;
-            EdUi.Lbl(_pWidgetInsp, "Kalınlık", 12, y + 2, 64, false); _wFw = EdUi.Num(_pWidgetInsp, 80, y, 64, 0, 12, 0.5m, 1);
-            EdUi.Lbl(_pWidgetInsp, "Köşe", 156, y + 2, 46, false); _wRad = EdUi.Num(_pWidgetInsp, 206, y, 64, -1, 100, 1, 0); y += 28;
-            EdUi.Lbl(_pWidgetInsp, "Çubuk stili", 12, y + 2, 100, false); _wBars = EdUi.Combo(_pWidgetInsp, 120, y, 194, BarNm); y += 28;
-            EdUi.Lbl(_pWidgetInsp, "Daire uç", 12, y + 2, 100, false); _wCap = EdUi.Combo(_pWidgetInsp, 120, y, 194, "Tema", "Yuvarlak uç", "Düz uç"); y += 28;
-            EdUi.Lbl(_pWidgetInsp, "Daire kalınlık", 12, y + 2, 100, false); _wGw = EdUi.Num(_pWidgetInsp, 120, y, 66, 0, 300, 10, 0);
-            _wGlow = EdUi.Combo(_pWidgetInsp, 196, y, 118, "Glow:Tema", "Glow:Açık", "Glow:Kapalı"); y += 32;
+            EdUi.Lbl(_pWidgetInsp, L.T("Çerçeve stili", "Frame style"), 12, y + 2, 100, false); _wFrame = EdUi.Combo(_pWidgetInsp, 120, y, 194, GetFrameNm()); y += 28;
+            EdUi.Lbl(_pWidgetInsp, L.T("Kalınlık", "Border W"), 12, y + 2, 64, false); _wFw = EdUi.Num(_pWidgetInsp, 80, y, 64, 0, 12, 0.5m, 1);
+            EdUi.Lbl(_pWidgetInsp, L.T("Köşe", "Radius"), 156, y + 2, 46, false); _wRad = EdUi.Num(_pWidgetInsp, 206, y, 64, -1, 100, 1, 0); y += 28;
+            EdUi.Lbl(_pWidgetInsp, L.T("Çubuk stili", "Bar style"), 12, y + 2, 100, false); _wBars = EdUi.Combo(_pWidgetInsp, 120, y, 194, GetBarNm()); y += 28;
+            EdUi.Lbl(_pWidgetInsp, L.T("Daire uç", "Dial cap"), 12, y + 2, 100, false); _wCap = EdUi.Combo(_pWidgetInsp, 120, y, 194, L.T("Tema", "Theme"), L.T("Yuvarlak uç", "Rounded"), L.T("Düz uç", "Flat")); y += 28;
+            EdUi.Lbl(_pWidgetInsp, L.T("Daire kalınlık", "Dial width"), 12, y + 2, 100, false); _wGw = EdUi.Num(_pWidgetInsp, 120, y, 66, 0, 300, 10, 0);
+            _wGlow = EdUi.Combo(_pWidgetInsp, 196, y, 118, L.T("Glow:Tema", "Glow:Theme"), L.T("Glow:Açık", "Glow:On"), L.T("Glow:Kapalı", "Glow:Off")); y += 32;
 
-            _wLText = EdUi.Lbl(_pWidgetInsp, "METİN / BAŞLIK", 12, y, 300, true); y += 22;
+            _wLText = EdUi.Lbl(_pWidgetInsp, L.T("METİN / BAŞLIK", "TEXT / CAPTION"), 12, y, 300, true); y += 22;
             _wText = new TextBox { Left = 12, Top = y, Width = 306, Height = 48, Multiline = true, BackColor = CardBg, ForeColor = TxC, BorderStyle = BorderStyle.FixedSingle };
             _pWidgetInsp.Controls.Add(_wText); y += 52;
             _tokenPanel = new Panel { Left = 12, Top = y, Width = 308, Height = 52, BackColor = PanelBg };
-            string[] toks = { "{saat}", "{tarih}", "{cpu}", "{cpusic}", "{gpu}", "{gpusic}", "{ram}", "{fps}", "{ping}" };
+            string[] toks = L.IsEn
+                ? new[] { "{time}", "{date}", "{cpu}", "{cputemp}", "{gpu}", "{gputemp}", "{ram}", "{fps}", "{bat}" }
+                : new[] { "{saat}", "{tarih}", "{cpu}", "{cpusic}", "{gpu}", "{gpusic}", "{ram}", "{fps}", "{ping}" };
             int tx = 0, ty = 0;
             foreach (string tk in toks)
             {
@@ -384,21 +401,21 @@ namespace ProSystemMonitor
                 tx += 61; if (tx + 58 > 308) { tx = 0; ty += 26; }
             }
             _pWidgetInsp.Controls.Add(_tokenPanel); y += 56;
-            _wAlign = EdUi.Combo(_pWidgetInsp, 12, y, 120, "Hiza: Sol", "Hiza: Orta", "Hiza: Sağ");
+            _wAlign = EdUi.Combo(_pWidgetInsp, 12, y, 120, L.T("Hiza: Sol", "Align: Left"), L.T("Hiza: Orta", "Align: Center"), L.T("Hiza: Sağ", "Align: Right"));
 
-            _wLPath = EdUi.Lbl(_pWidgetInsp, "RESİM / LOGO DOSYASI", 12, y, 220, true);
+            _wLPath = EdUi.Lbl(_pWidgetInsp, L.T("RESİM / LOGO DOSYASI", "IMAGE / LOGO FILE"), 12, y, 220, true);
             _wPath = new TextBox { Left = 12, Top = y + 24, Width = 232, BackColor = CardBg, ForeColor = TxC, BorderStyle = BorderStyle.FixedSingle };
-            _wBrowse = EdUi.Btn(_pWidgetInsp, "Gözat…", 250, y + 23, 68, delegate
+            _wBrowse = EdUi.Btn(_pWidgetInsp, L.T("Gözat…", "Browse…"), 250, y + 23, 68, delegate
             {
-                using (var od = new OpenFileDialog { Filter = "Resimler|*.png;*.jpg;*.jpeg;*.bmp;*.gif|Tümü|*.*" })
+                using (var od = new OpenFileDialog { Filter = L.T("Resimler|*.png;*.jpg;*.jpeg;*.bmp;*.gif|Tümü|*.*", "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All|*.*") })
                     if (od.ShowDialog() == DialogResult.OK) _wPath.Text = od.FileName;
             });
             _pWidgetInsp.Controls.Add(_wPath);
             y += 62;
 
-            EdUi.Btn(_pWidgetInsp, "Stili Kopyala", 12, y, 96, delegate { WInst w = PrimarySel(); if (w != null) _clipStyle = w.Copy(); });
-            EdUi.Btn(_pWidgetInsp, "Stili Yapıştır", 114, y, 98, delegate { if (_clipStyle == null || _selIds.Count == 0) return; PushUndo(); foreach (string id in _selIds) DashboardForm.CopyStyleFields(_clipStyle, FindW(id)); BindInspector(); ApplyAndRedraw(true); });
-            EdUi.Btn(_pWidgetInsp, "Sıfırla", 218, y, 100, delegate { ResetSelectedStyle(); });
+            EdUi.Btn(_pWidgetInsp, L.T("Stili Kopyala", "Copy Style"), 12, y, 96, delegate { WInst w = PrimarySel(); if (w != null) _clipStyle = w.Copy(); });
+            EdUi.Btn(_pWidgetInsp, L.T("Stili Yapıştır", "Paste Style"), 114, y, 98, delegate { if (_clipStyle == null || _selIds.Count == 0) return; PushUndo(); foreach (string id in _selIds) DashboardForm.CopyStyleFields(_clipStyle, FindW(id)); BindInspector(); ApplyAndRedraw(true); });
+            EdUi.Btn(_pWidgetInsp, L.T("Sıfırla", "Reset"), 218, y, 100, delegate { ResetSelectedStyle(); });
             _pWidgetInsp.Height = y + 44;
 
             _wX.ValueChanged += delegate { ApplyWidgetProps(); }; _wY.ValueChanged += delegate { ApplyWidgetProps(); };
@@ -447,7 +464,7 @@ namespace ProSystemMonitor
         {
             if (_canvas == null || _lblZoom == null) return;
             _lblZoom.Text = Math.Round(_canvas.EffectiveScale * 100f) + "%";
-            _lblInfo.Text = _cw + "×" + _ch + "  ·  " + _wd.Count(x => x.Vis) + " aktif widget";
+            _lblInfo.Text = _cw + "×" + _ch + "  ·  " + _wd.Count(x => x.Vis) + L.T(" aktif widget", " active widgets");
         }
 
         private void RefreshPalette()
@@ -458,14 +475,15 @@ namespace ProSystemMonitor
             string lastCat = null;
             foreach (WDef d in _d._wlist)
             {
-                if (q.Length > 0 && d.Name.ToLowerInvariant().IndexOf(q) < 0 && d.Id.ToLowerInvariant().IndexOf(q) < 0 && (d.Category ?? "").ToLowerInvariant().IndexOf(q) < 0)
+                if (q.Length > 0 && d.Title.ToLowerInvariant().IndexOf(q) < 0 && d.Name.ToLowerInvariant().IndexOf(q) < 0 && d.Id.ToLowerInvariant().IndexOf(q) < 0 && d.CatTitle.ToLowerInvariant().IndexOf(q) < 0)
                     continue;
-                if (d.Category != lastCat)
+                string ct = d.CatTitle;
+                if (ct != lastCat)
                 {
-                    lastCat = d.Category;
-                    _palList.Items.Add(new PalItem { IsHeader = true, Text = (lastCat ?? "Diğer").ToUpper(new CultureInfo("tr-TR")) });
+                    lastCat = ct;
+                    _palList.Items.Add(new PalItem { IsHeader = true, Text = (lastCat ?? L.T("Diğer", "Other")).ToUpper(L.Culture) });
                 }
-                _palList.Items.Add(new PalItem { IsHeader = false, Text = d.Name, Def = d });
+                _palList.Items.Add(new PalItem { IsHeader = false, Text = d.Title, Def = d });
             }
             _palList.EndUpdate();
         }
@@ -512,7 +530,7 @@ namespace ProSystemMonitor
             using (var br = new SolidBrush(sel ? Color.FromArgb(46, 54, 70) : Bg)) e.Graphics.FillRectangle(br, e.Bounds);
             if (sel) using (var br = new SolidBrush(AccC)) e.Graphics.FillRectangle(br, e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height);
             WDef d = _d.DefOf(w.Id);
-            string txt = (w.Locked ? "🔒 " : "") + (d != null ? d.Name : w.Id);
+            string txt = (w.Locked ? "🔒 " : "") + (d != null ? d.Title : w.Id);
             string sz = (int)Math.Round(w.W) + "×" + (int)Math.Round(w.H);
             TextRenderer.DrawText(e.Graphics, txt, Font, new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 78, e.Bounds.Height), TxC, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
             TextRenderer.DrawText(e.Graphics, sz, new Font("Segoe UI", 8f), new Rectangle(e.Bounds.Right - 72, e.Bounds.Y, 66, e.Bounds.Height), DimC, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
@@ -540,7 +558,7 @@ namespace ProSystemMonitor
                 _pCanvasInsp.Visible = false;
                 _pWidgetInsp.Visible = true;
                 WDef d = _d.DefOf(w.Id);
-                _wTitle.Text = (_selIds.Count > 1 ? _selIds.Count + " widget seçili — " : "") + (d != null ? d.Name : w.Id);
+                _wTitle.Text = (_selIds.Count > 1 ? _selIds.Count + L.T(" widget seçili — ", " widgets selected — ") : "") + (d != null ? d.Title : w.Id);
                 _wX.Value = Clamp(_wX, (decimal)Math.Round(w.X));
                 _wY.Value = Clamp(_wY, (decimal)Math.Round(w.Y));
                 _wW.Value = Clamp(_wW, (decimal)Math.Round(w.W));
@@ -724,7 +742,7 @@ namespace ProSystemMonitor
             if (bd.Multi)
             {
                 w = new WInst { Id = NextMultiId(id), Vis = true };
-                if (id == "text") w.Text = "{saat}";
+                if (id == "text") w.Text = L.IsEn ? "{time}" : "{saat}";
                 _wd.Add(w);
             }
             else
@@ -758,7 +776,7 @@ namespace ProSystemMonitor
         {
             WInst cur = PrimarySel(); if (cur == null) return;
             WDef d = _d.DefOf(cur.Id);
-            if (d == null || !d.Multi) { MessageBox.Show("Tekil sensör widget'ları (CPU, GPU vb.) yalnızca bir kez eklenebilir; Metin, Resim ve Kutu öğeleri çoğaltılabilir.", "OnMon"); return; }
+            if (d == null || !d.Multi) { MessageBox.Show(L.T("Tekil sensör widget'ları (CPU, GPU vb.) yalnızca bir kez eklenebilir; Metin, Resim ve Kutu öğeleri çoğaltılabilir.", "Single-instance sensor widgets (CPU, GPU, etc.) can only be placed once; Text, Image, and Box widgets can be duplicated."), "OnMon"); return; }
             PushUndo();
             WInst c = cur.Copy(); c.Id = NextMultiId(DashboardForm.BaseId(cur.Id));
             c.X = Math.Min(_cw - c.W, cur.X + 24); c.Y = Math.Min(_ch - c.H, cur.Y + 24);
@@ -867,7 +885,7 @@ namespace ProSystemMonitor
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 _d.SaveTemplateToGallery(dlg.TplName, dlg.TplAuthor, dlg.TplDesc, _wd, _cw, _ch, _th, _bgCol, _bgImg, _gfs, _gzoom, _topBar, _hideStrip, _margin);
                 if (_d._galleryForm != null && !_d._galleryForm.IsDisposed) _d._galleryForm.RefreshCards();
-                MessageBox.Show("Düzen galeriye kaydedildi: " + dlg.TplName, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(L.T("Düzen galeriye kaydedildi: ", "Layout saved to gallery: ") + dlg.TplName, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -1322,19 +1340,19 @@ namespace ProSystemMonitor
                 var m = new ContextMenuStrip();
                 if (_f._selIds.Count > 0)
                 {
-                    m.Items.Add("Öne getir", null, delegate { _f.MoveLayer(true); });
-                    m.Items.Add("Arkaya gönder", null, delegate { _f.MoveLayer(false); });
-                    m.Items.Add("Çoğalt (Ctrl+D)", null, delegate { _f.DuplicateSelected(); });
-                    m.Items.Add("Stili kopyala", null, delegate { WInst p = _f.PrimarySel(); if (p != null) _f._clipStyle = p.Copy(); });
+                    m.Items.Add(L.T("Öne getir", "Bring to Front"), null, delegate { _f.MoveLayer(true); });
+                    m.Items.Add(L.T("Arkaya gönder", "Send to Back"), null, delegate { _f.MoveLayer(false); });
+                    m.Items.Add(L.T("Çoğalt (Ctrl+D)", "Duplicate (Ctrl+D)"), null, delegate { _f.DuplicateSelected(); });
+                    m.Items.Add(L.T("Stili kopyala", "Copy Style"), null, delegate { WInst p = _f.PrimarySel(); if (p != null) _f._clipStyle = p.Copy(); });
                     if (_f._clipStyle != null)
-                        m.Items.Add("Stili yapıştır", null, delegate { _f.PushUndo(); foreach (string id in _f._selIds) DashboardForm.CopyStyleFields(_f._clipStyle, _f.FindW(id)); _f.BindInspector(); _f.ApplyAndRedraw(true); });
-                    m.Items.Add("Yatay ortala", null, delegate { _f.AlignSelected("HC"); });
-                    m.Items.Add("Dikey ortala", null, delegate { _f.AlignSelected("VC"); });
-                    m.Items.Add(_f.PrimarySel().Locked ? "Kilidi aç" : "Kilitle", null, delegate { _f.ToggleLockSelected(); });
-                    m.Items.Add("Sil / Gizle (Del)", null, delegate { _f.DeleteSelected(); });
+                        m.Items.Add(L.T("Stili yapıştır", "Paste Style"), null, delegate { _f.PushUndo(); foreach (string id in _f._selIds) DashboardForm.CopyStyleFields(_f._clipStyle, _f.FindW(id)); _f.BindInspector(); _f.ApplyAndRedraw(true); });
+                    m.Items.Add(L.T("Yatay ortala", "Center Horizontally"), null, delegate { _f.AlignSelected("HC"); });
+                    m.Items.Add(L.T("Dikey ortala", "Center Vertically"), null, delegate { _f.AlignSelected("VC"); });
+                    m.Items.Add(_f.PrimarySel().Locked ? L.T("Kilidi aç", "Unlock") : L.T("Kilitle", "Lock"), null, delegate { _f.ToggleLockSelected(); });
+                    m.Items.Add(L.T("Sil / Gizle (Del)", "Delete / Hide (Del)"), null, delegate { _f.DeleteSelected(); });
                     m.Items.Add(new ToolStripSeparator());
                 }
-                m.Items.Add("Tümünü sığdır", null, delegate { FitToView(); _f.UpdateZoomLabel(); });
+                m.Items.Add(L.T("Tümünü sığdır", "Fit to View"), null, delegate { FitToView(); _f.UpdateZoomLabel(); });
                 m.Show(Cursor.Position);
             }
 
@@ -1375,28 +1393,29 @@ namespace ProSystemMonitor
 
         public SaveTemplateModal(DashboardForm d)
         {
-            Text = "Düzeni Galeriye Kaydet"; FormBorderStyle = FormBorderStyle.FixedDialog;
+            ModernUi.ApplyDarkTitleBar(this);
+            Text = L.T("Düzeni Galeriye Kaydet", "Save Layout to Gallery"); FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false; MinimizeBox = false; StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(420, 260);
             BackColor = Color.FromArgb(22, 24, 30); ForeColor = Color.FromArgb(232, 234, 240);
             Font = new Font("Segoe UI", 9.5f);
 
-            EdUi.Lbl(this, "Düzen adı", 16, 14, 160, false);
-            _name = new TextBox { Left = 16, Top = 38, Width = 384, Text = "Düzenim " + DateTime.Now.ToString("dd.MM"), BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle };
+            EdUi.Lbl(this, L.T("Düzen adı", "Layout Name"), 16, 14, 180, false);
+            _name = new TextBox { Left = 16, Top = 38, Width = 384, Text = L.T("Düzenim ", "My Layout ") + DateTime.Now.ToString("dd.MM"), BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle };
             Controls.Add(_name);
 
-            EdUi.Lbl(this, "Hazırlayan", 16, 72, 160, false);
+            EdUi.Lbl(this, L.T("Hazırlayan", "Author"), 16, 72, 180, false);
             _author = new TextBox { Left = 16, Top = 96, Width = 384, Text = Environment.UserName, BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle };
             Controls.Add(_author);
 
-            EdUi.Lbl(this, "Açıklama (isteğe bağlı)", 16, 130, 220, false);
+            EdUi.Lbl(this, L.T("Açıklama (isteğe bağlı)", "Description (optional)"), 16, 130, 240, false);
             _desc = new TextBox { Left = 16, Top = 154, Width = 384, Height = 44, Multiline = true, BackColor = EdUi.Card, ForeColor = EdUi.Tx, BorderStyle = BorderStyle.FixedSingle };
             Controls.Add(_desc);
 
-            var ok = new Button { Text = "Kaydet", Left = 220, Top = 214, Width = 86, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0, 140, 190), ForeColor = Color.White };
+            var ok = new Button { Text = L.T("Kaydet", "Save"), Left = 220, Top = 214, Width = 86, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0, 140, 190), ForeColor = Color.White };
             ok.FlatAppearance.BorderSize = 0;
             ok.Click += delegate { if (TplName.Length == 0) return; DialogResult = DialogResult.OK; Close(); };
-            var cancel = new Button { Text = "İptal", Left = 314, Top = 214, Width = 86, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = EdUi.Card, ForeColor = EdUi.Tx };
+            var cancel = new Button { Text = L.T("İptal", "Cancel"), Left = 314, Top = 214, Width = 86, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = EdUi.Card, ForeColor = EdUi.Tx };
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(ok); Controls.Add(cancel);
             AcceptButton = ok; CancelButton = cancel;

@@ -31,6 +31,8 @@ namespace ProSystemMonitor
         public DriveTelemetry[] Drives = new DriveTelemetry[0];
         public ProcItem[] TopProcs = new ProcItem[0], TopCpu = new ProcItem[0];
         public double SelfMb, SelfCpu;
+        public double SysBat = double.NaN;
+        public bool SysBatChg;
     }
 
     internal sealed class Theme
@@ -39,6 +41,17 @@ namespace ProSystemMonitor
         public Color Bg, Panel, Tile, Line, A1, A2, Track, Tx, Dim, Crit;
         public float R;
         public bool Glow, Mono;
+        public string Title
+        {
+            get
+            {
+                if (!L.IsEn) return Name;
+                return Name.Replace("(Açık)", "(Light)").Replace("Synthwave Gece", "Synthwave Night")
+                           .Replace("Blueprint (Teknik Çizim)", "Blueprint").Replace("Brütalist", "Brutalist")
+                           .Replace("Karbon Yarış", "Carbon Racing").Replace("Derin Okyanus", "Deep Ocean")
+                           .Replace("Taktik HUD", "Tactical HUD");
+            }
+        }
     }
 
     internal static class Themes
@@ -99,6 +112,8 @@ namespace ProSystemMonitor
         public static volatile string WxTemp = "--", WxDesc = "";
         public static string[] Prayer = { "05:48", "07:14", "12:57", "15:58", "18:29", "19:49" };
         public static string[] PrayerNames = { "İmsak", "Güneş", "Öğle", "İkindi", "Akşam", "Yatsı" };
+        public static string[] PrayerNamesEn = { "Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha" };
+        public static string GetPrayerName(int i) { return L.IsEn ? PrayerNamesEn[i] : PrayerNames[i]; }
         private static System.Threading.Timer _timer;
         private static string _city = "istanbul";
 
@@ -140,16 +155,20 @@ namespace ProSystemMonitor
 
         private static void Fetch()
         {
-            string city = _city;
+            string rawCity = _city ?? "istanbul";
+            string cityPart = rawCity, countryPart = "Turkey";
+            int cm = rawCity.IndexOf(',');
+            if (cm > 0) { cityPart = rawCity.Substring(0, cm).Trim(); countryPart = rawCity.Substring(cm + 1).Trim(); }
             try
             {
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 using (var wc = new WebClient())
                 {
                     wc.Encoding = Encoding.UTF8;
-                    string w = wc.DownloadString("https://wttr.in/" + Uri.EscapeDataString(city) + "?m&format=%t|%C&lang=tr").Trim();
+                    string lang = L.IsEn ? "en" : "tr";
+                    string w = wc.DownloadString("https://wttr.in/" + Uri.EscapeDataString(cityPart) + "?m&format=%t|%C&lang=" + lang).Trim();
                     string[] p = w.Split(new[] { '|' });
-                    if (p.Length >= 2) { WxTemp = p[0].Replace("+", ""); WxDesc = TrWx(p[1].Trim()); }
+                    if (p.Length >= 2) { WxTemp = p[0].Replace("+", ""); WxDesc = L.IsEn ? p[1].Trim() : TrWx(p[1].Trim()); }
                 }
             }
             catch { }
@@ -158,7 +177,7 @@ namespace ProSystemMonitor
                 using (var wc = new WebClient())
                 {
                     wc.Encoding = Encoding.UTF8;
-                    string j = wc.DownloadString("https://api.aladhan.com/v1/timingsByCity?city=" + Uri.EscapeDataString(city) + "&country=Turkey&method=13");
+                    string j = wc.DownloadString("https://api.aladhan.com/v1/timingsByCity?city=" + Uri.EscapeDataString(cityPart) + "&country=" + Uri.EscapeDataString(countryPart) + "&method=13");
                     string[] keys = { "Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha" };
                     var res = new string[6];
                     for (int i = 0; i < 6; i++)

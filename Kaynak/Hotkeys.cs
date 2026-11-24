@@ -19,6 +19,19 @@ namespace ProSystemMonitor
             "Mikrofonu sessize al / aç",
             "Hoparlörü sessize al / aç",
             "Sonraki ses profili" };
+        public static readonly string[] NamesEn = {
+            "Switch audio output device (among selected)",
+            "Switch microphone / input device (among selected)",
+            "Mute / unmute microphone",
+            "Mute / unmute speakers",
+            "Next audio profile" };
+        public static string GetName(int i) { return L.IsEn ? NamesEn[i] : Names[i]; }
+        private static readonly List<string> _lastBad = new List<string>();
+
+        public static void RefreshStatusText()
+        {
+            Status = _lastBad.Count == 0 ? "" : L.T("Başka bir uygulama kullanıyor: ", "In use by another app: ") + string.Join(", ", _lastBad.ToArray());
+        }
 
         // [mod, vk]; mod: 1=Alt 2=Ctrl 4=Shift 8=Win
         public static readonly Dictionary<string, int[]> Map = new Dictionary<string, int[]>();
@@ -80,15 +93,15 @@ namespace ProSystemMonitor
         private static void RegisterAll()
         {
             if (_win == null) return;
-            var bad = new List<string>();
+            _lastBad.Clear();
             for (int i = 0; i < Ids.Length; i++)
             {
                 UnregisterHotKey(_win.Handle, i + 1);
                 int[] k;
                 if (!Map.TryGetValue(Ids[i], out k)) continue;
-                if (!RegisterHotKey(_win.Handle, i + 1, (uint)k[0] | 0x4000u, (uint)k[1])) bad.Add(Describe(k));
+                if (!RegisterHotKey(_win.Handle, i + 1, (uint)k[0] | 0x4000u, (uint)k[1])) _lastBad.Add(Describe(k));
             }
-            Status = bad.Count == 0 ? "" : "Başka bir uygulama kullanıyor: " + string.Join(", ", bad.ToArray());
+            RefreshStatusText();
         }
 
         public static void Set(string id, int mod, int vk)

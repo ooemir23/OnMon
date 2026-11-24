@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ROG Pro Telemetry Studio</title>
+<title>OnMon Telemetry Studio</title>
 <style>
   :root {
     --bg:#000; --panel:#050505; --tile:#0b0b0d; --line:#2b2b2e;
@@ -269,9 +269,10 @@
 
 <header class="ribbon" id="ribbon">
   <div class="rg">
-    <div class="rbrand" id="rBrand">ROG TELEMETRY</div>
-    <div class="badge"><span class="dot" id="rDot"></span><span id="rSrc">Bağlanıyor…</span></div>
+    <div class="rbrand" id="rBrand">ONMON TELEMETRY</div>
+    <div class="badge"><span class="dot" id="rDot"></span><span id="rSrc">...</span></div>
     <div class="badge">Ping <b id="rPing">--</b></div>
+    <div class="badge" id="rBatBox" style="display:none">🔋 <b id="rBat">--</b></div>
     <div class="badge">💾 <b id="rDisk">--</b></div>
     <div class="badge" id="rThrBox" style="display:none;color:var(--crit)">⚠ <b id="rThr"></b></div>
     <div class="badge">🌤 <b id="rWx">--</b></div>
@@ -279,8 +280,9 @@
   </div>
   <div class="rg"><div class="seg" id="layoutSeg"></div></div>
   <div class="rg">
-    <button class="btn" onclick="nextTheme()">🎨 <span id="rTheme">Tema</span></button>
-    <button class="btn" onclick="toggleDrawer()">⚙ Ayarlar</button>
+    <button class="btn" onclick="toggleLang()" id="btnLang">🌐 EN</button>
+    <button class="btn" onclick="nextTheme()">🎨 <span id="rTheme">Theme</span></button>
+    <button class="btn" onclick="toggleDrawer()" id="btnSettings">⚙ Ayarlar</button>
     <button class="btn" onclick="toggleFs()">⛶</button>
   </div>
 </header>
@@ -403,34 +405,34 @@ const graph = (k, o = {}) => `<div class="gbox"><canvas data-graph="${k}" data-f
    LAYOUTS (all live-bound via data-v / data-bar / data-arc / data-graph)
    ===================================================================== */
 const LAYOUTS = {
-  classic: { name: '1 · Klasik (Fotoğraftaki)', html: () => `
+  classic: { name: () => T('1 · Klasik', '1 · Classic'), html: () => `
     <section class="view" id="v-classic">
       <div class="c-top">
         <div class="panel clock">
-          <div class="brand" data-v="brand">ASUS</div>
+          <div class="brand" data-v="brand">SYSTEM</div>
           <div class="time" id="clkTime">--:--:--</div>
           <div class="date" id="clkDate">--.--.----</div>
-          <div class="sub"><span>Up Time <b data-v="uptime">--</b></span><span>Sound <b data-v="sound">--</b></span></div>
+          <div class="sub"><span>${T('Çalışma','Up Time')} <b data-v="uptime">--</b></span><span>${T('Ses','Sound')} <b data-v="sound">--</b></span></div>
         </div>
         <div class="panel">
-          ${head('mem', 'Memory')}
+          ${head('mem', T('Bellek','Memory'))}
           <div class="mem-body">
-            <div class="mrow"><span>Load</span>${bar('ramLoad')}<b data-v="ramLoad">--</b></div>
-            <div class="mrow"><span>Speed</span><div class="bar"><i style="width:100%"></i></div><b class="sm" data-v="ramSpeed">--</b></div>
-            <div class="mrow"><span>Usage</span>${bar('ramLoad')}<b data-v="ramUsed">--</b></div>
-            <div class="mrow"><span>Free</span>${bar('ramFreePct')}<b data-v="ramFree">--</b></div>
+            <div class="mrow"><span>${T('Yük','Load')}</span>${bar('ramLoad')}<b data-v="ramLoad">--</b></div>
+            <div class="mrow"><span>${T('Hız','Speed')}</span><div class="bar"><i style="width:100%"></i></div><b class="sm" data-v="ramSpeed">--</b></div>
+            <div class="mrow"><span>${T('Kullanım','Usage')}</span>${bar('ramLoad')}<b data-v="ramUsed">--</b></div>
+            <div class="mrow"><span>${T('Boş','Free')}</span>${bar('ramFreePct')}<b data-v="ramFree">--</b></div>
           </div>
         </div>
         <div class="panel">
-          ${head('mobo', 'MOBO', 'moboModel')}
+          ${head('mobo', T('ANAKART','MOBO'), 'moboModel')}
           <div class="mobo-body">
             <div class="mlines">
-              <div class="mline"><span>Chipset</span><b data-v="chipset">--</b></div>
-              <div class="mline"><span>BIOS Ver.</span><b data-v="bios">--</b></div>
-              <div class="mline"><span>Bus Type</span><b data-v="bus">--</b></div>
-              <div class="mline"><span>Processes</span><b data-v="procs">--</b></div>
+              <div class="mline"><span>${T('Yonga','Chipset')}</span><b data-v="chipset">--</b></div>
+              <div class="mline"><span>BIOS</span><b data-v="bios">--</b></div>
+              <div class="mline"><span>${T('Yol','Bus Type')}</span><b data-v="bus">--</b></div>
+              <div class="mline"><span>${T('İşlem','Processes')}</span><b data-v="procs">--</b></div>
             </div>
-            <div class="mtemp">${bar('moboTemp')}<div class="row"><span>Temperature</span><b data-v="moboTemp">--</b></div></div>
+            <div class="mtemp">${bar('moboTemp')}<div class="row"><span>${T('Sıcaklık','Temperature')}</span><b data-v="moboTemp">--</b></div></div>
           </div>
         </div>
       </div>
@@ -439,12 +441,12 @@ const LAYOUTS = {
         <div class="panel">
           ${head('cpu', 'CPU', 'cpuModel')}
           <div class="tele">
-            ${dial('cpuLoad')}
+            ${dial('cpuLoad', T('Yük','Load'))}
             <div class="stats">
-              ${stat('CPU', 'cpuTemp')}${stat('Clock', 'cpuClock')}${stat('Fan', 'cpuFan')}${stat('AIO Pump', 'pump')}
+              ${stat('CPU', 'cpuTemp')}${stat(T('Saat','Clock'), 'cpuClock')}${stat('Fan', 'cpuFan')}${stat(T('Pompa','AIO Pump'), 'pump')}
             </div>
             <div class="gcard">
-              <div class="gcap"><span>Fan 1 Kasa <b data-v="cha1">--</b></span><span>Fan 2 Kasa <b data-v="cha2">--</b></span></div>
+              <div class="gcap"><span>${T('Kasa 1','Case 1')} <b data-v="cha1">--</b></span><span>${T('Kasa 2','Case 2')} <b data-v="cha2">--</b></span></div>
               ${graph('cpuTemp', { floor: 60 })}
             </div>
             <div class="cores" id="coreMini"></div>
@@ -453,125 +455,125 @@ const LAYOUTS = {
         <div class="panel">
           ${head('gpu', 'GPU', 'gpuModel')}
           <div class="tele">
-            ${dial('gpuLoad')}
+            ${dial('gpuLoad', T('Yük','Load'))}
             <div class="stats">
-              ${stat('Temp', 'gpuTemp')}${stat('Power', 'gpuW')}${stat('Clock', 'gpuClock')}${stat('VRAM', 'vram')}${stat('Fan', 'gpuFan')}
+              ${stat(T('Sıcaklık','Temp'), 'gpuTemp')}${stat(T('Güç','Power'), 'gpuW')}${stat(T('Saat','Clock'), 'gpuClock')}${stat('VRAM', 'vram')}${stat('Fan', 'gpuFan')}
             </div>
             <div class="gpu-graphs">
               <div class="gcard">${graph('fps', { floor: 60, wm: 'FPS' })}</div>
-              <div class="gcard"><div class="gcap"><span>GPU Yük Geçmişi</span><b data-v="gpuLoadPct">--</b></div>${graph('gpuLoad', { fixedMax: 100 })}</div>
+              <div class="gcard"><div class="gcap"><span>${T('GPU Yük Geçmişi','GPU Load History')}</span><b data-v="gpuLoadPct">--</b></div>${graph('gpuLoad', { fixedMax: 100 })}</div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="c-bot">
-        <div class="panel">${head('disk', 'Storage', null, 'diskRW')}<div class="stor" id="storClassic"></div></div>
+        <div class="panel">${head('disk', T('Depolama','Storage'), null, 'diskRW')}<div class="stor" id="storClassic"></div></div>
         <div class="panel">
-          ${head('bolt', 'Power')}
+          ${head('bolt', T('Güç','Power'))}
           <div class="pw">
             <div class="l"><span>CPU</span><b data-v="cpuW">--</b></div>
             <div class="l"><span>CPU Vcore</span><b data-v="cpuV">--</b></div>
             <div class="l"><span>GPU</span><b data-v="gpuW">--</b></div>
             <div class="l"><span>GPU Volt</span><b data-v="gpuV">--</b></div>
-            <div class="l tot"><span>Toplam</span><b data-v="totalW">--</b></div>
+            <div class="l tot"><span>${T('Toplam','Total')}</span><b data-v="totalW">--</b></div>
           </div>
         </div>
         <div class="panel">
-          ${head('net', 'Network', null, 'ip')}
+          ${head('net', T('Ağ','Network'), null, 'ip')}
           <div class="net">
-            <div class="tx"><div><span>Upload</span><b data-v="netUp">--</b></div><div><span>Total</span><b data-v="netUpTot">--</b></div></div>
+            <div class="tx"><div><span>${T('Yükleme','Upload')}</span><b data-v="netUp">--</b></div><div><span>${T('Toplam','Total')}</span><b data-v="netUpTot">--</b></div></div>
             <div class="sp">${graph('netUp', { floor: 50, labels: false })}</div>
-            <div class="tx"><div><span>Down.</span><b data-v="netDown">--</b></div><div><span>Total</span><b data-v="netDownTot">--</b></div></div>
+            <div class="tx"><div><span>${T('İndirme','Down.')}</span><b data-v="netDown">--</b></div><div><span>${T('Toplam','Total')}</span><b data-v="netDownTot">--</b></div></div>
             <div class="sp">${graph('netDown', { floor: 200, labels: false })}</div>
           </div>
         </div>
       </div>
     </section>` },
 
-  hud: { name: '2 · Oyun HUD', html: () => `
+  hud: { name: () => T('2 · Oyun HUD', '2 · Gaming HUD'), html: () => `
     <section class="view" id="v-hud">
       <div class="h-top">
         <div class="panel fps-card">
-          ${head('game', 'Oyun', 'game')}
+          ${head('game', T('Oyun','Game'), 'game')}
           <div class="hud-tele">
             ${dial('fps', 'FPS', '', '')}
-            <div class="stats">${stat('Frame Time', 'frame')}${stat('1% Low', 'low1')}${stat('Ping', 'ping')}${stat('Ort. FPS', 'fpsAvg')}</div>
+            <div class="stats">${stat('Frame Time', 'frame')}${stat('1% Low', 'low1')}${stat('Ping', 'ping')}${stat(T('Ort. FPS','Avg FPS'), 'fpsAvg')}</div>
           </div>
         </div>
         <div class="panel">
           ${head('cpu', 'CPU', 'cpuModel')}
           <div class="hud-tele">
-            ${dial('cpuLoad')}
-            <div class="stats">${stat('Sıcaklık', 'cpuTemp')}${stat('Güç', 'cpuW')}${stat('Saat', 'cpuClock')}${stat('Fan', 'cpuFan')}</div>
+            ${dial('cpuLoad', T('Yük','Load'))}
+            <div class="stats">${stat(T('Sıcaklık','Temp'), 'cpuTemp')}${stat(T('Güç','Power'), 'cpuW')}${stat(T('Saat','Clock'), 'cpuClock')}${stat('Fan', 'cpuFan')}</div>
           </div>
         </div>
         <div class="panel">
           ${head('gpu', 'GPU', 'gpuModel')}
           <div class="hud-tele">
-            ${dial('gpuLoad')}
-            <div class="stats">${stat('Sıcaklık', 'gpuTemp')}${stat('Güç', 'gpuW')}${stat('Saat', 'gpuClock')}${stat('VRAM', 'vram')}</div>
+            ${dial('gpuLoad', T('Yük','Load'))}
+            <div class="stats">${stat(T('Sıcaklık','Temp'), 'gpuTemp')}${stat(T('Güç','Power'), 'gpuW')}${stat(T('Saat','Clock'), 'gpuClock')}${stat('VRAM', 'vram')}</div>
           </div>
         </div>
       </div>
       <div class="h-bot">
         <div class="panel mini">${head('net', 'Ping')}<div class="big" data-v="pingNum">--<small>ms</small></div>${graph('ping', { floor: 30, labels: false })}</div>
-        <div class="panel mini">${head('mem', 'RAM')}<div class="big" data-v="ramLoad">--</div>${bar('ramLoad')}<div class="cap"><span>Kullanılan</span><b data-v="ramUsed">--</b></div></div>
-        <div class="panel mini">${head('gpu', 'VRAM')}<div class="big" data-v="vramPct">--</div>${bar('vramPct')}<div class="cap"><span>Kullanılan</span><b data-v="vram">--</b></div></div>
-        <div class="panel mini">${head('bolt', 'Güç')}<div class="big" data-v="totalWNum">--<small>W</small></div>${graph('totalW', { floor: 100, labels: false })}</div>
-        <div class="panel mini">${head('net', 'Ağ')}<div class="cap"><span>İndirme</span><b data-v="netDown">--</b></div>${graph('netDown', { floor: 200, labels: false })}<div class="cap"><span>Yükleme</span><b data-v="netUp">--</b></div></div>
+        <div class="panel mini">${head('mem', 'RAM')}<div class="big" data-v="ramLoad">--</div>${bar('ramLoad')}<div class="cap"><span>${T('Kullanılan','Used')}</span><b data-v="ramUsed">--</b></div></div>
+        <div class="panel mini">${head('gpu', 'VRAM')}<div class="big" data-v="vramPct">--</div>${bar('vramPct')}<div class="cap"><span>${T('Kullanılan','Used')}</span><b data-v="vram">--</b></div></div>
+        <div class="panel mini">${head('bolt', T('Güç','Power'))}<div class="big" data-v="totalWNum">--<small>W</small></div>${graph('totalW', { floor: 100, labels: false })}</div>
+        <div class="panel mini">${head('net', T('Ağ','Network'))}<div class="cap"><span>${T('İndirme','Down')}</span><b data-v="netDown">--</b></div>${graph('netDown', { floor: 200, labels: false })}<div class="cap"><span>${T('Yükleme','Up')}</span><b data-v="netUp">--</b></div></div>
       </div>
     </section>` },
 
-  cockpit: { name: '3 · Pro Kokpit', html: () => `
+  cockpit: { name: () => T('3 · Pro Kokpit', '3 · Pro Cockpit'), html: () => `
     <section class="view" id="v-cockpit">
       <div class="k-top">
         <div class="panel">
-          ${head('clock', 'Zaman')}
+          ${head('clock', T('Zaman','Time'))}
           <div class="wx"><div><div class="tm" id="kTime">--:--</div><div class="dt" id="kDate">--</div></div>
           <div class="tp"><span id="kWxT">--</span><small id="kWxD">--</small></div></div>
         </div>
         <div class="panel">
-          ${head('clock', 'Namaz Vakitleri', null, 'prayerRem')}
+          ${head('clock', T('Namaz Vakitleri','Prayer Times'), null, 'prayerRem')}
           <div class="prayers" id="prayerGrid"></div>
         </div>
-        <div class="panel">${head('mem', 'Bellek Tüketenler')}<div class="procs" id="procList"></div></div>
+        <div class="panel">${head('mem', T('Bellek Tüketenler','Top Memory'))}<div class="procs" id="procList"></div></div>
       </div>
       <div class="k-mid">
         <div class="panel">
           ${head('cpu', 'CPU', 'cpuModel')}
-          <div class="k-cpu">${dial('cpuLoad')}<div class="stats">${stat('Sıcaklık', 'cpuTemp')}${stat('Saat', 'cpuClock')}${stat('Güç', 'cpuW')}</div></div>
+          <div class="k-cpu">${dial('cpuLoad', T('Yük','Load'))}<div class="stats">${stat(T('Sıcaklık','Temp'), 'cpuTemp')}${stat(T('Saat','Clock'), 'cpuClock')}${stat(T('Güç','Power'), 'cpuW')}</div></div>
         </div>
         <div class="panel">
-          ${head('cpu', 'Çekirdekler')}
+          ${head('cpu', T('Çekirdekler','Cores'))}
           <div class="coreload" id="coreLoad"></div>
         </div>
         <div class="panel">
           ${head('gpu', 'GPU', 'gpuModel')}
-          <div class="k-cpu">${dial('gpuLoad')}<div class="stats">${stat('Sıcaklık', 'gpuTemp')}${stat('Saat', 'gpuClock')}${stat('VRAM', 'vram')}</div></div>
+          <div class="k-cpu">${dial('gpuLoad', T('Yük','Load'))}<div class="stats">${stat(T('Sıcaklık','Temp'), 'gpuTemp')}${stat(T('Saat','Clock'), 'gpuClock')}${stat('VRAM', 'vram')}</div></div>
         </div>
       </div>
       <div class="k-bot">
-        <div class="panel">${head('disk', 'Depolama', null, 'diskRW')}<div class="stor" id="storCockpit"></div></div>
+        <div class="panel">${head('disk', T('Depolama','Storage'), null, 'diskRW')}<div class="stor" id="storCockpit"></div></div>
         <div class="panel">
-          ${head('fan', 'Soğutma')}
-          <div class="fans">${stat('CPU Fan', 'cpuFan')}${stat('AIO Pompa', 'pump')}${stat('Kasa 1', 'cha1')}${stat('Kasa 2', 'cha2')}</div>
+          ${head('fan', T('Soğutma','Cooling'))}
+          <div class="fans">${stat('CPU Fan', 'cpuFan')}${stat(T('AIO Pompa','AIO Pump'), 'pump')}${stat(T('Kasa 1','Case 1'), 'cha1')}${stat(T('Kasa 2','Case 2'), 'cha2')}</div>
         </div>
         <div class="panel">
-          ${head('mobo', 'Sistem')}
+          ${head('mobo', T('Sistem','System'))}
           <div class="keyvals">
-            <div><span>Anakart</span><b data-v="moboTemp">--</b></div>
+            <div><span>${T('Anakart','Board')}</span><b data-v="moboTemp">--</b></div>
             <div><span>RAM</span><b data-v="ramUsed">--</b></div>
-            <div><span>Süreç</span><b data-v="procs">--</b></div>
-            <div><span>Toplam Güç</span><b data-v="totalW">--</b></div>
+            <div><span>${T('Süreç','Procs')}</span><b data-v="procs">--</b></div>
+            <div><span>${T('Toplam Güç','Total Power')}</span><b data-v="totalW">--</b></div>
           </div>
         </div>
         <div class="panel">
-          ${head('net', 'Ağ', null, 'ip')}
+          ${head('net', T('Ağ','Network'), null, 'ip')}
           <div class="keyvals">
-            <div><span>İndirme</span><b data-v="netDown">--</b></div>
-            <div><span>Yükleme</span><b data-v="netUp">--</b></div>
-            <div><span>Toplam ↓</span><b data-v="netDownTot">--</b></div>
+            <div><span>${T('İndirme','Download')}</span><b data-v="netDown">--</b></div>
+            <div><span>${T('Yükleme','Upload')}</span><b data-v="netUp">--</b></div>
+            <div><span>${T('Toplam ↓','Total ↓')}</span><b data-v="netDownTot">--</b></div>
             <div><span>Ping</span><b data-v="ping">--</b></div>
           </div>
         </div>
@@ -580,10 +582,26 @@ const LAYOUTS = {
 };
 const LAYOUT_IDS = Object.keys(LAYOUTS);
 let layout = 'classic';
+let LANG = (localStorage.getItem('proLang') || ((navigator.language || '').toLowerCase().startsWith('tr') ? 'tr' : 'en'));
+const T = (tr, en) => LANG === 'en' ? en : tr;
+
+function toggleLang() {
+  LANG = LANG === 'en' ? 'tr' : 'en';
+  save('proLang', LANG);
+  buildUI();
+  setLayout(layout);
+  applyTheme(theme, false);
+  tick();
+  loadWeatherAndPrayer();
+  if (LAST) render(LAST);
+}
 
 function buildUI() {
+  document.documentElement.lang = LANG;
+  const bl = document.getElementById('btnLang'); if (bl) bl.textContent = LANG === 'en' ? '🌐 TR' : '🌐 EN';
+  const bs = document.getElementById('btnSettings'); if (bs) bs.textContent = T('⚙ Ayarlar', '⚙ Settings');
   document.getElementById('stage').innerHTML = LAYOUT_IDS.map(id => LAYOUTS[id].html()).join('');
-  document.getElementById('layoutSeg').innerHTML = LAYOUT_IDS.map((id, i) => `<button data-l="${id}" onclick="setLayout('${id}')">${LAYOUTS[id].name}</button>`).join('');
+  document.getElementById('layoutSeg').innerHTML = LAYOUT_IDS.map((id, i) => `<button data-l="${id}" onclick="setLayout('${id}')">${LAYOUTS[id].name()}</button>`).join('');
   document.getElementById('tgrid').innerHTML = THEME_IDS.map(id => {
     const t = THEMES[id];
     return `<button class="tcard" data-id="${id}" onclick="applyTheme('${id}',true)">
@@ -634,7 +652,7 @@ const SPEC = {
   cpuV:{f:'cpuVolt',fmt:v=>v.toFixed(3)+' V'}, gpuV:{f:'gpuVolt',fmt:v=>v.toFixed(3)+' V'},
   totalW:{f:'totalW',fmt:v=>v.toFixed(1)+' W'}, totalWNum:{f:'totalW',fmt:v=>i0(v)+'<small> W</small>'},
   vram:{f:'gpuVramUsedMb',fmt:v=>i0(v)+' MB',barF:'vramPct',max:100}, vramPct:{f:'vramPct',fmt:v=>i0(v)+'%',max:100},
-  fps:{f:'fps',fmt:i0,max:240}, low1:{f:'fpsLow1',fmt:i0,max:240}, diskRW:{f:'diskRW',fmt:v=>v}, frame:{f:'frameTimeMs',fmt:v=>v.toFixed(1)+' ms',max:33}, fpsAvg:{f:'fpsAvg',fmt:i0,max:240}, game:{f:'activeGame',fmt:v=>v||'Oyun algılanmadı'},
+  fps:{f:'fps',fmt:i0,max:240}, low1:{f:'fpsLow1',fmt:i0,max:240}, diskRW:{f:'diskRW',fmt:v=>v}, frame:{f:'frameTimeMs',fmt:v=>v.toFixed(1)+' ms',max:33}, fpsAvg:{f:'fpsAvg',fmt:i0,max:240}, game:{f:'activeGame',fmt:v=>v||T('Oyun algılanmadı','No game detected')},
   ramLoad:{f:'memLoadPct',fmt:v=>i0(v)+'%',max:100}, ramFreePct:{f:'ramFreePct',fmt:i0,max:100},
   ramUsed:{f:'memUsedGb',fmt:v=>v.toFixed(1)+' GB'}, ramFree:{f:'memFreeGb',fmt:v=>v.toFixed(1)+' GB'}, ramSpeed:{f:'memSpeedText',fmt:v=>v||'--'},
   moboTemp:{f:'moboTemp',fmt:v=>i0(v)+'°C',max:80,alert:70}, moboModel:{f:'moboModel',fmt:v=>v}, chipset:{f:'moboChipset',fmt:v=>v}, bios:{f:'moboBios',fmt:v=>v||'--'},
@@ -665,11 +683,18 @@ function derive(d) {
 let LAST = null, LAST_SEEN = false;
 function render(d) {
   const x = derive(d); LAST = x;
-  document.getElementById('rSrc').textContent = d.sensorSource || 'Sensör';
+  document.getElementById('rSrc').textContent = d.sensorSource || T('Sensör', 'Sensor');
   document.getElementById('rPing').textContent = x.pingMs === null ? '--' : i0(x.pingMs) + ' ms';
   document.getElementById('rDisk').textContent = x.diskRW === null ? '--' : x.diskRW;
+  const batBox = document.getElementById('rBatBox');
+  if (batBox) {
+    if (d.batteryPct !== null && d.batteryPct !== undefined) {
+      batBox.style.display = '';
+      document.getElementById('rBat').textContent = i0(d.batteryPct) + '%' + (d.batteryCharging ? ' ⚡' : '');
+    } else batBox.style.display = 'none';
+  }
   const thr = document.getElementById('rThrBox'); thr.style.display = d.throttle ? '' : 'none'; document.getElementById('rThr').textContent = d.throttle || '';
-  document.getElementById('rBrand').textContent = (d.brandName || 'ROG') + ' TELEMETRY';
+  document.getElementById('rBrand').textContent = (d.brandName || 'ONMON') + ' TELEMETRY';
 
   document.querySelectorAll('.dial [data-v="fps"]').forEach(el => { const n = String(el.textContent).length; el.style.fontSize = n >= 4 ? '78px' : ''; });
   document.querySelectorAll('[data-v]').forEach(el => {
@@ -787,16 +812,19 @@ function drawAllGraphs() {
    ===================================================================== */
 let city = 'istanbul';
 let prayer = { imsak:'05:48', gunes:'07:14', ogle:'12:57', ikindi:'15:58', aksam:'18:29', yatsi:'19:49' };
-const PNAMES = [['imsak','İmsak'],['gunes','Güneş'],['ogle','Öğle'],['ikindi','İkindi'],['aksam','Akşam'],['yatsi','Yatsı']];
+const PNAMES_TR = [['imsak','İmsak'],['gunes','Güneş'],['ogle','Öğle'],['ikindi','İkindi'],['aksam','Akşam'],['yatsi','Yatsı']];
+const PNAMES_EN = [['imsak','Fajr'],['gunes','Sunrise'],['ogle','Dhuhr'],['ikindi','Asr'],['aksam','Maghrib'],['yatsi','Isha']];
 const toSec = s => { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 3600 + (m || 0) * 60; };
 
 function tick() {
   const now = new Date();
+  const loc = LANG === 'en' ? 'en-US' : 'tr-TR';
+  const PNAMES = LANG === 'en' ? PNAMES_EN : PNAMES_TR;
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  set('clkTime', now.toLocaleTimeString('tr-TR', { hour12: false }));
-  set('clkDate', now.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric' }));
-  set('kTime', now.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit', hour12:false }));
-  set('kDate', now.toLocaleDateString('tr-TR', { weekday:'long', day:'numeric', month:'long' }));
+  set('clkTime', now.toLocaleTimeString(loc, { hour12: false }));
+  set('clkDate', now.toLocaleDateString(loc, { day:'2-digit', month:'2-digit', year:'numeric' }));
+  set('kTime', now.toLocaleTimeString(loc, { hour:'2-digit', minute:'2-digit', hour12:false }));
+  set('kDate', now.toLocaleDateString(loc, { weekday:'long', day:'numeric', month:'long' }));
 
   const t = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
   let ni = PNAMES.findIndex(([k]) => toSec(prayer[k]) > t), diff;
@@ -807,7 +835,7 @@ function tick() {
   document.querySelectorAll('[data-v="prayerRem"]').forEach(e => e.textContent = `${PNAMES[ni][1]} -${rem}`);
   const g = document.getElementById('prayerGrid');
   if (g) {
-    const key = PNAMES.map(([k]) => prayer[k]).join() + ni;
+    const key = PNAMES.map(([k]) => prayer[k]).join() + ni + LANG;
     if (g.dataset.k !== key) { g.dataset.k = key; g.innerHTML = PNAMES.map(([k, n], i) => `<div class="slot ${i === ni ? 'next' : ''}"><span>${n}</span><b>${prayer[k]}</b></div>`).join(''); }
   }
 }

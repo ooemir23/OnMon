@@ -53,10 +53,10 @@ namespace ProSystemMonitor
             try
             {
                 int secs = (int)Math.Ceiling((target - DateTime.Now).TotalSeconds);
-                if (secs < 15) { Error = "Süre en az 15 saniye olmalı."; return false; }
+                if (secs < 15) { Error = L.T("Süre en az 15 saniye olmalı.", "Duration must be at least 15 seconds."); return false; }
                 Run("/a");   // varsa önceki zamanlayıcıyı iptal et
-                int rc = Run((action == 2 ? "/r" : "/s") + " /t " + secs + (force ? " /f" : "") + " /c \"OnMon zamanlayıcısı\"");
-                if (rc != 0) { Error = "Zamanlayıcı kurulamadı (kod " + rc + ")."; return false; }
+                int rc = Run((action == 2 ? "/r" : "/s") + " /t " + secs + (force ? " /f" : "") + " /c \"OnMon Timer\"");
+                if (rc != 0) { Error = L.T("Zamanlayıcı kurulamadı (kod ", "Could not set timer (code ") + rc + ")."; return false; }
                 Action = action; Target = target; Force = force;
                 Directory.CreateDirectory(AppData.Dir);
                 File.WriteAllText(FilePath, action + "|" + target.ToUniversalTime().Ticks + "|" + (force ? "1" : "0"), Encoding.UTF8);
@@ -75,6 +75,11 @@ namespace ProSystemMonitor
         {
             if (r.TotalSeconds <= 0) return "";
             int mins = (int)Math.Ceiling(r.TotalMinutes);
+            if (L.IsEn)
+            {
+                if (mins <= 1) return "<1m";
+                return mins >= 60 ? (mins / 60) + "h " + (mins % 60) + "m" : mins + "m";
+            }
             if (mins <= 1) return "<1dk";
             return mins >= 60 ? (mins / 60) + "sa " + (mins % 60) + "dk" : mins + "dk";
         }
