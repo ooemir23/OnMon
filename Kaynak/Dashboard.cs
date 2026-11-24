@@ -33,6 +33,217 @@ namespace ProSystemMonitor
         public double SelfMb, SelfCpu;
         public double SysBat = double.NaN;
         public bool SysBatChg;
+        public int SysBatMin = -1;
+        public double SysBatW = double.NaN;
+        public string WifiSsid = "";
+        public int WifiSignal = -1;
+    }
+
+    /// <summary>Oturum boyunca gözlenen en düşük / en yüksek sensör değerleri.</summary>
+    public static class PeakStats
+    {
+        private static readonly object _lk = new object();
+        public static DateTime StartedAt = DateTime.Now;
+        public static double CpuTempMin = double.NaN, CpuTempMax = double.NaN;
+        public static double GpuTempMin = double.NaN, GpuTempMax = double.NaN;
+        public static double CpuWMax = double.NaN, GpuWMax = double.NaN;
+        public static double FpsMin = double.NaN, FpsMax = double.NaN;
+
+        public static void Update(Snap s)
+        {
+            if (s == null) return;
+            lock (_lk)
+            {
+                if (!double.IsNaN(s.CpuTemp) && s.CpuTemp > 0 && s.CpuTemp < 130)
+                {
+                    if (double.IsNaN(CpuTempMin) || s.CpuTemp < CpuTempMin) CpuTempMin = s.CpuTemp;
+                    if (double.IsNaN(CpuTempMax) || s.CpuTemp > CpuTempMax) CpuTempMax = s.CpuTemp;
+                }
+                if (!double.IsNaN(s.GpuTemp) && s.GpuTemp > 0 && s.GpuTemp < 130)
+                {
+                    if (double.IsNaN(GpuTempMin) || s.GpuTemp < GpuTempMin) GpuTempMin = s.GpuTemp;
+                    if (double.IsNaN(GpuTempMax) || s.GpuTemp > GpuTempMax) GpuTempMax = s.GpuTemp;
+                }
+                if (!double.IsNaN(s.CpuW) && s.CpuW >= 0 && s.CpuW < 1000)
+                {
+                    if (double.IsNaN(CpuWMax) || s.CpuW > CpuWMax) CpuWMax = s.CpuW;
+                }
+                if (!double.IsNaN(s.GpuW) && s.GpuW >= 0 && s.GpuW < 1500)
+                {
+                    if (double.IsNaN(GpuWMax) || s.GpuW > GpuWMax) GpuWMax = s.GpuW;
+                }
+                if (s.Fps >= 5 && s.Fps < 2000)
+                {
+                    if (double.IsNaN(FpsMin) || s.Fps < FpsMin) FpsMin = s.Fps;
+                    if (double.IsNaN(FpsMax) || s.Fps > FpsMax) FpsMax = s.Fps;
+                }
+            }
+        }
+
+        public static void Reset()
+        {
+            lock (_lk)
+            {
+                StartedAt = DateTime.Now;
+                CpuTempMin = double.NaN; CpuTempMax = double.NaN;
+                GpuTempMin = double.NaN; GpuTempMax = double.NaN;
+                CpuWMax = double.NaN; GpuWMax = double.NaN;
+                FpsMin = double.NaN; FpsMax = double.NaN;
+            }
+        }
+
+        public static string SummaryText()
+        {
+            lock (_lk)
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine(L.T("Oturum başlangıcı: ", "Session started: ") + AppPrefs.FmtClock(StartedAt));
+                sb.AppendLine(L.T("CPU sıcaklık Min / Maks: ", "CPU temp Min / Max: ") + AppPrefs.FmtTemp(CpuTempMin) + " / " + AppPrefs.FmtTemp(CpuTempMax));
+                sb.AppendLine(L.T("GPU sıcaklık Min / Maks: ", "GPU temp Min / Max: ") + AppPrefs.FmtTemp(GpuTempMin) + " / " + AppPrefs.FmtTemp(GpuTempMax));
+                sb.AppendLine(L.T("Maks. Güç (CPU / GPU): ", "Max Power (CPU / GPU): ") +
+                    (double.IsNaN(CpuWMax) ? "--" : Math.Round(CpuWMax) + "W") + " / " +
+                    (double.IsNaN(GpuWMax) ? "--" : Math.Round(GpuWMax) + "W"));
+                sb.AppendLine(L.T("FPS Min / Maks: ", "FPS Min / Max: ") +
+                    (double.IsNaN(FpsMin) ? "--" : Math.Round(FpsMin).ToString(CultureInfo.InvariantCulture)) + " / " +
+                    (double.IsNaN(FpsMax) ? "--" : Math.Round(FpsMax).ToString(CultureInfo.InvariantCulture)));
+                return sb.ToString();
+            }
+        }
+    }
+
+    /// <summary>Tüm formlar ve arka plan servisi arasında paylaşılan kullanıcı tercihleri.</summary>
+    public static class AppPrefs
+    {
+        public static volatile bool TempFahrenheit;
+        public static volatile bool Clock12h;
+        public static volatile bool ShowPrayer = true;
+
+        public static volatile bool NightMode;
+        public static volatile int NightStartHour = 23;
+        public static volatile int NightEndHour = 7;
+        public static volatile int NightBright = 35;
+
+        public static volatile bool OverlayEnabled;
+        public static volatile int OverlayCorner = 0;   // 0=Sol Üst, 1=Sağ Üst, 2=Sol Alt, 3=Sağ Alt
+        public static volatile int OverlayOpacity = 82; // 30..100
+
+        public static volatile int TrayIconMode = 0;    // 0=Logo, 1=CPU °C, 2=GPU °C
+
+        public static volatile int AlertCpu = 90;
+        public static volatile int AlertGpu = 85;
+        public static volatile int AlertDisk = 70;
+        public static volatile int AlertRam = 92;
+        public static volatile int AlertBat = 15;
+        public static volatile int AlertPing = 150;
+        public static volatile bool AlertBeep;
+
+        public static volatile bool Onboarded;
+
+        public static double ConvertTemp(double c)
+        {
+            if (double.IsNaN(c)) return double.NaN;
+            return TempFahrenheit ? (c * 9.0 / 5.0 + 32.0) : c;
+        }
+
+        public static string TempUnitStr()
+        {
+            return TempFahrenheit ? "°F" : "°C";
+        }
+
+        public static string FmtTemp(double c)
+        {
+            if (double.IsNaN(c)) return "--";
+            double v = ConvertTemp(c);
+            return ((int)Math.Round(v)).ToString(CultureInfo.InvariantCulture) + TempUnitStr();
+        }
+
+        public static string FmtTempShort(double c)
+        {
+            if (double.IsNaN(c)) return "--";
+            double v = ConvertTemp(c);
+            return ((int)Math.Round(v)).ToString(CultureInfo.InvariantCulture) + "°";
+        }
+
+        public static string FmtClock(DateTime dt)
+        {
+            return Clock12h
+                ? dt.ToString("h:mm tt", CultureInfo.InvariantCulture)
+                : dt.ToString("HH:mm", CultureInfo.InvariantCulture);
+        }
+
+        public static string FmtClockSec(DateTime dt)
+        {
+            return Clock12h
+                ? dt.ToString("h:mm:ss tt", CultureInfo.InvariantCulture)
+                : dt.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        }
+
+        public static bool IsNightNow()
+        {
+            if (!NightMode) return false;
+            int h = DateTime.Now.Hour;
+            int s = NightStartHour, e = NightEndHour;
+            if (s == e) return false;
+            if (s < e) return h >= s && h < e;
+            return h >= s || h < e;
+        }
+
+        public static string FmtMinutes(int mins)
+        {
+            if (mins <= 0) return "";
+            int h = mins / 60, m = mins % 60;
+            if (L.IsEn) return h > 0 ? (h + "h " + m + "m") : (m + "m");
+            return h > 0 ? (h + "sa " + m + "dk") : (m + "dk");
+        }
+
+        public static string FmtWx(string wx)
+        {
+            if (string.IsNullOrEmpty(wx) || wx == "--" || !TempFahrenheit) return wx;
+            Match m = Regex.Match(wx, @"(-?\d+(?:[.,]\d+)?)");
+            double c;
+            if (m.Success && double.TryParse(m.Groups[1].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out c))
+                return ((int)Math.Round(c * 9.0 / 5.0 + 32.0)).ToString(CultureInfo.InvariantCulture) + "°F";
+            return wx;
+        }
+
+        public static void LoadFromDisk()
+        {
+            try
+            {
+                string p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProSystemMonitor", "ui.txt");
+                if (!File.Exists(p)) { Onboarded = false; return; }
+                bool sawOnb = false;
+                foreach (string line in File.ReadAllLines(p))
+                {
+                    int i = line.IndexOf('=');
+                    if (i < 0) continue;
+                    string k = line.Substring(0, i).Trim().ToLowerInvariant(), v = line.Substring(i + 1).Trim();
+                    int n;
+                    if (k == "tempf") TempFahrenheit = v == "1";
+                    else if (k == "clock12h") Clock12h = v == "1";
+                    else if (k == "showprayer") ShowPrayer = v != "0";
+                    else if (k == "nightmode") NightMode = v == "1";
+                    else if (k == "nightstart" && int.TryParse(v, out n)) NightStartHour = Math.Max(0, Math.Min(23, n));
+                    else if (k == "nightend" && int.TryParse(v, out n)) NightEndHour = Math.Max(0, Math.Min(23, n));
+                    else if (k == "nightbright" && int.TryParse(v, out n)) NightBright = Math.Max(15, Math.Min(95, n));
+                    else if (k == "overlay") OverlayEnabled = v == "1";
+                    else if (k == "overlaycorner" && int.TryParse(v, out n)) OverlayCorner = Math.Max(0, Math.Min(3, n));
+                    else if (k == "overlayop" && int.TryParse(v, out n)) OverlayOpacity = Math.Max(30, Math.Min(100, n));
+                    else if (k == "traymode" && int.TryParse(v, out n)) TrayIconMode = Math.Max(0, Math.Min(2, n));
+                    else if (k == "alcpu" && int.TryParse(v, out n)) AlertCpu = Math.Max(50, Math.Min(115, n));
+                    else if (k == "algpu" && int.TryParse(v, out n)) AlertGpu = Math.Max(50, Math.Min(115, n));
+                    else if (k == "aldisk" && int.TryParse(v, out n)) AlertDisk = Math.Max(40, Math.Min(95, n));
+                    else if (k == "alram" && int.TryParse(v, out n)) AlertRam = Math.Max(50, Math.Min(99, n));
+                    else if (k == "albat" && int.TryParse(v, out n)) AlertBat = Math.Max(5, Math.Min(50, n));
+                    else if (k == "alping" && int.TryParse(v, out n)) AlertPing = Math.Max(30, Math.Min(999, n));
+                    else if (k == "albeep") AlertBeep = v == "1";
+                    else if (k == "onboarded") { sawOnb = true; Onboarded = v == "1"; }
+                    else if (k == "lowcpu2") Program.PollIntervalMs = (v == "1") ? 2000 : 1000;
+                }
+                if (!sawOnb) Onboarded = true;
+            }
+            catch { }
+        }
     }
 
     internal sealed class Theme

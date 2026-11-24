@@ -29,6 +29,12 @@ namespace ProSystemMonitor
         public static volatile bool DashVisible;
         public static string LatestJson = "{}";
         private static NotifyIcon _trayIcon;
+        private static Icon _dynTrayIcon;
+        private static DateTime _lastTrayLive = DateTime.MinValue;
+        private static string _lastTrayTip = "";
+        private static int _lastTrayMode = -1, _lastTrayTemp = int.MinValue;
+        private static MiniOverlayForm _overlay;
+        private static bool _onboardingShown;
         private static TelemetryCollector _collector;
         private static HttpListener _listener;
         private static readonly ConcurrentDictionary<Guid, StreamWriter> _sseClients = new ConcurrentDictionary<Guid, StreamWriter>();
@@ -93,7 +99,9 @@ namespace ProSystemMonitor
                 Thread serverThread = new Thread(HttpServerLoop) { IsBackground = true };
                 serverThread.Start();
 
+                AppPrefs.LoadFromDisk();
                 SetupTrayIcon();
+                if (AppPrefs.OverlayEnabled) SyncOverlay();
 
                 // Sensör/WMI başlatma yavaş olabilir: arayüzü bekletmeden arka planda yap.
                 Thread pollThread = new Thread(() =>
@@ -133,7 +141,9 @@ namespace ProSystemMonitor
                 Application.Run();
 
                 _running = false;
+                try { if (_overlay != null && !_overlay.IsDisposed) { _overlay.Close(); _overlay.Dispose(); } } catch { }
                 try { if (_trayIcon != null) { _trayIcon.Visible = false; _trayIcon.Dispose(); } } catch { }
+                try { if (_dynTrayIcon != null) _dynTrayIcon.Dispose(); } catch { }
                 try { if (_listener != null) _listener.Stop(); } catch { }
                 try { if (_collector != null) _collector.Dispose(); } catch { }
             }
@@ -209,8 +219,9 @@ namespace ProSystemMonitor
                         using (var st = new StudioForm(dash))
                         using (var gl = new GalleryForm(dash))
                         using (var sf = new SettingsForm(dash))
+                        using (var ob = new OnboardingForm(dash))
                         {
-                            if (st.Controls.Count == 0 || gl.Controls.Count == 0 || sf.Controls.Count == 0)
+                            if (st.Controls.Count == 0 || gl.Controls.Count == 0 || sf.Controls.Count == 0 || ob.Controls.Count == 0)
                                 throw new Exception("Forms empty (" + lang + ")");
                             for (int pi = 0; pi < sf.PageCount; pi++)
                                 sf.ShowPage(pi);
@@ -248,6 +259,78 @@ namespace ProSystemMonitor
                         }
                     }
                     finally { try { File.Delete(tmp); } catch { } }
+
+                    // 5. v60 features: AppPrefs units/clock, PeakStats, MediaControl, NetWifi, MiniOverlay, BackupManager, media widget
+                    if (dash.DefOf("media") == null) throw new Exception("media widget missing");
+                    bool prevF = AppPrefs.TempFahrenheit, prev12 = AppPrefs.Clock12h;
+                    try
+                    {
+                        AppPrefs.TempFahrenheit = false;
+                        if (AppPrefs.FmtTemp(100) != "100°C") throw new Exception("FmtTemp C failed");
+                        AppPrefs.TempFahrenheit = true;
+                        if (AppPrefs.FmtTemp(100) != "212°F") throw new Exception("FmtTemp F failed");
+                        AppPrefs.Clock12h = false;
+                        if (AppPrefs.FmtClock(new DateTime(2026, 1, 1, 15, 5, 0)) != "15:05") throw new Exception("Clock 24h failed");
+                        AppPrefs.Clock12h = true;
+                        if (!AppPrefs.FmtClock(new DateTime(2026, 1, 1, 15, 5, 0)).Contains("PM")) throw new Exception("Clock 12h failed");
+                    }
+                    finally { AppPrefs.TempFahrenheit = prevF; AppPrefs.Clock12h = prev12; }
+
+                    PeakStats.Reset();
+                    var testSnap = new Snap { CpuTemp = 52, GpuTemp = 64, CpuW = 45, GpuW = 180, Fps = 144, MemLoad = 48 };
+                    PeakStats.Update(testSnap);
+                    if (PeakStats.CpuTempMax != 52 || PeakStats.FpsMax != 144) throw new Exception("PeakStats failed");
+                    PeakStats.Reset();
+
+                    MediaInfo mi = MediaControl.Read();
+                    if (mi == null) throw new Exception("MediaControl.Read null");
+                    string wssid; int wsig;
+                    NetWifi.Read(out wssid, out wsig);
+
+                    using (var ov = new MiniOverlayForm())
+                    {
+                        ov.UpdateSnap(testSnap);
+                        ov.ApplyLayout();
+                    }
+
+                    string bakSrc = Path.Combine(Path.GetTempPath(), "onmon_bak_src_" + Guid.NewGuid().ToString("N"));
+                    string bakDst = Path.Combine(Path.GetTempPath(), "onmon_bak_dst_" + Guid.NewGuid().ToString("N"));
+                    string bakFile = Path.Combine(Path.GetTempPath(), "onmon_bak_" + Guid.NewGuid().ToString("N") + ".onmonbak");
+                    try
+                    {
+                        Directory.CreateDirectory(Path.Combine(bakSrc, "Sablonlar"));
+                        File.WriteAllText(Path.Combine(bakSrc, "ui.txt"), "lang=en\ntempf=1\n", new UTF8Encoding(false));
+                        File.WriteAllText(Path.Combine(bakSrc, "Sablonlar", "custom.onmon"), "ONMON-SABLON 2\n", new UTF8Encoding(false));
+                        int nExp = BackupManager.ExportBackup(bakFile, bakSrc);
+                        int nImp;
+                        bool okImp = BackupManager.ImportBackup(bakFile, bakDst, out nImp);
+                        if (nExp != 2 || !okImp || nImp != 2 || !File.Exists(Path.Combine(bakDst, "Sablonlar", "custom.onmon")))
+                            throw new Exception("BackupManager round-trip failed");
+                    }
+                    finally
+                    {
+                        try { if (Directory.Exists(bakSrc)) Directory.Delete(bakSrc, true); } catch { }
+                        try { if (Directory.Exists(bakDst)) Directory.Delete(bakDst, true); } catch { }
+                        try { if (File.Exists(bakFile)) File.Delete(bakFile); } catch { }
+                    }
+
+                    // 6. Validate community index.json & curated .onmon files if layouts/ exists
+                    string layDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "layouts");
+                    string idxFile = Path.Combine(layDir, "index.json");
+                    if (File.Exists(idxFile))
+                    {
+                        var comm = GalleryControl.ParseCommunityJson(File.ReadAllText(idxFile, Encoding.UTF8));
+                        if (comm.Count < 3) throw new Exception("Community index.json count < 3");
+                        foreach (var ci in comm)
+                        {
+                            string lf = Path.Combine(layDir, ci.File);
+                            if (!File.Exists(lf)) throw new Exception("Missing community file: " + ci.File);
+                            LayoutMeta cm = dash.ReadTemplateMeta(lf, true);
+                            if (cm == null || cm.Thumb == null || cm.WidgetCount == 0)
+                                throw new Exception("Invalid community template: " + ci.File);
+                            cm.Thumb.Dispose();
+                        }
+                    }
                 }
 
                 Console.WriteLine("SELFTEST_OK");
@@ -304,7 +387,8 @@ namespace ProSystemMonitor
                     if (_alertLast.TryGetValue(key, out last) && (DateTime.UtcNow - last).TotalMinutes < 5) return;
                     _alertLast[key] = DateTime.UtcNow;
                 }
-                if (_trayIcon != null) _trayIcon.ShowBalloonTip(6000, "OnMon - Uyarı", text, ToolTipIcon.Warning);
+                if (_trayIcon != null) _trayIcon.ShowBalloonTip(6000, L.T("OnMon - Uyarı", "OnMon - Alert"), text, ToolTipIcon.Warning);
+                if (AppPrefs.AlertBeep) try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
             }
             catch { }
         }
@@ -653,8 +737,43 @@ namespace ProSystemMonitor
         private static void PushDash()
         {
             DashboardForm d = Dash; Snap s = LastSnap;
-            if (d == null || s == null || _ui == null) return;
-            try { _ui.BeginInvoke((MethodInvoker)delegate { DashboardForm x = Dash; if (x != null && !x.IsDisposed) x.Push(s); }); } catch { }
+            if (_ui == null || s == null) return;
+            try
+            {
+                _ui.BeginInvoke((MethodInvoker)delegate
+                {
+                    DashboardForm x = Dash;
+                    if (x != null && !x.IsDisposed) x.Push(s);
+                    if (_overlay != null && !_overlay.IsDisposed && AppPrefs.OverlayEnabled) _overlay.UpdateSnap(s);
+                    UpdateTrayLive(s);
+                });
+            }
+            catch { }
+        }
+
+        public static void SyncOverlay()
+        {
+            if (_ui == null) return;
+            Action act = delegate
+            {
+                try
+                {
+                    if (AppPrefs.OverlayEnabled)
+                    {
+                        if (_overlay == null || _overlay.IsDisposed) _overlay = new MiniOverlayForm();
+                        _overlay.ApplyLayout();
+                        if (LastSnap != null) _overlay.UpdateSnap(LastSnap);
+                        if (!_overlay.Visible) _overlay.Show();
+                    }
+                    else if (_overlay != null && !_overlay.IsDisposed)
+                    {
+                        _overlay.Hide();
+                    }
+                }
+                catch { }
+            };
+            if (_ui.IsHandleCreated && _ui.InvokeRequired) _ui.BeginInvoke(act);
+            else act();
         }
 
         public static void LaunchDashboardOnSecondMonitor()
@@ -666,11 +785,17 @@ namespace ProSystemMonitor
                 {
                     try
                     {
-                        if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); if (Dash.WindowState == FormWindowState.Minimized) Dash.WindowState = FormWindowState.Normal; return; }
+                        if (Dash != null && !Dash.IsDisposed) { Dash.PlaceOnSecondMonitor(); Dash.Show(); if (Dash.WindowState == FormWindowState.Minimized) Dash.WindowState = FormWindowState.Normal; SyncOverlay(); return; }
                         var f = new DashboardForm();
                         Dash = f;
                         f.PlaceOnSecondMonitor();
                         f.Show();
+                        SyncOverlay();
+                        if (!_onboardingShown && !AppPrefs.Onboarded)
+                        {
+                            _onboardingShown = true;
+                            new OnboardingForm(f).Show();
+                        }
                         Log("pano", new Exception("pano açıldı " + f.Bounds));
                     }
                     catch (Exception ex) { Log("pano", ex); Dash = null; }
@@ -816,11 +941,28 @@ namespace ProSystemMonitor
                 var openBrowserItem = new ToolStripMenuItem(L.T("Tarayıcıda Aç (127.0.0.1:" + Port + ")", "Open in Browser (127.0.0.1:" + Port + ")"));
                 openBrowserItem.Click += (s, e) => LaunchBrowserDashboard();
 
+                var overlayItem = new ToolStripMenuItem(L.T("🎮 Mini Overlay HUD (Köşe Çubuğu)", "🎮 Mini Overlay HUD (Corner Strip)")) { Checked = AppPrefs.OverlayEnabled };
+                overlayItem.Click += (s, e) =>
+                {
+                    AppPrefs.OverlayEnabled = !AppPrefs.OverlayEnabled;
+                    overlayItem.Checked = AppPrefs.OverlayEnabled;
+                    if (Dash != null && !Dash.IsDisposed) Dash.SaveSettings();
+                    SyncOverlay();
+                };
+
+                var resetPeakItem = new ToolStripMenuItem(L.T("🔄 Oturum Peak Değerlerini Sıfırla", "🔄 Reset Session Peaks"));
+                resetPeakItem.Click += (s, e) => { PeakStats.Reset(); ShowBalloon(L.T("Oturum Min/Maks değerleri sıfırlandı.", "Session Min/Max peak stats reset.")); };
+
+                var wizardItem = new ToolStripMenuItem(L.T("✨ İlk Kurulum Sihirbazı…", "✨ Setup Wizard…"));
+                wizardItem.Click += (s, e) => _ui.BeginInvoke((MethodInvoker)delegate { new OnboardingForm(Dash).Show(); });
+
                 var dumpItem = new ToolStripMenuItem(L.T("Sensör Listesini Kaydet (sensorler.txt)", "Save Sensor Dump (sensorler.txt)"));
                 dumpItem.Click += (s, e) => { if (_collector != null) _collector.RequestSensorDump(); };
 
                 try { AlertsEnabled = !File.Exists(AlertFlagPath); } catch { }
-                var alertItem = new ToolStripMenuItem(L.T("Isı Uyarıları (CPU 90° / GPU 85° / Disk 70°)", "Thermal Alerts (CPU 90° / GPU 85° / Disk 70°)")) { Checked = AlertsEnabled };
+                var alertItem = new ToolStripMenuItem(L.T(
+                    "Isı & Sistem Uyarıları (CPU " + AppPrefs.FmtTemp(AppPrefs.AlertCpu) + " / GPU " + AppPrefs.FmtTemp(AppPrefs.AlertGpu) + ")",
+                    "Thermal & System Alerts (CPU " + AppPrefs.FmtTemp(AppPrefs.AlertCpu) + " / GPU " + AppPrefs.FmtTemp(AppPrefs.AlertGpu) + ")")) { Checked = AlertsEnabled };
                 alertItem.Click += (s, e) => { SetAlertsEnabled(!AlertsEnabled); alertItem.Checked = AlertsEnabled; };
 
                 var autoItem = new ToolStripMenuItem(L.T("Windows ile Başlat", "Start with Windows"));
@@ -847,10 +989,13 @@ namespace ProSystemMonitor
                 langItem.DropDownItems.Add(enIt);
 
                 menu.Items.Add(open2ndItem);
+                menu.Items.Add(overlayItem);
                 menu.Items.Add(studioItem);
                 menu.Items.Add(galleryItem);
                 menu.Items.Add(L.T("Edge ile Aç (daha çok RAM)", "Open in Edge App (higher RAM)"), null, (s, e) => LaunchEdgeDashboard());
                 menu.Items.Add(openBrowserItem);
+                menu.Items.Add(resetPeakItem);
+                menu.Items.Add(wizardItem);
 
                 var sndItem = new ToolStripMenuItem(L.T("Ses Cihazı", "Audio Output"));
                 sndItem.DropDownOpening += (s, e) =>
@@ -899,6 +1044,83 @@ namespace ProSystemMonitor
 
         public static Icon TrayIcon() { return CreateRogTrayIcon(); }
 
+        public static void UpdateTrayLive(Snap s)
+        {
+            if (_trayIcon == null || s == null) return;
+            if ((DateTime.UtcNow - _lastTrayLive).TotalSeconds < 1.8) return;
+            _lastTrayLive = DateTime.UtcNow;
+            try
+            {
+                string tip = "CPU " + AppPrefs.FmtTempShort(s.CpuTemp) + " · GPU " + AppPrefs.FmtTempShort(s.GpuTemp) + " · RAM " + Math.Round(s.MemLoad) + "%";
+                if (s.Fps >= 5) tip += " · " + Math.Round(s.Fps) + " FPS";
+                if (tip.Length > 63) tip = tip.Substring(0, 63);
+                if (tip != _lastTrayTip)
+                {
+                    _lastTrayTip = tip;
+                    _trayIcon.Text = tip;
+                }
+
+                int mode = AppPrefs.TrayIconMode;
+                double rawT = mode == 1 ? s.CpuTemp : (mode == 2 ? s.GpuTemp : double.NaN);
+                int dispT = double.IsNaN(rawT) ? int.MinValue : (int)Math.Round(AppPrefs.ConvertTemp(rawT));
+                if (mode == _lastTrayMode && dispT == _lastTrayTemp) return;
+
+                Icon nextIcon = null;
+                if (mode == 1 && !double.IsNaN(s.CpuTemp))
+                    nextIcon = CreateTempTrayIcon(s.CpuTemp);
+                else if (mode == 2 && !double.IsNaN(s.GpuTemp))
+                    nextIcon = CreateTempTrayIcon(s.GpuTemp);
+                else if (mode == 0 && _dynTrayIcon != null)
+                    nextIcon = CreateRogTrayIcon();
+
+                if (nextIcon != null)
+                {
+                    Icon prevDyn = _dynTrayIcon;
+                    _dynTrayIcon = (mode == 0) ? null : nextIcon;
+                    _trayIcon.Icon = nextIcon;
+                    _lastTrayMode = mode;
+                    _lastTrayTemp = dispT;
+                    if (prevDyn != null && prevDyn != nextIcon) try { prevDyn.Dispose(); } catch { }
+                }
+                else if (mode == 0 && _dynTrayIcon == null)
+                {
+                    _lastTrayMode = 0;
+                    _lastTrayTemp = int.MinValue;
+                }
+            }
+            catch { }
+        }
+
+        private static Icon CreateTempTrayIcon(double tempC)
+        {
+            double disp = AppPrefs.ConvertTemp(tempC);
+            int val = (int)Math.Round(disp);
+            string txt = val > 99 ? val.ToString(CultureInfo.InvariantCulture) : val.ToString(CultureInfo.InvariantCulture);
+            Color fg = tempC >= 80 ? Color.FromArgb(255, 72, 72) : (tempC >= 65 ? Color.FromArgb(255, 178, 36) : Color.FromArgb(46, 224, 128));
+            using (var bmp = new Bitmap(32, 32))
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+                using (var bg = new SolidBrush(Color.FromArgb(245, 16, 18, 24)))
+                using (var pn = new Pen(fg, 2.2f))
+                {
+                    g.FillEllipse(bg, 1, 1, 30, 30);
+                    g.DrawEllipse(pn, 1, 1, 30, 30);
+                }
+                float fsz = txt.Length >= 3 ? 10.5f : 13f;
+                using (var f = new Font("Segoe UI", fsz, FontStyle.Bold))
+                using (var br = new SolidBrush(fg))
+                using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                {
+                    g.DrawString(txt, f, br, new RectangleF(0, 1, 32, 31), sf);
+                }
+                IntPtr hIcon = bmp.GetHicon();
+                try { return (Icon)Icon.FromHandle(hIcon).Clone(); }
+                finally { Win32Native.DestroyIcon(hIcon); }
+            }
+        }
+
         private static Icon CreateRogTrayIcon()
         {
             using (Bitmap bmp = new Bitmap(32, 32))
@@ -933,6 +1155,7 @@ namespace ProSystemMonitor
         public double FreeGb;
         public double TotalGb;
         public string Letter;
+        public double HealthPct = double.NaN;
     }
 
     public class CoreTelemetry
@@ -1000,7 +1223,9 @@ namespace ProSystemMonitor
         private DateTime _lastSlowPoll = DateTime.MinValue;
         private DateTime _lastLhmGpuPoll = DateTime.MinValue;
         private double _cachedLhmGpuHot = double.NaN, _cachedLhmGpuFan = double.NaN, _cachedLhmGpuVolt = double.NaN;
+        private double _cachedBatW = double.NaN;
         private readonly Dictionary<string, double> _cachedDriveTemps = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, double> _cachedDriveHealth = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         private bool _boardNow = true;
         private DateTime _lastBoardPoll = DateTime.MinValue;
         private List<ProcItem> _cachedTopProcs = new List<ProcItem>();
@@ -1859,17 +2084,22 @@ namespace ProSystemMonitor
             if (!double.IsNaN(cpuTemp) && cpuTemp >= 93) gpuThrottle.Add(L.T("CPU ısı sınırı", "CPU thermal limit"));
             string throttleText = string.Join(", ", gpuThrottle);
 
-            // Uyarılar (tray bildirimi, 5 dk bekleme süresiyle)
-            if (cpuTemp >= 90) Program.Alert("cpu", L.T("CPU sıcaklığı yüksek: ", "High CPU temperature: ") + Math.Round(cpuTemp) + "°C");
-            if (gpuTemp >= 85) Program.Alert("gpu", L.T("GPU sıcaklığı yüksek: ", "High GPU temperature: ") + Math.Round(gpuTemp) + "°C");
+            // Uyarılar (özelleştirilebilir eşikler, 5 dk bekleme süresiyle)
+            if (cpuTemp >= AppPrefs.AlertCpu) Program.Alert("cpu", L.T("CPU sıcaklığı yüksek: ", "High CPU temperature: ") + AppPrefs.FmtTemp(cpuTemp));
+            if (gpuTemp >= AppPrefs.AlertGpu) Program.Alert("gpu", L.T("GPU sıcaklığı yüksek: ", "High GPU temperature: ") + AppPrefs.FmtTemp(gpuTemp));
             foreach (var dr in drives)
-                if (dr.TempC >= 70) Program.Alert("disk" + dr.Name, dr.Name + L.T(" sıcaklığı yüksek: ", " high temperature: ") + Math.Round(dr.TempC) + "°C");
+                if (dr.TempC >= AppPrefs.AlertDisk) Program.Alert("disk" + dr.Name, dr.Name + L.T(" sıcaklığı yüksek: ", " high temperature: ") + AppPrefs.FmtTemp(dr.TempC));
+            if (memLoadPct >= AppPrefs.AlertRam) Program.Alert("ram", L.T("Bellek kullanımı yüksek: %", "High memory usage: ") + Math.Round(memLoadPct) + "%");
+            if (_pingMs >= AppPrefs.AlertPing) Program.Alert("ping", L.T("Yüksek gecikme (Ping): ", "High network ping: ") + _pingMs + " ms");
 
             double netUpKbs = 0, netDownKbs = 0, netUpTotalMb = 0, netDownTotalMb = 0;
             ReadNetworkStats(out netUpKbs, out netDownKbs, out netUpTotalMb, out netDownTotalMb);
+            string wifiSsid; int wifiSignal;
+            NetWifi.Read(out wifiSsid, out wifiSignal);
 
             double sysBat = double.NaN;
             bool sysBatChg = false;
+            int sysBatMin = -1;
             try
             {
                 PowerStatus ps = System.Windows.Forms.SystemInformation.PowerStatus;
@@ -1877,6 +2107,9 @@ namespace ProSystemMonitor
                 {
                     sysBat = Math.Round(ps.BatteryLifePercent * 100.0);
                     sysBatChg = ps.PowerLineStatus == PowerLineStatus.Online || (ps.BatteryChargeStatus & BatteryChargeStatus.Charging) != 0;
+                    if (ps.BatteryLifeRemaining > 0) sysBatMin = ps.BatteryLifeRemaining / 60;
+                    if (!sysBatChg && sysBat <= AppPrefs.AlertBat)
+                        Program.Alert("bat", L.T("Düşük pil seviyesi: %", "Low battery level: ") + Math.Round(sysBat) + "%");
                 }
             }
             catch { }
@@ -1888,7 +2121,7 @@ namespace ProSystemMonitor
             _lastSensorSource = sensorSource;
             _lastDimTemp = dimmTemp;
 
-            return new Snap
+            var snap = new Snap
             {
                 Brand = _brandName, MoboModel = _moboModel, Chipset = _moboChipset, Bios = _moboBios, CpuModel = _cpuModel,
                 GpuModel = _gpuModel, GpuBus = gpuBusType, MemSpeed = _memSpeedText, Uptime = uptimeStr, Ip = _ipAddress,
@@ -1902,8 +2135,10 @@ namespace ProSystemMonitor
                 NetUp = netUpKbs, NetDown = netDownKbs, NetUpTot = netUpTotalMb, NetDownTot = netDownTotalMb, DiskR = diskReadMBs, DiskW = diskWriteMBs,
                 Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray(), TopCpu = _cachedTopCpu.ToArray(), SelfMb = _selfMb, SelfCpu = _selfCpu,
                 GpuHot = gpuHotspotTemp, CpuDiode = cpuDiodeTemp, DimmTemp = dimmTemp, SocV = socVolt, V12 = v12Volt,
-                SysBat = sysBat, SysBatChg = sysBatChg
+                SysBat = sysBat, SysBatChg = sysBatChg, SysBatMin = sysBatMin, SysBatW = _cachedBatW, WifiSsid = wifiSsid, WifiSignal = wifiSignal
             };
+            PeakStats.Update(snap);
+            return snap;
         }
 
         public string BuildJson(Snap s)
@@ -2164,6 +2399,17 @@ namespace ProSystemMonitor
             foreach (IHardware sub in hw.SubHardware) DumpHw(sub, sb, depth + 1);
         }
 
+        private static bool HasSystemBattery()
+        {
+            try
+            {
+                PowerStatus ps = System.Windows.Forms.SystemInformation.PowerStatus;
+                return (ps.BatteryChargeStatus & BatteryChargeStatus.NoSystemBattery) == 0 &&
+                       ps.BatteryChargeStatus != BatteryChargeStatus.Unknown;
+            }
+            catch { return false; }
+        }
+
         private LhmReading ReadLibreHardwareSensors()
         {
             var r = new LhmReading();
@@ -2181,7 +2427,8 @@ namespace ProSystemMonitor
                             IsGpuEnabled = true,
                             IsMotherboardEnabled = true,
                             IsStorageEnabled = true,
-                            IsMemoryEnabled = true
+                            IsMemoryEnabled = true,
+                            IsBatteryEnabled = HasSystemBattery()
                         };
                         _lhmComputer.Open();
                         _lhmInitialized = true;
@@ -2200,7 +2447,7 @@ namespace ProSystemMonitor
 
                 bool pollStorageNow = (DateTime.UtcNow - _lastStoragePoll).TotalSeconds >= 15;
                 if (pollStorageNow) _lastStoragePoll = DateTime.UtcNow;
-                bool pollMemNow = (DateTime.UtcNow - _lastMemPoll).TotalSeconds >= 5;
+                bool pollMemNow = (DateTime.UtcNow - _lastMemPoll).TotalSeconds >= 15;
                 if (pollMemNow) { _lastMemPoll = DateTime.UtcNow; _cachedDimmTemp = double.NaN; }
 
                 _boardNow = (DateTime.UtcNow - _lastBoardPoll).TotalSeconds >= 3;
@@ -2252,6 +2499,7 @@ namespace ProSystemMonitor
                     break;
                 case HardwareType.Storage: ReadStorage(hw); break;
                 case HardwareType.Memory: ReadMemory(hw); break;
+                case HardwareType.Battery: ReadBattery(hw); break;
                 case HardwareType.Motherboard:
                 case HardwareType.SuperIO:
                 case HardwareType.EmbeddedController:
@@ -2505,22 +2753,45 @@ namespace ProSystemMonitor
                 r.CpuVolt = r.CpuVid;
         }
 
+        private void ReadBattery(IHardware hw)
+        {
+            foreach (ISensor s in hw.Sensors)
+            {
+                double? vn = Val(s);
+                if (!vn.HasValue) continue;
+                string n = s.Name ?? "";
+                if (s.SensorType == SensorType.Power && (Has(n, "Charge") || Has(n, "Rate")))
+                {
+                    if (Has(n, "Discharge") && vn.Value > 0.1) _cachedBatW = -Math.Abs(vn.Value);
+                    else if (Has(n, "Charge") && vn.Value > 0.1) _cachedBatW = Math.Abs(vn.Value);
+                    else if (double.IsNaN(_cachedBatW)) _cachedBatW = vn.Value;
+                }
+            }
+        }
+
         private void ReadStorage(IHardware hw)
         {
             double best = double.NaN;
+            double health = double.NaN;
             int bestPrio = -1;
             foreach (ISensor s in hw.Sensors)
             {
-                if (s.SensorType != SensorType.Temperature) continue;
                 string n = s.Name ?? "";
-                if (Has(n, "Warning") || Has(n, "Critical") || Has(n, "Limit") || Has(n, "Resolution")) continue;
                 double? vn = Val(s);
-                if (!vn.HasValue || vn.Value <= 0 || vn.Value >= 100) continue;
+                if (!vn.HasValue) continue;
+                if (s.SensorType == SensorType.Level && (Has(n, "Remaining Life") || Has(n, "Available Spare") || n.Equals("Life", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (vn.Value >= 0 && vn.Value <= 100 && double.IsNaN(health)) health = vn.Value;
+                }
+                if (s.SensorType != SensorType.Temperature) continue;
+                if (Has(n, "Warning") || Has(n, "Critical") || Has(n, "Limit") || Has(n, "Resolution")) continue;
+                if (vn.Value <= 0 || vn.Value >= 100) continue;
                 int prio = n.Equals("Composite Temperature", StringComparison.OrdinalIgnoreCase) ? 2 :
                            (n.Equals("Temperature", StringComparison.OrdinalIgnoreCase) ? 1 : 0);
                 if (prio > bestPrio) { bestPrio = prio; best = vn.Value; }
             }
             if (!double.IsNaN(best)) _cachedDriveTemps[hw.Name] = best;
+            if (!double.IsNaN(health)) _cachedDriveHealth[hw.Name] = health;
         }
 
         private void ReadMemory(IHardware hw)
@@ -2545,18 +2816,18 @@ namespace ProSystemMonitor
             return sb.ToString();
         }
 
-        private bool TryGetDriveTemp(string driveName, out double temp)
+        private bool TryGetDriveMap(Dictionary<string, double> map, string driveName, out double val)
         {
-            temp = double.NaN;
+            val = double.NaN;
             double t;
-            if (_cachedDriveTemps.TryGetValue(driveName, out t)) { temp = t; return true; }
+            if (map.TryGetValue(driveName, out t)) { val = t; return true; }
             string a = NormName(driveName);
             if (a.Length == 0) return false;
-            foreach (var kv in _cachedDriveTemps)
+            foreach (var kv in map)
             {
                 string b = NormName(kv.Key);
                 if (b.Length == 0) continue;
-                if (a.Contains(b) || b.Contains(a)) { temp = kv.Value; return true; }
+                if (a.Contains(b) || b.Contains(a)) { val = kv.Value; return true; }
             }
             return false;
         }
@@ -2570,9 +2841,10 @@ namespace ProSystemMonitor
 
             foreach (string dName in names)
             {
-                double t;
-                if (!TryGetDriveTemp(dName, out t)) t = double.NaN;
-                drives.Add(new DriveTelemetry { Name = dName, TempC = t });
+                double t, hp;
+                if (!TryGetDriveMap(_cachedDriveTemps, dName, out t)) t = double.NaN;
+                if (!TryGetDriveMap(_cachedDriveHealth, dName, out hp)) hp = double.NaN;
+                drives.Add(new DriveTelemetry { Name = dName, TempC = t, HealthPct = hp });
             }
             return drives;
         }

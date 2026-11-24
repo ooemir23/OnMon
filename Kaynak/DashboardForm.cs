@@ -67,7 +67,25 @@ namespace ProSystemMonitor
                 if (s.CpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("İşlemci", "Processor"), s.CpuModel));
                 if (s.GpuModel.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("Ekran kartı", "Graphics Card"), s.GpuModel + (s.GpuBus.Length > 0 ? "  (" + s.GpuBus + ")" : "")));
                 if (s.MemSpeed.Length > 0) rows.Add(new KeyValuePair<string, string>(L.T("Bellek hızı", "Memory Speed"), s.MemSpeed));
-                if (!double.IsNaN(s.SysBat)) rows.Add(new KeyValuePair<string, string>(L.T("Pil durumu", "Battery"), I0(s.SysBat) + "%" + (s.SysBatChg ? L.T(" (Şarj oluyor)", " (Charging)") : "")));
+                if (!double.IsNaN(s.SysBat))
+                {
+                    string bStr = I0(s.SysBat) + "%" + (s.SysBatChg ? L.T(" (Şarj oluyor)", " (Charging)") : "");
+                    if (s.SysBatMin > 0 && !s.SysBatChg) bStr += " · " + AppPrefs.FmtMinutes(s.SysBatMin);
+                    if (!double.IsNaN(s.SysBatW)) bStr += " · " + (s.SysBatW > 0 ? "+" : "") + s.SysBatW.ToString("0.0", CultureInfo.InvariantCulture) + " W";
+                    rows.Add(new KeyValuePair<string, string>(L.T("Pil durumu", "Battery"), bStr));
+                }
+                if (!string.IsNullOrEmpty(s.WifiSsid))
+                {
+                    string wStr = s.WifiSsid + (s.WifiSignal >= 0 ? " (" + s.WifiSignal + "%)" : "");
+                    rows.Add(new KeyValuePair<string, string>("Wi-Fi", wStr));
+                }
+            }
+            if (!double.IsNaN(PeakStats.CpuTempMax) || !double.IsNaN(PeakStats.GpuTempMax))
+            {
+                string pk = "CPU " + AppPrefs.FmtTemp(PeakStats.CpuTempMin) + "–" + AppPrefs.FmtTemp(PeakStats.CpuTempMax) +
+                            " · GPU " + AppPrefs.FmtTemp(PeakStats.GpuTempMin) + "–" + AppPrefs.FmtTemp(PeakStats.GpuTempMax) +
+                            (!double.IsNaN(PeakStats.FpsMax) ? " · " + I0(PeakStats.FpsMax) + " FPS" : "");
+                rows.Add(new KeyValuePair<string, string>(L.T("Oturum Peak", "Session Peak"), pk));
             }
             if (SysInfo.Boot != DateTime.MinValue)
             {
@@ -100,6 +118,11 @@ namespace ProSystemMonitor
         internal int _bright = 100;          // uygulama parlaklığı %
         private RectangleF _brRect;
         private static readonly int[] BrLevels = { 100, 80, 60, 40, 25 };
+        internal int EffectiveBright()
+        {
+            return AppPrefs.IsNightNow() ? AppPrefs.NightBright : _bright;
+        }
+
         internal void NextBright()
         {
             int i = Array.IndexOf(BrLevels, _bright);
@@ -109,10 +132,11 @@ namespace ProSystemMonitor
         private void DrawBrightBtn()
         {
             if (_brRect.Width <= 0) return;
+            int eb = EffectiveBright();
             Theme t = _th; RectangleF r = _brRect;
-            using (GraphicsPath bp = RR(r, r.Height / 2f)) { G.FillPath(Br(Color.FromArgb(255, 24, 26, 32)), bp); G.DrawPath(Pn(_bright < 100 ? t.A1 : Color.FromArgb(255, 120, 124, 134), 1.4f), bp); }
+            using (GraphicsPath bp = RR(r, r.Height / 2f)) { G.FillPath(Br(Color.FromArgb(255, 24, 26, 32)), bp); G.DrawPath(Pn(eb < 100 ? t.A1 : Color.FromArgb(255, 120, 124, 134), 1.4f), bp); }
             float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f;
-            Color c = _bright < 100 ? t.A1 : Color.FromArgb(255, 200, 204, 214);
+            Color c = eb < 100 ? t.A1 : Color.FromArgb(255, 200, 204, 214);
             G.FillEllipse(Br(c), cx - 4.5f, cy - 4.5f, 9, 9);
             for (int k = 0; k < 8; k++)
             {
@@ -171,7 +195,7 @@ namespace ProSystemMonitor
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsIconic(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int cmd);
-        private readonly System.Windows.Forms.Timer _deskTimer = new System.Windows.Forms.Timer { Interval = 250 };
+        private readonly System.Windows.Forms.Timer _deskTimer = new System.Windows.Forms.Timer { Interval = 500 };
         private bool _deskLogged, _deskTop;
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern int GetClassName(IntPtr h, System.Text.StringBuilder sb, int max);
@@ -249,6 +273,7 @@ namespace ProSystemMonitor
         {
             try
             {
+                AppPrefs.LoadFromDisk();
                 if (!File.Exists(SettingsPath)) return;
                 bool hasDesk = false;
                 foreach (string line in File.ReadAllLines(SettingsPath))
@@ -302,9 +327,50 @@ namespace ProSystemMonitor
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-                File.WriteAllLines(SettingsPath, new[] { "lang=" + L.Lang, "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city, "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"), "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"), "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()), "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright, "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs), "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture), "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol, "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture), "rcedit=" + (_rcEdit ? "1" : "0") });
+                File.WriteAllLines(SettingsPath, new[]
+                {
+                    "lang=" + L.Lang, "layout=" + _layout, "theme=" + _th.Id, "margin=" + _margin, "city=" + _city,
+                    "audiobar=" + (_audioBar ? "1" : "0"), "micbar=" + (_micBar ? "1" : "0"), "volbar=" + (_volBar ? "1" : "0"),
+                    "hidestrip=" + (_hideStrip ? "1" : "0"), "autogame=" + (_autoGame ? "1" : "0"), "topbar=" + (_topBar ? "1" : "0"),
+                    "lowcpu2=" + (_lowCpu ? "1" : "0"), "fanmap=" + string.Join(",", TelemetryCollector.FanMap.Select(x => x.ToString()).ToArray()),
+                    "topmost=" + (TopMost ? "1" : "0"), "desk=" + (_desk ? "1" : "0"), "bright=" + _bright,
+                    "soundfav=" + string.Join("|", _favs), "micfav=" + string.Join("|", _micFavs),
+                    "cw=" + _cw, "ch=" + _ch, "grid=" + _grid.ToString(CultureInfo.InvariantCulture),
+                    "showgrid=" + (_showGrid ? "1" : "0"), "snap=" + (_snapOn ? "1" : "0"), "bgcol=" + _bgCol,
+                    "bgimg=" + _bgImg, "gfs=" + _gfs.ToString(CultureInfo.InvariantCulture), "gzoom=" + _gzoom.ToString(CultureInfo.InvariantCulture),
+                    "rcedit=" + (_rcEdit ? "1" : "0"),
+                    "tempf=" + (AppPrefs.TempFahrenheit ? "1" : "0"),
+                    "clock12h=" + (AppPrefs.Clock12h ? "1" : "0"),
+                    "showprayer=" + (AppPrefs.ShowPrayer ? "1" : "0"),
+                    "nightmode=" + (AppPrefs.NightMode ? "1" : "0"),
+                    "nightstart=" + AppPrefs.NightStartHour,
+                    "nightend=" + AppPrefs.NightEndHour,
+                    "nightbright=" + AppPrefs.NightBright,
+                    "overlay=" + (AppPrefs.OverlayEnabled ? "1" : "0"),
+                    "overlaycorner=" + AppPrefs.OverlayCorner,
+                    "overlayop=" + AppPrefs.OverlayOpacity,
+                    "traymode=" + AppPrefs.TrayIconMode,
+                    "alcpu=" + AppPrefs.AlertCpu,
+                    "algpu=" + AppPrefs.AlertGpu,
+                    "aldisk=" + AppPrefs.AlertDisk,
+                    "alram=" + AppPrefs.AlertRam,
+                    "albat=" + AppPrefs.AlertBat,
+                    "alping=" + AppPrefs.AlertPing,
+                    "albeep=" + (AppPrefs.AlertBeep ? "1" : "0"),
+                    "onboarded=" + (AppPrefs.Onboarded ? "1" : "0")
+                });
             }
             catch { }
+        }
+
+        internal void ReloadFromDisk()
+        {
+            LoadSettings();
+            WLoad();
+            Program.SyncOverlay();
+            Program.RebuildTrayMenu();
+            _dirty = true;
+            Invalidate();
         }
 
         // ---------------- yaşam döngüsü ----------------
@@ -824,6 +890,9 @@ namespace ProSystemMonitor
                     else if (h.Value == "vol:mute") ToggleVolMute();
                     else if (h.Value == "out:next") NextAudio();
                     else if (h.Value == "bright:next") NextBright();
+                    else if (h.Value == "media:prev") { MediaControl.Prev(); _dirty = true; Invalidate(); }
+                    else if (h.Value == "media:play") { MediaControl.PlayPause(); _dirty = true; Invalidate(); }
+                    else if (h.Value == "media:next") { MediaControl.Next(); _dirty = true; Invalidate(); }
                     else if (h.Value.StartsWith("prof:")) { int pi; if (int.TryParse(h.Value.Substring(5), out pi) && pi >= 0 && pi < AudioProfiles.All.Count) { _profIdx = pi; ApplyProfile(AudioProfiles.All[pi]); } }
                     else if (h.Value == "vol:bar") { _volRect = h.Key; _volDrag = true; SetVolumeTo((cx - h.Key.X) / h.Key.Width); }
                     else SwitchAudio(h.Value);
@@ -944,7 +1013,7 @@ namespace ProSystemMonitor
         private static string I0(double v) { return double.IsNaN(v) ? "--" : Math.Round(v).ToString("0", CultureInfo.InvariantCulture); }
         private static string D1(double v) { return double.IsNaN(v) ? "--" : v.ToString("0.0", CultureInfo.InvariantCulture); }
         private static string Pct(double v) { return double.IsNaN(v) ? "--" : I0(v) + "%"; }
-        private static string Tc(double v) { return double.IsNaN(v) ? "--" : I0(v) + "°C"; }
+        private static string Tc(double v) { return AppPrefs.FmtTemp(v); }
         private static string Mhz(double v) { return double.IsNaN(v) ? "--" : I0(v) + " MHz"; }
         private static string Rpm(double v) { return double.IsNaN(v) ? "--" : I0(v) + " RPM"; }
         private static string Wt(double v) { return double.IsNaN(v) ? "--" : D1(v) + " W"; }
@@ -1314,10 +1383,11 @@ namespace ProSystemMonitor
             _brRect = RectangleF.Empty;
             if (_topBar) DrawInfoBar(_snap, StripOn ? _ch + 32f : _ch);
             if (allowOverlay && _topBar) DrawInfoPanel(_snap, StripOn ? _ch + 32f : _ch);
-            if (allowOverlay && _bright < 100)
+            int effBr = EffectiveBright();
+            if (allowOverlay && effBr < 100)
             {
                 G.ResetTransform();
-                G.FillRectangle(Br(Color.FromArgb((int)(255 * (100 - _bright) / 100f), 0, 0, 0)), 0, 0, W, Hh);
+                G.FillRectangle(Br(Color.FromArgb((int)(255 * (100 - effBr) / 100f), 0, 0, 0)), 0, 0, W, Hh);
                 G.TranslateTransform(_ox, _oy); G.ScaleTransform(sc, sc);
             }
             if (allowOverlay && _edit) DrawEditor();
@@ -1532,7 +1602,10 @@ namespace ProSystemMonitor
 
         private void PNet(RectangleF r, Snap s)
         {
-            RectangleF c = Card(r, L.T("AĞ", "NETWORK"), s.Ip, double.IsNaN(s.Ping) ? null : I0(s.Ping) + " ms");
+            string sub = !string.IsNullOrEmpty(s.WifiSsid)
+                ? ("Wi-Fi " + Shorten(s.WifiSsid, 16) + (s.WifiSignal >= 0 ? " (" + s.WifiSignal + "%)" : "") + (string.IsNullOrEmpty(s.Ip) ? "" : " · " + s.Ip))
+                : s.Ip;
+            RectangleF c = Card(r, L.T("AĞ", "NETWORK"), sub, double.IsNaN(s.Ping) ? null : I0(s.Ping) + " ms");
             float half = (c.Width - 20) / 2;
             Caption(c.X, c.Y, half, "▲", Spd(s.NetUp), null, null);
             Caption(c.X + half + 20, c.Y, half, "▼", Spd(s.NetDown), null, null);
@@ -1553,10 +1626,11 @@ namespace ProSystemMonitor
             {
                 DriveTelemetry d = s.Drives[i];
                 string nm = !string.IsNullOrEmpty(d.Mount) ? d.Mount : (!string.IsNullOrEmpty(d.Letter) ? d.Letter : d.Name);
+                string hlth = !double.IsNaN(d.HealthPct) ? " · ♥" + I0(d.HealthPct) + "%" : "";
                 Lb[i] = nm;
                 bool hasSpace = d.TotalGb > 0;
-                V[i] = hasSpace ? D1(d.FreeGb) + L.T(" GB boş", " GB free") : (double.IsNaN(d.TempC) ? "--" : Tc(d.TempC));
-                P[i] = hasSpace ? d.UsedPct : (double.IsNaN(d.TempC) ? 0 : Ratio(d.TempC, 100)); Hh[i] = hasSpace ? d.UsedPct > 92 : Hot(d.TempC, 70);
+                V[i] = (hasSpace ? D1(d.FreeGb) + L.T(" GB boş", " GB free") : (double.IsNaN(d.TempC) ? "--" : Tc(d.TempC))) + hlth;
+                P[i] = hasSpace ? d.UsedPct : (double.IsNaN(d.TempC) ? 0 : Ratio(d.TempC, 100)); Hh[i] = hasSpace ? d.UsedPct > 92 : Hot(d.TempC, AppPrefs.AlertDisk);
             }
             StatColumn(c.X, c.Y, c.Width, c.Height, Lb, V, P, Hh);
         }
@@ -1596,16 +1670,18 @@ namespace ProSystemMonitor
         {
             DateTime now = DateTime.Now;
             CultureInfo ci = L.Culture;
-            RectangleF c = Card(r, L.T("SAAT", "CLOCK"), now.ToString("d MMMM dddd", ci), Extras.WxTemp);
+            RectangleF c = Card(r, L.T("SAAT", "CLOCK"), now.ToString("d MMMM dddd", ci), AppPrefs.FmtWx(Extras.WxTemp));
+            bool showP = AppPrefs.ShowPrayer;
             bool narrow = c.Width < 700;
-            string tm = now.ToString("HH:mm", ci);
-            float areaW = narrow ? c.Width * 0.62f : c.Width * 0.5f;
-            float fs = Math.Min(150, narrow ? c.Height * 0.3f : c.Height * 0.62f);
+            string tm = AppPrefs.FmtClock(now);
+            float areaW = showP ? (narrow ? c.Width * 0.62f : c.Width * 0.5f) : c.Width;
+            float fs = Math.Min(150, showP ? (narrow ? c.Height * 0.3f : c.Height * 0.62f) : c.Height * 0.55f);
             Font ft = F(fs, true, false);
             while (fs > 30 && TW(tm, ft) > areaW) { fs -= 4; ft = F(fs, true, false); }
-            float th = narrow ? c.Height * 0.42f : c.Height * 0.8f;
-            Txt(tm, ft, _th.Tx, c.X, c.Y, areaW + 10, th, 0);
-            Txt(Extras.WxDesc, F(24, false, true), _th.Dim, c.X, narrow ? c.Y + th : c.Bottom - 40, c.Width * 0.5f, 36, 0);
+            float th = showP ? (narrow ? c.Height * 0.42f : c.Height * 0.8f) : c.Height * 0.72f;
+            Txt(tm, ft, _th.Tx, c.X, c.Y, areaW + 10, th, showP ? 0 : 1);
+            Txt(Extras.WxDesc, F(24, false, true), _th.Dim, c.X, narrow || !showP ? c.Y + th : c.Bottom - 40, showP ? c.Width * 0.5f : c.Width, 36, showP ? 0 : 1);
+            if (!showP) return;
             int next = NextPrayer(now);
             if (narrow)
             {
@@ -1647,19 +1723,19 @@ namespace ProSystemMonitor
             float bx = 64 + TW(brand, fb) + 18;
             if (Extras.WxTemp != "--")
             {
-                string wx = Extras.WxTemp + "  " + Extras.WxDesc;
+                string wx = AppPrefs.FmtWx(Extras.WxTemp) + "  " + Extras.WxDesc;
                 Txt(wx, fd, t.Dim, bx, y, 500, h, 0);
                 bx += TW(wx, fd) + 22;
             }
             Font fbat = F(18, true, false);
             if (s != null && !double.IsNaN(s.SysBat))
             {
-                string btxt = L.T("Pil ", "Bat ") + I0(s.SysBat) + "%" + (s.SysBatChg ? " ⚡" : "");
+                string btxt = L.T("Pil ", "Bat ") + I0(s.SysBat) + "%" + (s.SysBatChg ? " ⚡" : (s.SysBatMin > 0 ? " " + AppPrefs.FmtMinutes(s.SysBatMin) : ""));
                 float bbw = TW(btxt, fbat) + 22;
                 if (bx + bbw <= 1120)
                 {
                     var bbr = new RectangleF(bx, y + 2, bbw, h - 4);
-                    bool lowB = !s.SysBatChg && s.SysBat <= 18;
+                    bool lowB = !s.SysBatChg && s.SysBat <= AppPrefs.AlertBat;
                     using (GraphicsPath bp = RR(bbr, (h - 4) / 2f))
                     {
                         G.FillPath(Br(lowB ? Al(t.Crit, 90) : (s.SysBatChg ? Al(t.A1, 65) : t.Tile)), bp);
@@ -1688,9 +1764,9 @@ namespace ProSystemMonitor
                     bx += bw + 8;
                 }
             }
-            string clock = now.ToString("HH:mm", ci);
+            string clock = AppPrefs.FmtClock(now);
             string date = now.ToString("d MMMM dddd", ci);
-            string pr = PrayerLeft(now);
+            string pr = AppPrefs.ShowPrayer ? PrayerLeft(now) : "";
             float x = _cw - 14;
             Font fc = F(28, true, false);
             float cw = TW(clock, fc) + 6;
@@ -1966,7 +2042,7 @@ namespace ProSystemMonitor
             float fs = 56; Font fb = F(fs, true, false);
             while (fs > 24 && TW(brand, fb) > r.Width - 40) { fs -= 4; fb = F(fs, true, false); }
             Txt(brand, fb, t.Tx, r.X, r.Y + 8, r.Width, 70, 1);
-            Txt(now.ToString("HH:mm", CultureInfo.InvariantCulture), F(64, false, true), t.Tx, r.X, r.Y + 76, r.Width, 76, 1);
+            Txt(AppPrefs.FmtClock(now), F(64, false, true), t.Tx, r.X, r.Y + 76, r.Width, 76, 1);
             var pill = new RectangleF(r.X + 50, r.Y + 156, r.Width - 100, 36);
             using (GraphicsPath p = RR(pill, 8)) G.FillPath(Br(t.Tx), p);
             Txt(now.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture), F(26, true, false), t.Bg, pill.X, pill.Y, pill.Width, pill.Height, 1);
@@ -2427,7 +2503,7 @@ namespace ProSystemMonitor
                 string midTop = inGame ? ("▶ " + Shorten(GameSession.Active ? GameSession.Game : s.Game, 22)) : (L.T("AÇIK SÜRE  ", "UPTIME  ") + s.Uptime);
                 string midBot;
                 if (!double.IsNaN(s.SysBat))
-                    midBot = L.T("PİL ", "BATTERY ") + I0(s.SysBat) + "%" + (s.SysBatChg ? " ⚡" : "");
+                    midBot = L.T("PİL ", "BATTERY ") + I0(s.SysBat) + "%" + (s.SysBatChg ? " ⚡" : (s.SysBatMin > 0 ? " · " + AppPrefs.FmtMinutes(s.SysBatMin) : ""));
                 else if (s.Fps > 0)
                     midBot = I0(s.Fps) + " FPS" + (!double.IsNaN(s.Low1) ? "  ·  1% " + I0(s.Low1) : "");
                 else if (!double.IsNaN(s.Ping))
@@ -2439,8 +2515,8 @@ namespace ProSystemMonitor
             }
 
             float rightW = r.Width * 0.25f;
-            string clk = now.ToString("HH:mm", ci);
-            string dt = now.ToString("d MMM dddd", ci) + (Extras.WxTemp != "--" ? "  ·  " + Extras.WxTemp : "");
+            string clk = AppPrefs.FmtClock(now);
+            string dt = now.ToString("d MMM dddd", ci) + (Extras.WxTemp != "--" ? "  ·  " + AppPrefs.FmtWx(Extras.WxTemp) : "");
             Font fClk = F(Math.Min(40f, r.Height * 0.44f), true, false);
             Font fDt = F(Math.Min(19f, r.Height * 0.22f), false, true);
             Txt(clk, fClk, t.A1, r.Right - pad - rightW, y0 - 2, rightW, innerH * 0.58f, 2);
@@ -2631,6 +2707,48 @@ namespace ProSystemMonitor
                 Txt(Fit(bigs[i], F(30, true, false), iw * 0.65f), F(30, true, false), hots[i] ? t.Crit : t.Tx, x + iw * 0.35f, r.Y + 6, iw * 0.65f, 34, 2);
                 BarAt(x, r.Y + r.Height * 0.54f, iw, pcts[i], hots[i], 7f);
                 Txt(Fit(subs[i], F(17, false, true), iw), F(17, false, true), t.Dim, x, r.Bottom - 30, iw, 24, 0);
+            }
+        }
+
+        private void PMedia(RectangleF r, Snap s)
+        {
+            Theme t = _th;
+            MediaInfo mi = MediaControl.Read();
+            string appTag = mi != null && mi.IsActive ? mi.AppName : L.T("MEDYA", "MEDIA");
+            RectangleF c = Card(r, L.T("ŞİMDİ ÇALAN", "NOW PLAYING"), appTag, null);
+
+            float pad = 4f;
+            float btnSz = Math.Min(42f, Math.Max(30f, c.Height * 0.52f));
+            float btnsW = btnSz * 3 + 16f;
+            float textW = Math.Max(40f, c.Width - btnsW - 14f);
+
+            string title = (mi != null && mi.IsActive && !string.IsNullOrEmpty(mi.Title))
+                ? mi.Title
+                : L.T("Aktif medya oynatıcı bulunamadı", "No active media playing");
+            string artist = (mi != null && mi.IsActive && !string.IsNullOrEmpty(mi.Artist))
+                ? mi.Artist
+                : L.T("Spotify, YouTube veya VLC açın", "Open Spotify, YouTube or VLC");
+
+            Font fT = F(Math.Min(26f, Math.Max(16f, c.Height * 0.26f)), true, false);
+            Font fA = F(Math.Min(19f, Math.Max(14f, c.Height * 0.19f)), false, true);
+            Txt(Fit(title, fT, textW), fT, (mi != null && mi.IsActive) ? t.Tx : t.Dim, c.X + pad, c.Y + 4, textW, c.Height * 0.52f, 0);
+            Txt(Fit(artist, fA, textW), fA, (mi != null && mi.IsActive) ? t.A1 : t.Dim, c.X + pad, c.Y + c.Height * 0.52f, textW, c.Height * 0.42f, 0);
+
+            float bx0 = c.Right - btnsW;
+            float by = c.Y + (c.Height - btnSz) / 2f;
+            string[] icons = { "⏮", "⏯", "⏭" };
+            string[] acts = { "media:prev", "media:play", "media:next" };
+            for (int i = 0; i < 3; i++)
+            {
+                var br = new RectangleF(bx0 + i * (btnSz + 8f), by, btnSz, btnSz);
+                bool mid = i == 1;
+                using (GraphicsPath gp = RR(br, btnSz / 2f))
+                {
+                    G.FillPath(Br(mid ? Al(t.A1, 55) : t.Tile), gp);
+                    G.DrawPath(Pn(mid ? t.A1 : t.Line, mid ? 1.8f : 1.2f), gp);
+                }
+                Txt(icons[i], F(btnSz * 0.45f, true, false), mid ? t.A1 : t.Tx, br.X, br.Y, br.Width, br.Height, 1);
+                _hits.Add(new KeyValuePair<RectangleF, string>(br, acts[i]));
             }
         }
     }

@@ -1,4 +1,4 @@
-version=59
+version=60
 file=ProSystemMonitor.exe
-sha256=1d3fa4cef71e54477f1c0bf257a8ecba5802d28e1b1502a161cbdc6c251dc76d
-notes=Modern Control Center settings UI, English & Turkish support, 8 new modern/minimal/detailed layouts, universal PC brand & NVIDIA/AMD/Intel/Laptop support.
+sha256=d95010137321d0ee7a7ef8dc335e42bf4e5497b8150670ad92280326e5fd2e99
+notes=v60 Mega Update + Ultra-Low Idle CPU: In-game Mini Overlay HUD, Media Player widget, Auto Night Mode, C/F & 12h/24h & Prayer toggle, Custom Alert Thresholds + Beep, First-Run Wizard, Online Community Gallery, Live Tray Temp Icon, Battery runtime/W + SMART health + Wi-Fi + Peak Min/Max, .onmonbak Backup/Restore, and lightweight idle CPU optimizations.

@@ -185,6 +185,7 @@ namespace ProSystemMonitor
             Wd("sys", "Sistem Özeti", "System Summary", cSysTr, cSysEn, 530, 234, 220, 100, (r, s) => PSys(r, s));
 
             Wd("sound", "Ses Mikseri", "Audio Mixer", cAudTr, cAudEn, 440, 338, 300, 160, (r, s) => PSound(r, s));
+            Wd("media", "Medya Kontrol", "Media Player", cAudTr, cAudEn, 460, 145, 240, 96, (r, s) => PMedia(r, s));
             Wd("clock", "Saat & Hava", "Clock & Weather", cAudTr, cAudEn, 420, 234, 200, 100, (r, s) => PClock(r, s));
             Wd("text", "Özel Metin", "Custom Text", cAudTr, cAudEn, 500, 120, 80, 40, (r, s) => WText(r, s)); _wlist[_wlist.Count - 1].Multi = true;
             Wd("image", "Logo / Resim", "Logo / Image", cAudTr, cAudEn, 300, 300, 60, 60, (r, s) => WImage(r, s)); _wlist[_wlist.Count - 1].Multi = true;

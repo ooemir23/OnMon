@@ -100,24 +100,24 @@ namespace ProSystemMonitor
 
             // 12 Pages grouped in sidebar
             AddSectionHeader(L.T("KİŞİSELLEŞTİRME", "PERSONALIZATION"));
-            AddPage("\u25C8", L.T("Görünüm ve Dil", "Appearance & Language"), "tema theme layout duzen sablon preset dil language turkce english studio", BuildView());
-            AddPage("\u25A6", L.T("Düzen Galerisi", "Layout Gallery"), "gallery galeri onmon import export paylas sablon", BuildLayoutsPage());
+            AddPage("\u25C8", L.T("Görünüm ve Dil", "Appearance & Language"), "tema theme layout duzen sablon preset dil language turkce english studio fahrenheit celsius 12h 24h night gece", BuildView());
+            AddPage("\u25A6", L.T("Düzen Galerisi", "Layout Gallery"), "gallery galeri onmon import export paylas sablon community topluluk", BuildLayoutsPage());
 
             AddSectionHeader(L.T("SES VE OYUN", "AUDIO & GAMING"));
-            AddPage("\u266A", L.T("Ses ve Mikrofon", "Audio & Microphone"), "ses audio mic mikrofon speaker hoparlor kulaklik hotkey kisayol", BuildAudio());
+            AddPage("\u266A", L.T("Ses ve Mikrofon", "Audio & Microphone"), "ses audio mic mikrofon speaker hoparlor kulaklik hotkey kisayol media", BuildAudio());
             AddPage("\u2630", L.T("Ses Profilleri", "Audio Profiles"), "profil profile ses audio game music", BuildProfiles());
             AddPage("\u25B6", L.T("Oyun Oturumları", "Game Sessions"), "oyun game fps csv hud auto session oturum", BuildSessions());
 
             AddSectionHeader(L.T("DONANIM VE SİSTEM", "HARDWARE & SYSTEM"));
             AddPage("\u273A", L.T("Fan Eşleme", "Fan Mapping"), "fan rpm pump pompa cooling sogutma anakart", BuildFans());
-            AddPage("\u26A1", L.T("Pil ve Cihazlar", "Batteries & Devices"), "pil battery laptop bluetooth cetra hid wireless", BuildDevices());
-            AddPage("\u25CE", L.T("Konum ve Uyarılar", "Location & Alerts"), "sehir city hava weather namaz prayer alarm alert sicaklik", BuildData());
-            AddPage("\u2756", L.T("Pencere ve Sistem", "Window & System"), "monitor ekran display topmost desktop masaustu win+d startup cpu web browser", BuildSystem());
+            AddPage("\u26A1", L.T("Pil ve Cihazlar", "Batteries & Devices"), "pil battery laptop bluetooth cetra hid wireless smart disk", BuildDevices());
+            AddPage("\u25CE", L.T("Konum ve Uyarılar", "Location & Alerts"), "sehir city hava weather namaz prayer alarm alert sicaklik beep ping ram esik threshold", BuildData());
+            AddPage("\u2756", L.T("Pencere ve Sistem", "Window & System"), "monitor ekran display topmost desktop masaustu win+d startup cpu web browser overlay hud tray backup yedek wizard sihirbaz", BuildSystem());
 
             AddSectionHeader(L.T("ARAÇLAR", "TOOLS"));
             AddPage("\u23F0", L.T("Zamanlayıcı", "Power Timer"), "shutdown restart kapat yeniden baslat zamanlayici timer", BuildTimer());
             AddPage("\u21BB", L.T("Güncelleme (OTA)", "Updates (OTA)"), "update guncelleme ota github version surum changelog", BuildUpdate());
-            AddPage("\u2699", L.T("Tanılama", "Diagnostics"), "diag tanilama sensor pawnio log fps hata", BuildDiag());
+            AddPage("\u2699", L.T("Tanılama", "Diagnostics"), "diag tanilama sensor pawnio log fps hata peak min max wifi", BuildDiag());
 
             ReflowSidebar("");
             ShowPage(0);
@@ -515,16 +515,99 @@ namespace ProSystemMonitor
             // Split container for Layouts (left) + Themes (right)
             var split = new Panel
             {
-                Left = 26, Top = 154, Width = InitPageW - 68, Height = 550,
+                Left = 26, Top = 154, Width = InitPageW - 68, Height = 410,
                 BackColor = ModernColors.CanvasBg,
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             p.Controls.Add(split);
 
-            var leftCard = new ModernCard { Left = 0, Top = 0, Width = 366, Height = 550 };
-            var rightCard = new ModernCard { Left = 380, Top = 0, Width = 452, Height = 550 };
+            var leftCard = new ModernCard { Left = 0, Top = 0, Width = 366, Height = 410 };
+            var rightCard = new ModernCard { Left = 380, Top = 0, Width = 452, Height = 410 };
             split.Controls.Add(leftCard);
             split.Controls.Add(rightCard);
+
+            // Units, Clock & Night Mode card below split
+            ModernCard cPref = AddCard(p, 576, 206, false);
+            CardTitle(cPref, L.T("BİRİMLER, SAAT VE OTOMATİK GECE MODU", "UNITS, CLOCK & AUTO NIGHT MODE"), 16, 12, 520);
+
+            int colW = (cPref.Width - 42) / 2;
+            var ckTempF = new ModernToggle
+            {
+                Title = L.T("Fahrenheit (°F) kullan", "Use Fahrenheit (°F)"),
+                Subtitle = L.T("Açıkken sıcaklıklar °F olarak gösterilir", "Displays all temperatures in °F"),
+                Left = 14, Top = 36, Width = colW, Height = 46, AccentColor = _acc
+            };
+            ckTempF.SetCheckedSilent(AppPrefs.TempFahrenheit);
+            ckTempF.CheckedChanged += delegate { if (!_loading) { AppPrefs.TempFahrenheit = ckTempF.Checked; _d.SaveSettings(); _d.Invalidate(); Program.RebuildTrayMenu(); } };
+            _accentCtls.Add(ckTempF);
+            cPref.Controls.Add(ckTempF);
+
+            var ckClock12 = new ModernToggle
+            {
+                Title = L.T("12 saatlik (AM/PM) biçimi", "12-hour (AM/PM) clock"),
+                Subtitle = L.T("Saat widget ve bilgi çubuğu biçimi", "Applies to clock widget & info bar"),
+                Left = 28 + colW, Top = 36, Width = colW, Height = 46, AccentColor = _acc
+            };
+            ckClock12.SetCheckedSilent(AppPrefs.Clock12h);
+            ckClock12.CheckedChanged += delegate { if (!_loading) { AppPrefs.Clock12h = ckClock12.Checked; _d.SaveSettings(); _d.Invalidate(); } };
+            _accentCtls.Add(ckClock12);
+            cPref.Controls.Add(ckClock12);
+
+            var ckPrayer = new ModernToggle
+            {
+                Title = L.T("Namaz vakitlerini göster", "Show Prayer Times"),
+                Subtitle = L.T("Bilgi çubuğunda ve Saat kartında vakitler", "Prayer schedule on clock & info bar"),
+                Left = 14, Top = 86, Width = colW, Height = 46, AccentColor = _acc
+            };
+            ckPrayer.SetCheckedSilent(AppPrefs.ShowPrayer);
+            ckPrayer.CheckedChanged += delegate { if (!_loading) { AppPrefs.ShowPrayer = ckPrayer.Checked; _d.SaveSettings(); _d.Invalidate(); } };
+            _accentCtls.Add(ckPrayer);
+            cPref.Controls.Add(ckPrayer);
+
+            var ckNight = new ModernToggle
+            {
+                Title = L.T("Otomatik Gece Modu", "Auto Night Mode"),
+                Subtitle = L.T("Belirlenen saatlerde parlaklığı otomatik kısar", "Automatically dims dashboard at night hours"),
+                Left = 28 + colW, Top = 86, Width = colW, Height = 46, AccentColor = _acc
+            };
+            ckNight.SetCheckedSilent(AppPrefs.NightMode);
+            ckNight.CheckedChanged += delegate { if (!_loading) { AppPrefs.NightMode = ckNight.Checked; _d.SaveSettings(); _d.Invalidate(); } };
+            _accentCtls.Add(ckNight);
+            cPref.Controls.Add(ckNight);
+
+            var lNs = new Label { Text = L.T("Başlangıç:", "Start:"), Left = 16, Top = 152, Width = 72, Height = 22, ForeColor = ModernColors.Dim, BackColor = ModernColors.CardBg };
+            cPref.Controls.Add(lNs);
+            ComboBox cbNs = StyledCombo(cPref, 90, 148, 72, ComboBoxStyle.DropDownList);
+            cbNs.MaxDropDownItems = 10; cbNs.IntegralHeight = false; cbNs.DropDownHeight = 200;
+            var lNe = new Label { Text = L.T("Bitiş:", "End:"), Left = 176, Top = 152, Width = 50, Height = 22, ForeColor = ModernColors.Dim, BackColor = ModernColors.CardBg };
+            cPref.Controls.Add(lNe);
+            ComboBox cbNe = StyledCombo(cPref, 228, 148, 72, ComboBoxStyle.DropDownList);
+            cbNe.MaxDropDownItems = 10; cbNe.IntegralHeight = false; cbNe.DropDownHeight = 200;
+            for (int h = 0; h < 24; h++) { string hh = h.ToString("00") + ":00"; cbNs.Items.Add(hh); cbNe.Items.Add(hh); }
+            cbNs.SelectedIndex = Math.Max(0, Math.Min(23, AppPrefs.NightStartHour));
+            cbNe.SelectedIndex = Math.Max(0, Math.Min(23, AppPrefs.NightEndHour));
+            cbNs.SelectedIndexChanged += delegate { if (!_loading) { AppPrefs.NightStartHour = cbNs.SelectedIndex; _d.SaveSettings(); _d.Invalidate(); } };
+            cbNe.SelectedIndexChanged += delegate { if (!_loading) { AppPrefs.NightEndHour = cbNe.SelectedIndex; _d.SaveSettings(); _d.Invalidate(); } };
+
+            var slNightBr = new ModernSlider
+            {
+                Label = L.T("GECE PARLAKLIĞI", "NIGHT BRIGHTNESS"), Suffix = "%",
+                Minimum = 15, Maximum = 95, Left = 324, Top = 142, Width = cPref.Width - 340, Height = 44,
+                AccentColor = _acc
+            };
+            slNightBr.SetValueSilent(Math.Max(15, Math.Min(95, AppPrefs.NightBright)));
+            slNightBr.ValueChanged += delegate { if (!_loading) { AppPrefs.NightBright = slNightBr.Value; _d.SaveSettings(); if (AppPrefs.IsNightNow()) _d.Invalidate(); } };
+            _accentCtls.Add(slNightBr);
+            cPref.Controls.Add(slNightBr);
+
+            cPref.SizeChanged += delegate
+            {
+                int cw2 = Math.Max(200, (cPref.Width - 42) / 2);
+                ckTempF.Width = cw2; ckPrayer.Width = cw2;
+                ckClock12.Left = 28 + cw2; ckClock12.Width = cw2;
+                ckNight.Left = 28 + cw2; ckNight.Width = cw2;
+                slNightBr.Width = Math.Max(160, cPref.Width - 340);
+            };
 
             split.SizeChanged += delegate
             {
@@ -1064,11 +1147,42 @@ namespace ProSystemMonitor
             });
             cLoc.Controls.Add(new Label { Text = L.T("Şehir adını veya 'şehir,ülke' biçimini yazabilirsin (ör. izmir, london,uk, berlin,germany).", "Enter any city or 'city,country' format (e.g. istanbul, london,uk, new york,usa)."), Left = 16, Top = 92, Width = cLoc.Width - 32, Height = 22, ForeColor = ModernColors.Dim, BackColor = ModernColors.CardBg, Font = new Font("Segoe UI", 8.8f) });
 
-            ModernCard cAl = AddCard(p, 226, 76, false);
+            ModernCard cAl = AddCard(p, 226, 336, false);
+            CardTitle(cAl, L.T("ÖZELLEŞTİRİLEBİLİR UYARI EŞİKLERİ", "CUSTOM ALERT THRESHOLDS"), 16, 12, 460);
             AddToggle(cAl,
-                L.T("Yüksek sıcaklık uyarıları", "Thermal threshold tray alerts"),
-                L.T("CPU 90°C, GPU 85°C veya Disk 70°C eşiği aşılınca bildirim gösterir", "Shows a Windows notification when CPU ≥ 90°C, GPU ≥ 85°C, or Disk ≥ 70°C"),
-                12, Program.AlertsEnabled, v => Program.SetAlertsEnabled(v));
+                L.T("Yüksek sıcaklık & sistem uyarıları", "Threshold tray alerts"),
+                L.T("Belirlediğiniz eşikler aşılınca Windows bildirimi gösterir", "Shows Windows alerts when configured limits are exceeded"),
+                36, Program.AlertsEnabled, v => Program.SetAlertsEnabled(v));
+            AddToggle(cAl,
+                L.T("Uyarıda sesli ikaz (Bip)", "Play alert sound (Beep)"),
+                L.T("Bildirim gösterildiğinde sistem uyarı sesi çalar", "Plays Windows exclamation sound on alert"),
+                90, AppPrefs.AlertBeep, v => { AppPrefs.AlertBeep = v; _d.SaveSettings(); });
+
+            int alColW = (cAl.Width - 44) / 2;
+            Func<string, string, int, int, int, int, int, Action<int>, ModernSlider> addTh = delegate (string lbl, string suf, int mn, int mx, int cur, int x, int y, Action<int> onVal)
+            {
+                var sl = new ModernSlider { Label = lbl, Suffix = suf, Minimum = mn, Maximum = mx, Left = x, Top = y, Width = alColW, Height = 46, AccentColor = _acc };
+                sl.SetValueSilent(Math.Max(mn, Math.Min(mx, cur)));
+                sl.ValueChanged += delegate { if (!_loading) { onVal(sl.Value); _d.SaveSettings(); Program.RebuildTrayMenu(); } };
+                _accentCtls.Add(sl);
+                cAl.Controls.Add(sl);
+                return sl;
+            };
+            var sCpuAl = addTh(L.T("CPU SICAKLIK EŞİĞİ", "CPU TEMP THRESHOLD"), "°C", 60, 105, AppPrefs.AlertCpu, 16, 148, v => AppPrefs.AlertCpu = v);
+            var sGpuAl = addTh(L.T("GPU SICAKLIK EŞİĞİ", "GPU TEMP THRESHOLD"), "°C", 60, 105, AppPrefs.AlertGpu, 28 + alColW, 148, v => AppPrefs.AlertGpu = v);
+            var sDskAl = addTh(L.T("DİSK SICAKLIK EŞİĞİ", "DISK TEMP THRESHOLD"), "°C", 45, 90, AppPrefs.AlertDisk, 16, 202, v => AppPrefs.AlertDisk = v);
+            var sRamAl = addTh(L.T("RAM KULLANIM EŞİĞİ", "RAM USAGE THRESHOLD"), "%", 70, 99, AppPrefs.AlertRam, 28 + alColW, 202, v => AppPrefs.AlertRam = v);
+            var sBatAl = addTh(L.T("DÜŞÜK PİL EŞİĞİ", "LOW BATTERY ALERT"), "%", 5, 40, AppPrefs.AlertBat, 16, 256, v => AppPrefs.AlertBat = v);
+            var sPngAl = addTh(L.T("YÜKSEK PİNG EŞİĞİ", "HIGH PING ALERT"), " ms", 50, 500, AppPrefs.AlertPing, 28 + alColW, 256, v => AppPrefs.AlertPing = v);
+
+            cAl.SizeChanged += delegate
+            {
+                int cw2 = Math.Max(180, (cAl.Width - 44) / 2);
+                sCpuAl.Width = cw2; sDskAl.Width = cw2; sBatAl.Width = cw2;
+                sGpuAl.Left = 28 + cw2; sGpuAl.Width = cw2;
+                sRamAl.Left = 28 + cw2; sRamAl.Width = cw2;
+                sPngAl.Left = 28 + cw2; sPngAl.Width = cw2;
+            };
             return p;
         }
 
@@ -1116,6 +1230,73 @@ namespace ProSystemMonitor
             AddBtn(cWeb, L.T("Edge Uygulaması Olarak Aç", "Open as Edge App"), 200, 40, 210, ModernButtonVariant.Secondary, delegate { Program.LaunchEdgeDashboard(); });
             var bExit = AddBtn(cWeb, L.T("Uygulamadan Çık", "Exit Application"), cWeb.Width - 186, 40, 170, ModernButtonVariant.Danger, delegate { Program.ExitAppAsk(); });
             bExit.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
+            // Mini Overlay HUD & Tray Icon Card
+            ModernCard cHud = AddCard(p, 582, 162, false);
+            CardTitle(cHud, L.T("MİNİ OVERLAY HUD (TEK MONİTÖR) VE TEPSİ SİMGESİ", "MINI OVERLAY HUD & LIVE TRAY ICON"), 16, 12, 560);
+            AddToggle(cHud,
+                L.T("Oyun içi tıklamayı geçiren Mini Overlay HUD", "In-game click-through Mini Overlay HUD"),
+                L.T("Ekran köşesinde FPS, CPU/GPU sıcaklık ve RAM çubuğu gösterir (tıklamaları oyuna geçirir)", "Renders a transparent click-through HUD bar at a screen corner"),
+                36, AppPrefs.OverlayEnabled, v => { AppPrefs.OverlayEnabled = v; Program.SyncOverlay(); Program.RebuildTrayMenu(); _d.SaveSettings(); });
+
+            cHud.Controls.Add(new Label { Text = L.T("Köşe:", "Corner:"), Left = 16, Top = 104, Width = 56, Height = 22, ForeColor = ModernColors.Dim, BackColor = ModernColors.CardBg });
+            ComboBox cbCorner = StyledCombo(cHud, 74, 100, 140, ComboBoxStyle.DropDownList);
+            cbCorner.Items.AddRange(new object[] { L.T("Sol Üst", "Top-Left"), L.T("Sağ Üst", "Top-Right"), L.T("Sol Alt", "Bottom-Left"), L.T("Sağ Alt", "Bottom-Right") });
+            cbCorner.SelectedIndex = Math.Max(0, Math.Min(3, AppPrefs.OverlayCorner));
+            cbCorner.SelectedIndexChanged += delegate { if (!_loading) { AppPrefs.OverlayCorner = cbCorner.SelectedIndex; Program.SyncOverlay(); _d.SaveSettings(); } };
+
+            cHud.Controls.Add(new Label { Text = L.T("Tepsi:", "Tray:"), Left = 226, Top = 104, Width = 52, Height = 22, ForeColor = ModernColors.Dim, BackColor = ModernColors.CardBg });
+            ComboBox cbTray = StyledCombo(cHud, 280, 100, 150, ComboBoxStyle.DropDownList);
+            cbTray.Items.AddRange(new object[] { L.T("OnMon Logo", "OnMon Logo"), L.T("Canlı CPU °C", "Live CPU Temp"), L.T("Canlı GPU °C", "Live GPU Temp") });
+            cbTray.SelectedIndex = Math.Max(0, Math.Min(2, AppPrefs.TrayIconMode));
+            cbTray.SelectedIndexChanged += delegate { if (!_loading) { AppPrefs.TrayIconMode = cbTray.SelectedIndex; _d.SaveSettings(); Program.UpdateTrayLive(Program.LastSnap); } };
+
+            var slOvOp = new ModernSlider { Label = L.T("OPAKLIK", "OPACITY"), Suffix = "%", Minimum = 30, Maximum = 100, Left = 446, Top = 94, Width = cHud.Width - 462, Height = 46, AccentColor = _acc, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            slOvOp.SetValueSilent(Math.Max(30, Math.Min(100, AppPrefs.OverlayOpacity)));
+            slOvOp.ValueChanged += delegate { if (!_loading) { AppPrefs.OverlayOpacity = slOvOp.Value; Program.SyncOverlay(); _d.SaveSettings(); } };
+            _accentCtls.Add(slOvOp);
+            cHud.Controls.Add(slOvOp);
+
+            // Backup, Restore & Setup Wizard Card
+            ModernCard cBak = AddCard(p, 756, 98, false);
+            CardTitle(cBak, L.T("YEDEKLEME VE KURULUM SİHİRBAZI", "BACKUP, RESTORE & SETUP WIZARD"), 16, 12, 520);
+            AddBtn(cBak, L.T("📤 Ayarları Yedekle…", "📤 Backup Settings…"), 16, 42, 184, ModernButtonVariant.Secondary, delegate
+            {
+                using (var sd = new SaveFileDialog { Title = L.T("OnMon Yedeği Kaydet", "Save OnMon Backup"), Filter = "OnMon Backup (*.onmonbak)|*.onmonbak", FileName = "OnMon_Backup_" + DateTime.Now.ToString("yyyyMMdd") + ".onmonbak", DefaultExt = "onmonbak" })
+                {
+                    if (sd.ShowDialog(this) != DialogResult.OK) return;
+                    try
+                    {
+                        _d.SaveSettings();
+                        int n = BackupManager.ExportBackup(sd.FileName);
+                        MessageBox.Show(this, L.T(n + " dosya başarıyla yedeklendi.", "Exported " + n + " files successfully."), "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex) { MessageBox.Show(this, ex.Message, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                }
+            });
+            AddBtn(cBak, L.T("📥 Yedekten Geri Yükle…", "📥 Restore Backup…"), 210, 42, 196, ModernButtonVariant.Secondary, delegate
+            {
+                using (var od = new OpenFileDialog { Title = L.T("OnMon Yedeği Yükle", "Restore OnMon Backup"), Filter = "OnMon Backup (*.onmonbak)|*.onmonbak|All|*.*" })
+                {
+                    if (od.ShowDialog(this) != DialogResult.OK) return;
+                    try
+                    {
+                        int n;
+                        if (!BackupManager.ImportBackup(od.FileName, out n))
+                        {
+                            MessageBox.Show(this, L.T("Geçersiz yedek dosyası.", "Invalid backup file."), "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        _d.ReloadFromDisk();
+                        MessageBox.Show(this, L.T(n + " dosya geri yüklendi ve uygulandı.", "Restored and applied " + n + " files."), "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex) { MessageBox.Show(this, ex.Message, "OnMon", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                }
+            });
+            AddBtn(cBak, L.T("✨ Kurulum Sihirbazı", "✨ Setup Wizard"), 416, 42, 186, ModernButtonVariant.Primary, delegate
+            {
+                new OnboardingForm(_d).Show();
+            });
             return p;
         }
 
@@ -1370,6 +1551,7 @@ namespace ProSystemMonitor
                 catch (Exception ex) { MessageBox.Show(L.T("Başlatılamadı: ", "Could not start: ") + ex.Message); }
             });
             AddBtn(cAct, L.T("pawnio.eu Sitesini Aç", "Open pawnio.eu"), 276, 58, 180, ModernButtonVariant.Ghost, delegate { try { Process.Start("https://pawnio.eu"); } catch { } });
+            AddBtn(cAct, L.T("🔄 Peak Değerlerini Sıfırla", "🔄 Reset Session Peaks"), 466, 58, 210, ModernButtonVariant.Secondary, delegate { PeakStats.Reset(); RefreshDiag(); });
             return p;
         }
 
@@ -1377,6 +1559,8 @@ namespace ProSystemMonitor
         {
             double pms = _d._paintMs;
             var sb = new System.Text.StringBuilder();
+            sb.AppendLine(L.T("--- Oturum Min / Maks (Peak) ---", "--- Session Min / Max (Peak) ---"));
+            sb.AppendLine(PeakStats.SummaryText());
             sb.AppendLine(L.T("Sensör kaynağı:", "Sensor backend:"));
             sb.AppendLine("  " + (string.IsNullOrEmpty(_d._source) ? L.T("(henüz veri yok)", "(waiting for data)") : _d._source));
             sb.AppendLine();

@@ -1,0 +1,20 @@
+ONMON-SABLON 2
+name=OLED Dark Minimal
+author=OnMon Community
+desc=True-black OLED-friendly minimal cards, clock, and media controller
+canvas=1920,1080
+gzoom=1
+gfs=1
+bgcol=0
+theme=oled
+topbar=0
+hidestrip=1
+margin=8
+bgimg=
+W:hero|20|20|1880|105|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1
+W:minicpu|20|145|610|410|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1
+W:minigpu|655|145|610|410|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1
+W:miniram|1290|145|610|410|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1
+W:clock|20|575|925|485|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1
+W:media|970|575|930|195|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1
+W:net|970|790|930|270|1|1.00|0|0|0|0|100||0|0|-1|0||||0|0|1|||1

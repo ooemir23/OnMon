@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OnMon v60 — Ultra-Light PC Telemetry & Custom Hardware Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">O</span>
+      <span class="brand-name">OnMon</span>
+      <span class="ver-pill">v60</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#features" data-i18n="nav_feat">Özellikler</a>
+      <a href="#compare" data-i18n="nav_cmp">Farkı Ne?</a>
+      <a href="#start" data-i18n="nav_start">Kurulum</a>
+      <a href="https://github.com/ooemir23/OnMon" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <div class="nav-actions">
+      <div class="lang-switch" aria-label="Language switch">
+        <button class="lang-btn active" data-lang="tr">TR</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <a class="btn btn-primary btn-sm" href="https://github.com/ooemir23/OnMon/raw/main/ProSystemMonitor.exe" data-i18n="nav_dl">İndir v60</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <div class="eyebrow" data-i18n="hero_badge">⚡ Saf Native C# + GDI+ · Electron Yok · Tamamen Ücretsiz</div>
+        <h1><span class="grad" data-i18n="hero_title">Bilgisayarının Gerçek Nabzı, Tüy Kadar Hafif.</span></h1>
+        <p class="hero-sub" data-i18n="hero_sub">
+          İkinci monitörünüz, kasa içi mini ekranınız veya doğrudan oyununuz için ultra düşük CPU kullanımlı profesyonel donanım izleme, gerçek %1 Low FPS sayacı, görsel düzen stüdyosu ve ses/medya kontrol merkezi.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/ooemir23/OnMon/raw/main/ProSystemMonitor.exe" data-i18n="cta_dl">⬇ Hemen İndir (v60 .exe)</a>
+          <a class="btn btn-secondary" href="https://github.com/ooemir23/OnMon" target="_blank" rel="noopener" data-i18n="cta_gh">GitHub Kaynak Kodu</a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-chip">
+            <div class="stat-val">~0.1–0.3%</div>
+            <div class="stat-lbl" data-i18n="st_cpu">Boşta CPU</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-val">14 + 21</div>
+            <div class="stat-lbl" data-i18n="st_thm">Düzen & Tema</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-val">1% Low</div>
+            <div class="stat-lbl" data-i18n="st_fps">ETW Gerçek FPS</div>
+          </div>
+          <div class="stat-chip">
+            <div class="stat-val">HVCI OK</div>
+            <div class="stat-lbl" data-i18n="st_drv">İmzalı PawnIO</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-shell" id="simShell">
+        <div class="preview-toolbar">
+          <div class="swatches" title="Tema değiştir">
+            <button class="swatch active" data-theme="rog" style="background:linear-gradient(135deg,#ff4a00,#ffa21a)"></button>
+            <button class="swatch" data-theme="frost" style="background:linear-gradient(135deg,#00c8ff,#7df9ff)"></button>
+            <button class="swatch" data-theme="cyber" style="background:linear-gradient(135deg,#fcee0a,#00f0ff)"></button>
+            <button class="swatch" data-theme="nzxt" style="background:linear-gradient(135deg,#8b5cf6,#d08bff)"></button>
+            <button class="swatch" data-theme="oled" style="background:linear-gradient(135deg,#111,#38bdf8)"></button>
+          </div>
+          <div class="mode-tabs">
+            <button class="mode-btn active" data-simmode="dash" data-i18n="sim_dash">Pano</button>
+            <button class="mode-btn" data-simmode="hud" data-i18n="sim_hud">Mini HUD</button>
+          </div>
+        </div>
+
+        <div class="sim-canvas" id="simDash">
+          <div class="sim-card">
+            <div class="sim-head"><span>CPU · RYZEN 7 / CORE ULTRA</span><span class="sim-temp" id="sCpuT">54°C</span></div>
+            <div class="sim-big"><span id="sCpuL">28%</span><span style="font-size:12px;color:var(--dim)" id="sCpuClock">4850 MHz</span></div>
+            <div class="sim-bar"><div class="sim-fill" id="bCpu" style="width:28%"></div></div>
+            <div class="sim-meta"><span id="sCpuW">44.2 W</span><span data-i18n="sim_fan">Fan 1120 RPM</span></div>
+          </div>
+
+          <div class="sim-card">
+            <div class="sim-head"><span>GPU · RTX / RADEON / ARC</span><span class="sim-temp" id="sGpuT">61°C</span></div>
+            <div class="sim-big"><span id="sGpuL">74%</span><span style="font-size:12px;color:var(--dim)" id="sVram">6.4 / 12 GB</span></div>
+            <div class="sim-bar"><div class="sim-fill" id="bGpu" style="width:74%"></div></div>
+            <div class="sim-meta"><span id="sGpuW">188.5 W</span><span id="sGpuClk">2610 MHz</span></div>
+          </div>
+
+          <div class="sim-card">
+            <div class="sim-head"><span data-i18n="sim_fps_h">OYUN · REALTIME FPS</span><span class="sim-temp" id="sLow1">1% Low 118</span></div>
+            <div class="sim-big"><span id="sFps">144 FPS</span><span style="font-size:12px;color:var(--dim)" id="sFrame">6.9 ms</span></div>
+            <div class="sim-bar"><div class="sim-fill" id="bFps" style="width:68%"></div></div>
+            <div class="sim-meta"><span>Ping 14 ms</span><span id="sRam">RAM 46%</span></div>
+          </div>
+
+          <div class="sim-card">
+            <div class="sim-head"><span data-i18n="sim_med_h">MEDYA & AĞ</span><span>Wi-Fi 94%</span></div>
+            <div class="sim-big" style="font-size:15px;font-family:inherit;font-weight:800;margin:8px 0">Midnight City · M83</div>
+            <div class="sim-meta"><span style="color:var(--sim-a2)">⏮ ⏯ ⏭ Spotify</span><span>▼ 42.8 MB/s</span></div>
+          </div>
+        </div>
+
+        <div class="sim-hud-wrap hidden" id="simHud">
+          <div class="sim-hud-pill">
+            <span class="hud-fps" id="hFps">144 FPS (118)</span>
+            <span>|</span>
+            <span id="hCpu">CPU 54°C 28%</span>
+            <span>|</span>
+            <span id="hGpu">GPU 61°C 74%</span>
+            <span>|</span>
+            <span id="hRam">RAM 46%</span>
+          </div>
+          <div class="sim-hud-note" data-i18n="sim_hud_note">
+            ✨ Tek monitör veya tam ekran oyunlar için WS_EX_TRANSPARENT katmanıyla fare tıklamalarını oyuna geçirir; köşesi ve opaklığı özelleştirilebilir.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="container">
+      <div class="sec-head">
+        <h2 data-i18n="feat_t">Her Şey Tek Hafif Uygulamada</h2>
+        <p data-i18n="feat_s">Ağır tarayıcı motorları veya ücretli lisanslar olmadan, donanım sensörlerinden düzen tasarımına kadar ihtiyacınız olan her şey.</p>
+      </div>
+      <div class="feat-grid">
+        <div class="feat-card">
+          <div class="feat-ico">🖥️</div>
+          <h3 data-i18n="f1_t">Evrensel Donanım Desteği</h3>
+          <p data-i18n="f1_d">ASUS, MSI, Gigabyte, Lenovo, HP, Dell, Monster, Casper... Tüm PC ve dizüstü markaları, NVIDIA/AMD/Intel Arc GPU'lar ve Intel hibrit P/E çekirdekleri ile tam uyumlu.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🛡️</div>
+          <h3 data-i18n="f2_t">Windows 11 Bellek Bütünlüğü Uyumlu</h3>
+          <p data-i18n="f2_d">Eski güvensiz WinRing0 sürücülerine bağımlı kalmaz. LibreHardwareMonitor 0.9.6 + imzalı PawnIO ve NVML ile HVCI açıkken bile CPU watt ve anakart sensörlerini okur.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🎮</div>
+          <h3 data-i18n="f3_t">Gerçek %1 Low FPS & Mini HUD</h3>
+          <p data-i18n="f3_d">PresentMon / ETW tabanlı FPS ve gerçek %1 Low takibi + otomatik oyun oturumu CSV kaydı. Tek monitörlü sistemlerde tıklamayı geçiren Mini Overlay HUD desteği.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🎨</div>
+          <h3 data-i18n="f4_t">3 Panelli Düzen Stüdyosu</h3>
+          <p data-i18n="f4_d">Sürükle-bırak taşıma, mıknatıslı hizalama, Ctrl+Z geri alma, özel arka plan resmi/kasa ekranı çözünürlüğü (800×480, 1920×1080 vb.) ve widget başına tam renk/stil ayarı.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🌐</div>
+          <h3 data-i18n="f5_t">Topluluk Galerisi & .onmon Paylaşımı</h3>
+          <p data-i18n="f5_d">Tasarımlarınızı tüm görselleri ve önizlemesiyle tek bir .onmon dosyasına aktarın, paylaşın veya GitHub tabanlı Topluluk Galerisi'nden tek tıkla indirin.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🎧</div>
+          <h3 data-i18n="f6_t">Ses Mikseri & Medya Kontrolü</h3>
+          <p data-i18n="f6_d">Alt şeritten veya widget üzerinden tek tıkla hoparlör/kulaklık değiştirin, ses & mikrofon seviyesini kontrol edin ve Spotify/YouTube/VLC parçalarını panodan yönetin.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🌙</div>
+          <h3 data-i18n="f7_t">Otomatik Gece Modu & Birimler</h3>
+          <p data-i18n="f7_d">Belirlediğiniz saatlerde parlaklığı otomatik kısan Gece Modu, °C/°F sıcaklık birimi, 12s/24s saat, hava durumu ve isteğe bağlı namaz vakti göstergesi.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">🌡️</div>
+          <h3 data-i18n="f8_t">Canlı Tepsi Simgesi & Özel Uyarılar</h3>
+          <p data-i18n="f8_d">Bildirim tepsisinde canlı CPU/GPU °C rozeti ve anlık sensör özeti. Özelleştirilebilir CPU, GPU, Disk, RAM, Pil ve Ping uyarı eşikleri + sesli ikaz.</p>
+        </div>
+        <div class="feat-card">
+          <div class="feat-ico">💾</div>
+          <h3 data-i18n="f9_t">SMART Sağlık, Wi-Fi, Peak & Yedekleme</h3>
+          <p data-i18n="f9_d">SSD SMART sağlık %, native Wi-Fi SSID/sinyal, kalan pil süresi/Watt, oturum Min/Maks (Peak) takibi ve tek tıkla .onmonbak yedekleme/geri yükleme.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="container">
+      <div class="sec-head">
+        <h2 data-i18n="cmp_t">Diğer Uygulamalardan Farkı Ne?</h2>
+        <p data-i18n="cmp_s">Neden birden fazla araç kurmak yerine tek başına OnMon tercih edilir?</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="c_col">Özellik</th>
+              <th class="hl">OnMon v60</th>
+              <th>AIDA64 SensorPanel</th>
+              <th>Afterburner + RTSS</th>
+              <th>Rainmeter</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-i18n="c_r1">Fiyat & Açık Kaynak OTA</td>
+              <td class="hl"><span class="ok">✔</span> <span data-i18n="c_free">Tamamen Ücretsiz + OTA</span></td>
+              <td class="no" data-i18n="c_paid">Ücretli Lisans</td>
+              <td data-i18n="c_closed">Ücretsiz (Kapalı)</td>
+              <td data-i18n="c_ok_skin">Ücretsiz (Eklenti Gerekir)</td>
+            </tr>
+            <tr>
+              <td data-i18n="c_r2">Win 11 Bellek Bütünlüğü (PawnIO)</td>
+              <td class="hl"><span class="ok">✔</span> <span data-i18n="c_yes">Yerleşik + 1 Tık Kurulum</span></td>
+              <td class="no" data-i18n="c_part">Sürücü bağımlı</td>
+              <td class="no" data-i18n="c_part">Kısmi (RTSS gerekir)</td>
+              <td class="no" data-i18n="c_ext">Harici HWiNFO/LHM gerekir</td>
+            </tr>
+            <tr>
+              <td data-i18n="c_r3">İkinci Monitör + Oyun İçi Mini HUD</td>
+              <td class="hl"><span class="ok">✔</span> <span data-i18n="c_both">İkisi de Tek Uygulamada</span></td>
+              <td data-i18n="c_panel_only">Yalnız SensorPanel</td>
+              <td data-i18n="c_osd_only">Yalnız OSD</td>
+              <td class="no" data-i18n="c_desk_only">Yalnız Masaüstü</td>
+            </tr>
+            <tr>
+              <td data-i18n="c_r4">Sürükle-Bırak Düzen Stüdyosu & Galeri</td>
+              <td class="hl"><span class="ok">✔</span> <span data-i18n="c_studio">3 Panelli Stüdyo + Topluluk</span></td>
+              <td class="no" data-i18n="c_old_ed">Eski piksel editörü</td>
+              <td class="no">✖</td>
+              <td class="no" data-i18n="c_ini">.ini Dosya Düzenleme</td>
+            </tr>
+            <tr>
+              <td data-i18n="c_r5">Ses Cihazı, Mikrofon, Medya & Win+D</td>
+              <td class="hl"><span class="ok">✔</span> <span data-i18n="c_yes2">Tam Entegre</span></td>
+              <td class="no">✖</td>
+              <td class="no">✖</td>
+              <td class="no" data-i18n="c_plugin">Eklenti Gerekir</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="container">
+      <div class="sec-head">
+        <h2 data-i18n="st_t">3 Adımda Hazır</h2>
+        <p data-i18n="st_s">Kurulum sihirbazı birkaç saniyede dilinizi, temanızı, düzeninizi ve monitörünüzü ayarlar.</p>
+      </div>
+      <div class="steps">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3 data-i18n="s1_t">İndirin ve Çalıştırın</h3>
+          <p data-i18n="s1_d">ProSystemMonitor.exe dosyasını başlatın. İlk açılışta 3 adımlı İlk Kurulum Sihirbazı dilinizi (TR/EN), şablonunuzu ve ekranınızı sorar.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3 data-i18n="s2_t">PawnIO Sürücüsünü Doğrulayın</h3>
+          <p data-i18n="s2_d">Sihirbazdan veya Ayarlar > Tanılama bölümünden tek tıkla imzalı PawnIO sürücüsünü kurarak tüm CPU watt ve anakart fan sensörlerini açın.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3 data-i18n="s3_t">Özelleştirin ve Paylaşın</h3>
+          <p data-i18n="s3_d">Düzen Galerisi'nden topluluk şablonları indirin veya Düzen Stüdyosu'nda kendi ekranınızı tasarlayıp .onmon olarak paylaşın.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <div class="banner">
+        <div>
+          <h2 data-i18n="ban_t">Tamamen Ücretsiz, Açık Kaynak ve OTA Güncel</h2>
+          <p data-i18n="ban_d">OnMon yeni özellikleri ve topluluk düzenlerini doğrudan GitHub üzerinden alır. İstediğiniz zaman Ayarlar > Güncelleme sayfasından tek tıkla güncelleyin.</p>
+        </div>
+        <a class="btn btn-primary" href="https://github.com/ooemir23/OnMon/raw/main/ProSystemMonitor.exe" data-i18n="cta_dl">⬇ Hemen İndir (v60 .exe)</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container foot-inner">
+    <div>OnMon v60 · Windows x64 Telemetry & Dashboard · Apache/MIT Open Project</div>
+    <div><a href="https://github.com/ooemir23/OnMon" target="_blank" rel="noopener">github.com/ooemir23/OnMon</a></div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

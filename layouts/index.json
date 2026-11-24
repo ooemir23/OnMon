@@ -1,0 +1,35 @@
+[
+  {
+    "id": "cyberpunk_neon",
+    "name": "Cyberpunk Neon Pro",
+    "author": "OnMon Community",
+    "desc_tr": "Siberpunk neon çift halka, oyun barı, medya kontrol ve termal kartlar.",
+    "desc_en": "Cyberpunk neon dual-ring gauges, game HUD bar, media player, and thermals.",
+    "theme": "cyber",
+    "res": "1920x1080",
+    "widgets": 10,
+    "file": "cyberpunk_neon.onmon"
+  },
+  {
+    "id": "minimal_oled",
+    "name": "OLED Dark Minimal",
+    "author": "OnMon Community",
+    "desc_tr": "Siyah OLED dostu ultra sade kartlar, saat ve medya oynatıcı.",
+    "desc_en": "True-black OLED-friendly minimal cards, clock, and media controller.",
+    "theme": "oled",
+    "res": "1920x1080",
+    "widgets": 7,
+    "file": "minimal_oled.onmon"
+  },
+  {
+    "id": "streamer_pro",
+    "name": "Streamer & Creator Studio",
+    "author": "OnMon Community",
+    "desc_tr": "Yayıncılar için büyük FPS sayacı, ses mikseri, medya kontrolü ve canlı ağ hızı.",
+    "desc_en": "Creator & streamer layout with big FPS counter, audio mixer, media, and network.",
+    "theme": "nzxt",
+    "res": "1920x1080",
+    "widgets": 10,
+    "file": "streamer_pro.onmon"
+  }
+]
