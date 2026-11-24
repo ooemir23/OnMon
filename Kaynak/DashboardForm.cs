@@ -252,7 +252,7 @@ namespace ProSystemMonitor
                     int i = line.IndexOf('=');
                     if (i < 0) continue;
                     string k = line.Substring(0, i).Trim(), v = line.Substring(i + 1).Trim();
-                    if (k == "layout" && (v == "classic" || v == "hud" || v == "cockpit" || v == "aida" || v == "studio")) _layout = v;
+                    if (k == "layout" && v.Length > 0) _layout = v;
                     else if (k == "cw") { int q; if (int.TryParse(v, out q) && q >= 200 && q <= 8000) _cw = q; }
                     else if (k == "ch") { int q; if (int.TryParse(v, out q) && q >= 120 && q <= 8000) _ch = q; }
                     else if (k == "grid") { float q; if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out q) && q >= 1 && q <= 200) _grid = q; }
@@ -339,6 +339,33 @@ namespace ProSystemMonitor
             }
 
             ShutdownTimer.Load(); GameSession.LoadHistory(); AudioProfiles.Load(); Peripherals.StartBackground();
+            AllowDrop = true;
+            DragEnter += delegate (object s, DragEventArgs e)
+            {
+                if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
+                {
+                    string[] fs = e.Data.GetData(DataFormats.FileDrop) as string[];
+                    if (fs != null && fs.Any(x => x.EndsWith(".onmon", StringComparison.OrdinalIgnoreCase)))
+                        e.Effect = DragDropEffects.Copy;
+                }
+            };
+            DragDrop += delegate (object s, DragEventArgs e)
+            {
+                try
+                {
+                    string[] fs = e.Data != null ? (e.Data.GetData(DataFormats.FileDrop) as string[]) : null;
+                    if (fs == null) return;
+                    foreach (string f in fs)
+                    {
+                        if (f.EndsWith(".onmon", StringComparison.OrdinalIgnoreCase))
+                        {
+                            ImportAndApplyExternalTemplate(f);
+                            break;
+                        }
+                    }
+                }
+                catch { }
+            };
             BuildMenu();
             _timer.Interval = 500;
             _timer.Tick += delegate
@@ -442,6 +469,8 @@ namespace ProSystemMonitor
             base.OnFormClosed(e);
             _timer.Stop();
             try { if (_settings != null && !_settings.IsDisposed) _settings.Close(); } catch { }
+            try { if (_studioForm != null && !_studioForm.IsDisposed) _studioForm.Close(); } catch { }
+            try { if (_galleryForm != null && !_galleryForm.IsDisposed) _galleryForm.Close(); } catch { }
             if (_curHidden) { _curHidden = false; Cursor.Show(); }
             Extras.Stop();
             foreach (Font f in _fonts.Values) f.Dispose();
@@ -589,12 +618,42 @@ namespace ProSystemMonitor
         }
 
         private SettingsForm _settings;
+        internal StudioForm _studioForm;
+        internal GalleryForm _galleryForm;
 
         internal void OpenSettings()
         {
             if (_settings != null && !_settings.IsDisposed) { _settings.Show(); _settings.WindowState = FormWindowState.Normal; _settings.Activate(); return; }
             _settings = new SettingsForm(this);
             _settings.Show();
+        }
+
+        internal void OpenStudio()
+        {
+            if (_studioForm != null && !_studioForm.IsDisposed)
+            {
+                _studioForm.ReloadFromDashboard();
+                _studioForm.Show();
+                if (_studioForm.WindowState == FormWindowState.Minimized) _studioForm.WindowState = FormWindowState.Normal;
+                _studioForm.Activate();
+                return;
+            }
+            _studioForm = new StudioForm(this);
+            _studioForm.Show();
+        }
+
+        internal void OpenGallery()
+        {
+            if (_galleryForm != null && !_galleryForm.IsDisposed)
+            {
+                _galleryForm.RefreshCards();
+                _galleryForm.Show();
+                if (_galleryForm.WindowState == FormWindowState.Minimized) _galleryForm.WindowState = FormWindowState.Normal;
+                _galleryForm.Activate();
+                return;
+            }
+            _galleryForm = new GalleryForm(this);
+            _galleryForm.Show();
         }
 
         private void PopulateMenu(ContextMenuStrip m)
@@ -608,7 +667,9 @@ namespace ProSystemMonitor
             var set = Mi("Ayarlar…", "F2", false, delegate { OpenSettings(); });
             set.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
             m.Items.Add(set);
-            m.Items.Add(Mi("Panoyu düzenle (widget editörü)", "E", false, delegate { ToggleEdit(); }));
+            m.Items.Add(Mi("🎨 Düzen Stüdyosu (görsel editör)…", null, false, delegate { OpenStudio(); }));
+            m.Items.Add(Mi("📁 Düzen Galerisi / Düzen Ekle…", null, false, delegate { OpenGallery(); }));
+            m.Items.Add(Mi("Pano üstü hızlı düzenle", "E", false, delegate { ToggleEdit(); }));
             m.Items.Add(Mi(AudioSwitch.MicMuted ? "Mikrofonu aç" : "Mikrofonu sustur", "M", false, delegate { ToggleMic(); }));
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add(Mi("Küçült", null, false, delegate { UserMinimize(); }));
@@ -1162,6 +1223,11 @@ namespace ProSystemMonitor
 
         private void PaintAll(Graphics gr)
         {
+            PaintViewport(gr, ClientSize.Width, ClientSize.Height, true);
+        }
+
+        private void PaintViewport(Graphics gr, float W, float Hh, bool allowOverlay)
+        {
             G = gr;
             G.SmoothingMode = SmoothingMode.AntiAlias;
             G.TextRenderingHint = TextRenderingHint.AntiAlias;
@@ -1170,12 +1236,11 @@ namespace ProSystemMonitor
             G.Clear(_bgCol != 0 ? Color.FromArgb(255, Color.FromArgb(_bgCol)) : t.Bg);
             _marqActive = false; _marqRects.Clear(); _marqItems.Clear(); _hits.Clear();
 
-            float W = ClientSize.Width, Hh = ClientSize.Height;
-            float aw = W - _margin * 2, ah = Hh - _margin * 2;
+            float aw = Math.Max(10f, W - _margin * 2), ah = Math.Max(10f, Hh - _margin * 2);
             bool strip = StripOn;
             float chh = (strip ? _ch + 32f : _ch) + (_topBar ? InfoH : 0);
             _chh = chh;
-            float sc = Math.Max(0.1f, Math.Min(aw / _cw, ah / chh));
+            float sc = Math.Max(0.05f, Math.Min(aw / _cw, ah / chh));
             Image bgi = string.IsNullOrEmpty(_bgImg) ? null : GetImg(_bgImg, 2560);
             if (bgi != null)
             {
@@ -1199,7 +1264,7 @@ namespace ProSystemMonitor
             {
                 DrawWidgets(s);
 
-                if (!string.IsNullOrEmpty(s.Throttle))
+                if (allowOverlay && !string.IsNullOrEmpty(s.Throttle))
                 {
                     Font f = F(20, true, false);
                     string m = "⚠ " + s.Throttle;
@@ -1210,18 +1275,18 @@ namespace ProSystemMonitor
                 }
             }
 
-            DrawAudioBar();
+            if (strip) DrawAudioBar();
             _brRect = RectangleF.Empty;
             if (_topBar) DrawInfoBar(_snap, StripOn ? _ch + 32f : _ch);
-            if (_topBar) DrawInfoPanel(_snap, StripOn ? _ch + 32f : _ch);
-            if (_bright < 100)
+            if (allowOverlay && _topBar) DrawInfoPanel(_snap, StripOn ? _ch + 32f : _ch);
+            if (allowOverlay && _bright < 100)
             {
                 G.ResetTransform();
                 G.FillRectangle(Br(Color.FromArgb((int)(255 * (100 - _bright) / 100f), 0, 0, 0)), 0, 0, W, Hh);
                 G.TranslateTransform(_ox, _oy); G.ScaleTransform(sc, sc);
             }
-            if (_edit) DrawEditor();
-            if (!_edit) DrawBrightBtn();
+            if (allowOverlay && _edit) DrawEditor();
+            if (allowOverlay && !_edit) DrawBrightBtn();
 
             if (t.Style == "crt")
             {
@@ -1230,6 +1295,77 @@ namespace ProSystemMonitor
                 Pen sp = Pn(Color.FromArgb(70, 0, 0, 0), 1);
                 for (float y = 0; y < Hh; y += 3) G.DrawLine(sp, 0, y, W, y);
             }
+        }
+
+        private static Snap _demoSnap;
+        internal static Snap DemoSnap()
+        {
+            if (_demoSnap != null) return _demoSnap;
+            var cores = new CoreTelemetry[8];
+            for (int i = 0; i < 8; i++)
+                cores[i] = new CoreTelemetry { Index = i + 1, ClockMhz = 4850 + (i % 3) * 100, LoadPct = 22 + (i * 9) % 55 };
+            _demoSnap = new Snap
+            {
+                Brand = "ASUS", MoboModel = "ROG Strix B650E-E", Chipset = "AMD B650E", Bios = "3024",
+                CpuModel = "AMD Ryzen 7 7800X3D", GpuModel = "GeForce RTX 4080", GpuBus = "PCI-E 4.0 x16", MemSpeed = "DDR5-6000",
+                Uptime = "04:12:30", Ip = "192.168.1.42", Game = "", Throttle = "", Source = "Önizleme",
+                Sound = 64, Procs = 185, Ping = 14,
+                MemTotal = 32768, MemUsed = 15728, MemFree = 17040, MemLoad = 48, MoboTemp = 34, DimmTemp = 31,
+                CpuLoad = 36, CpuTemp = 54, CpuDiode = 51, CpuClock = 5050, CpuFan = 1180, Cha1 = 1050, Cha2 = 1020, Pump = 2400,
+                CpuW = 62.5, CpuV = 1.142, SocV = 1.18, V12 = 12.04,
+                GpuLoad = 78, GpuTemp = 63, GpuHot = 74, GpuClock = 2745, VramUsed = 6420, VramTotal = 16376, GpuFan = 1450, GpuW = 248.0, GpuV = 1.035,
+                Fps = 144, FrameMs = 6.9, Low1 = 118,
+                NetUp = 420, NetDown = 3850, NetUpTot = 1240, NetDownTot = 8420, DiskR = 145.2, DiskW = 32.8,
+                Cores = cores,
+                Drives = new[] { new DriveTelemetry { Name = "NVMe SSD", Mount = "C:", TempC = 36, TotalGb = 1000, FreeGb = 540, UsedPct = 46 } },
+                TopProcs = new[] { new ProcItem { Name = "Game.exe", MemMb = 4200, Cpu = 28 }, new ProcItem { Name = "msedge", MemMb = 920, Cpu = 4 }, new ProcItem { Name = "Discord", MemMb = 310, Cpu = 2 } },
+                TopCpu = new[] { new ProcItem { Name = "Game.exe", MemMb = 4200, Cpu = 28 }, new ProcItem { Name = "obs64", MemMb = 450, Cpu = 6 }, new ProcItem { Name = "msedge", MemMb = 920, Cpu = 4 } },
+                SelfMb = 38, SelfCpu = 0.2
+            };
+            return _demoSnap;
+        }
+
+        internal void RenderSceneTo(Graphics gr, int targetW, int targetH, List<WInst> widgets, int cw, int ch, Theme th, int bgCol, string bgImg, float gfs, float gzoom, bool topBar, bool hideStrip, int margin, Snap snap)
+        {
+            var sWd = _wd; int sCw = _cw, sCh = _ch, sBgCol = _bgCol, sMargin = _margin, sBright = _bright;
+            Theme sTh = _th; string sBgImg = _bgImg; float sGfs = _gfs, sGzoom = _gzoom;
+            bool sTopBar = _topBar, sHideStrip = _hideStrip, sEdit = _edit, sInfo = _infoOpen;
+            Snap sSnap = _snap; Graphics sG = G; float sOx = _ox, sOy = _oy, sSc = _sc, sChh = _chh;
+            var sHits = new List<KeyValuePair<RectangleF, string>>(_hits);
+            var sMarq = new List<MItem>(_marqItems);
+            try
+            {
+                _wd = widgets ?? sWd;
+                _cw = Math.Max(200, cw); _ch = Math.Max(120, ch);
+                _th = th ?? Themes.All[0];
+                _bgCol = bgCol; _bgImg = bgImg ?? "";
+                _gfs = gfs; _gzoom = gzoom;
+                _topBar = topBar; _hideStrip = hideStrip; _margin = margin;
+                _edit = false; _bright = 100; _infoOpen = false;
+                _snap = snap ?? DemoSnap();
+                PaintViewport(gr, Math.Max(16, targetW), Math.Max(16, targetH), false);
+            }
+            finally
+            {
+                _wd = sWd; _cw = sCw; _ch = sCh; _th = sTh; _bgCol = sBgCol; _bgImg = sBgImg;
+                _gfs = sGfs; _gzoom = sGzoom; _topBar = sTopBar; _hideStrip = sHideStrip; _margin = sMargin;
+                _edit = sEdit; _bright = sBright; _infoOpen = sInfo; _snap = sSnap;
+                G = sG; _ox = sOx; _oy = sOy; _sc = sSc; _chh = sChh;
+                _hits.Clear(); _hits.AddRange(sHits);
+                _marqItems.Clear(); _marqItems.AddRange(sMarq);
+            }
+        }
+
+        internal Bitmap RenderLayoutThumbnail(List<WInst> widgets, int cw, int ch, Theme th, int bgCol, string bgImg, float gfs, float gzoom, int thumbW, int thumbH)
+        {
+            var bmp = new Bitmap(Math.Max(32, thumbW), Math.Max(24, thumbH), System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            try
+            {
+                using (Graphics fg = Graphics.FromImage(bmp))
+                    RenderSceneTo(fg, bmp.Width, bmp.Height, widgets, cw, ch, th, bgCol, bgImg, gfs, gzoom, false, true, 0, DemoSnap());
+            }
+            catch { }
+            return bmp;
         }
 
         private void DrawBackground(float W, float Hh, float sc)

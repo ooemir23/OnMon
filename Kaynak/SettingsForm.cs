@@ -29,6 +29,7 @@ namespace ProSystemMonitor
         private ComboBox[] _fanCombo = new ComboBox[4];
         private ListView _fanList, _sessList, _profList, _perList;
         private TextBox _profName;
+        private GalleryControl _galleryCtrl;
         private readonly System.Windows.Forms.Timer _t = new System.Windows.Forms.Timer();
 
         public SettingsForm(DashboardForm d)
@@ -37,8 +38,8 @@ namespace ProSystemMonitor
             _acc = d._th.A1;
             Text = "Ayarlar — OnMon";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(1000, 640);
-            MinimumSize = new Size(960, 600);
+            ClientSize = new Size(1040, 660);
+            MinimumSize = new Size(980, 620);
             BackColor = Bg; ForeColor = Tx;
             Font = new Font("Segoe UI", 10f);
             TopMost = true;
@@ -55,6 +56,7 @@ namespace ProSystemMonitor
             side.Controls.Add(title);
 
             AddPage(side, "Görünüm", BuildView());
+            AddPage(side, "Düzenler ve paylaşım", BuildLayoutsPage());
             AddPage(side, "Ses ve mikrofon", BuildAudio());
             AddPage(side, "Konum ve uyarılar", BuildData());
             AddPage(side, "Pencere ve sistem", BuildSystem());
@@ -85,7 +87,7 @@ namespace ProSystemMonitor
             var b = new Button
             {
                 Text = "   " + name, TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat,
-                Left = 0, Top = 70 + idx * 48, Width = 200, Height = 44, ForeColor = Tx, BackColor = Side, Cursor = Cursors.Hand
+                Left = 0, Top = 64 + idx * 42, Width = 200, Height = 38, ForeColor = Tx, BackColor = Side, Cursor = Cursors.Hand
             };
             b.FlatAppearance.BorderSize = 0;
             b.FlatAppearance.MouseOverBackColor = Color.FromArgb(34, 37, 45);
@@ -105,16 +107,29 @@ namespace ProSystemMonitor
                 _nav[k].BackColor = k == i ? Color.FromArgb(40, 44, 54) : Side;
                 _nav[k].ForeColor = k == i ? _acc : Tx;
             }
-            if (i == 1) RefreshAudio();
-            if (i == 3) RefreshScreens();
-            if (i == 4) RefreshFans();
-            if (i == 5) RefreshSessions();
-            if (i == 6) RefreshProfiles();
-            if (i == 7) RefreshDevices();
-            if (i == 8) RefreshUpdate();
-            if (i == 9) RefreshDiag();
-            if (_tmrTick != null) _tmrTick.Enabled = i == 10;
-            if (i == 10) RefreshTimer();
+            if (i == 1 && _galleryCtrl != null) _galleryCtrl.RefreshCards();
+            if (i == 2) RefreshAudio();
+            if (i == 4) RefreshScreens();
+            if (i == 5) RefreshFans();
+            if (i == 6) RefreshSessions();
+            if (i == 7) RefreshProfiles();
+            if (i == 8) RefreshDevices();
+            if (i == 9) RefreshUpdate();
+            if (i == 10) RefreshDiag();
+            if (_tmrTick != null) _tmrTick.Enabled = i == 11;
+            if (i == 11) RefreshTimer();
+        }
+
+        private Panel BuildLayoutsPage()
+        {
+            var p = new Panel();
+            var hdr = H("Düzenler ve paylaşım", 0);
+            hdr.Dock = DockStyle.Top;
+            p.Controls.Add(hdr);
+            _galleryCtrl = new GalleryControl(_d) { Dock = DockStyle.Fill };
+            p.Controls.Add(_galleryCtrl);
+            _galleryCtrl.BringToFront();
+            return p;
         }
 
         private Label H(string text, int top)
@@ -182,10 +197,10 @@ namespace ProSystemMonitor
             p.Controls.Add(tb); p.Controls.Add(tl);
             { var ckb = Ck("Alt bilgi çubuğu: saat, tarih, sıradaki vakte kalan süre", 0, 330, 280, _d._topBar, v => { _d._topBar = v; _d.SaveSettings(); _d.Invalidate(); }); ckb.Height = 48; p.Controls.Add(ckb); }
 
-            p.Controls.Add(Bt("✎ Panoyu düzenle (E)", 0, 392, 220, delegate { _d.ToggleEdit(); Close(); }));
-            p.Controls.Add(Bt("Şablonu kaydet / paylaş…", 0, 428, 220, delegate { _d.ExportTemplate(); }));
-            p.Controls.Add(Bt("Şablon aç (içe aktar)…", 0, 464, 220, delegate { _d.ImportTemplate(); }));
-            { var ckr = Ck("Panoda sağ tık doğrudan düzenleme modunu açsın (kapalıysa menü açılır)", 0, 500, 280, _d._rcEdit, v => { _d._rcEdit = v; _d.SaveSettings(); }); ckr.Height = 48; p.Controls.Add(ckr); }
+            p.Controls.Add(Bt("🎨 Düzen Stüdyosunu Aç", 0, 384, 240, delegate { _d.OpenStudio(); Close(); }));
+            p.Controls.Add(Bt("📁 Düzen Galerisi / Düzen Ekle", 0, 422, 240, delegate { ShowPage(1); }));
+            p.Controls.Add(Bt("✎ Pano üstü hızlı düzenle (E)", 0, 460, 240, delegate { _d.ToggleEdit(); Close(); }));
+            { var ckr = Ck("Panoda sağ tık doğrudan düzenleme modunu açsın (kapalıysa menü açılır)", 0, 502, 280, _d._rcEdit, v => { _d._rcEdit = v; _d.SaveSettings(); }); ckr.Height = 48; p.Controls.Add(ckr); }
             p.Controls.Add(Sub("TEMA (21 seçenek, listeyi kaydır)", 300, 44, 400));
             _themeList = new ListBox { Left = 300, Top = 68, Width = 440, Height = 480, BackColor = Card, ForeColor = Tx, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 40 };
             foreach (Theme t in Themes.All) _themeList.Items.Add(t.Name);
@@ -737,9 +752,9 @@ namespace ProSystemMonitor
 
         private void Tick()
         {
-            if (_pages.Count > 7 && _pages[7].Visible) RefreshDevices();
-            if (_pages.Count > 4 && _pages[4].Visible) RefreshFans();
-            if (_pages.Count > 1 && _pages[1].Visible)
+            if (_pages.Count > 8 && _pages[8].Visible) RefreshDevices();
+            if (_pages.Count > 5 && _pages[5].Visible) RefreshFans();
+            if (_pages.Count > 2 && _pages[2].Visible)
             {
                 AudioSwitch.PollMic();
                 _micBarCtl.Value = (int)Math.Max(0, Math.Min(100, Math.Sqrt(AudioSwitch.MicLevel) * 100));

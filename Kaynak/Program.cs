@@ -32,16 +32,46 @@ namespace ProSystemMonitor
         private static TelemetryCollector _collector;
         private static HttpListener _listener;
         private static readonly ConcurrentDictionary<Guid, StreamWriter> _sseClients = new ConcurrentDictionary<Guid, StreamWriter>();
+        public static bool HasSseClients { get { return !_sseClients.IsEmpty; } }
         private static volatile bool _running = true;
 
         [STAThread]
         static void Main(string[] args)
         {
+            if (args != null && args.Contains("--selftest"))
+            {
+                int rc = RunSelfTest();
+                Environment.ExitCode = rc;
+                return;
+            }
+
+            string pendingFile = null;
+            if (args != null)
+            {
+                foreach (string a in args)
+                {
+                    if (!string.IsNullOrEmpty(a) && a.EndsWith(".onmon", StringComparison.OrdinalIgnoreCase) && File.Exists(a))
+                    {
+                        pendingFile = a;
+                        break;
+                    }
+                }
+            }
+
             bool createdNew;
             using (Mutex mutex = new Mutex(true, "Global\\ProSystemMonitor_SingleInstance_Mutex", out createdNew))
             {
                 if (!createdNew)
                 {
+                    if (!string.IsNullOrEmpty(pendingFile))
+                    {
+                        try
+                        {
+                            Directory.CreateDirectory(AppData.Dir);
+                            File.WriteAllText(Path.Combine(AppData.Dir, "pending_import.txt"), pendingFile, Encoding.UTF8);
+                        }
+                        catch { }
+                    }
                     SignalFirstInstance();
                     return;
                 }
@@ -56,7 +86,7 @@ namespace ProSystemMonitor
                 _ui = new Control(); _ui.CreateControl(); var hnd = _ui.Handle;
                 Hotkeys.Init();
                 _showEvt = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\ProSystemMonitor_ShowDash");
-                new Thread(() => { while (_running) { try { if (_showEvt.WaitOne(1000)) LaunchDashboardOnSecondMonitor(); } catch { } } }) { IsBackground = true }.Start();
+                new Thread(() => { while (_running) { try { if (_showEvt.WaitOne(1000)) { LaunchDashboardOnSecondMonitor(); CheckPendingImport(); } } catch { } } }) { IsBackground = true }.Start();
                 _collector = new TelemetryCollector();
 
                 Thread serverThread = new Thread(HttpServerLoop) { IsBackground = true };
@@ -70,7 +100,9 @@ namespace ProSystemMonitor
                     try
                     {
                         _collector.Initialize();
-                        LatestJson = _collector.CollectJson();
+                        Snap s0 = _collector.CollectSnap();
+                        LastSnap = s0;
+                        if (!_sseClients.IsEmpty) LatestJson = _collector.BuildJson(s0);
                         TrimProcessMemory();
                     }
                     catch { }
@@ -81,9 +113,20 @@ namespace ProSystemMonitor
                 new Thread(() => { Thread.Sleep(20000); RepairAutostart(); }) { IsBackground = true, Priority = ThreadPriority.BelowNormal }.Start();
                 Updater.StartBackground();
 
-                if (args == null || !args.Contains("--silent"))
+                if (!string.IsNullOrEmpty(pendingFile))
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(AppData.Dir);
+                        File.WriteAllText(Path.Combine(AppData.Dir, "pending_import.txt"), pendingFile, Encoding.UTF8);
+                    }
+                    catch { }
+                }
+
+                if (args == null || !args.Contains("--silent") || !string.IsNullOrEmpty(pendingFile))
                 {
                     LaunchDashboardOnSecondMonitor();
+                    CheckPendingImport();
                 }
 
                 Application.Run();
@@ -92,6 +135,87 @@ namespace ProSystemMonitor
                 try { if (_trayIcon != null) { _trayIcon.Visible = false; _trayIcon.Dispose(); } } catch { }
                 try { if (_listener != null) _listener.Stop(); } catch { }
                 try { if (_collector != null) _collector.Dispose(); } catch { }
+            }
+        }
+
+        private static int RunSelfTest()
+        {
+            try
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                // 1. CfgMgr32 peripheral refresh
+                var sw = Stopwatch.StartNew();
+                Peripherals.Refresh();
+                sw.Stop();
+                Console.WriteLine("CfgMgr32_Refresh_Ms=" + sw.ElapsedMilliseconds + " Status=" + Peripherals.Status);
+                if (sw.ElapsedMilliseconds > 5000) throw new Exception("CfgMgr32 slow: " + sw.ElapsedMilliseconds);
+
+                using (var dash = new DashboardForm())
+                {
+                    dash.WReg();
+                    // 2. Thumbnails for 5 built-in layouts
+                    string[] ids = { "classic", "hud", "cockpit", "aida", "studio" };
+                    foreach (string id in ids)
+                    {
+                        var ws = dash.WTemplate(id, 1920, 1080);
+                        using (Bitmap bmp = dash.RenderLayoutThumbnail(ws, 1920, 1080, Themes.All[0], 0, "", 1f, 1f, 240, 135))
+                        {
+                            if (bmp == null || bmp.Width != 240 || bmp.Height != 135)
+                                throw new Exception("Thumbnail failed for " + id);
+                        }
+                    }
+
+                    // 3. ONMON-SABLON 2 export + round-trip + scale 1920x1080 -> 800x480
+                    var srcWidgets = dash.WTemplate("classic", 1920, 1080);
+                    string txt = dash.BuildTemplateText("TestLayout", "TestUser", "TestDesc", srcWidgets, 1920, 1080, Themes.All[2], 0, "", 1.0f, 1.0f, true, false, 4);
+                    if (!txt.StartsWith("ONMON-SABLON 2") || txt.IndexOf("thumb=") < 0)
+                        throw new Exception("Invalid ONMON-SABLON 2 header");
+
+                    string tmp = Path.Combine(Path.GetTempPath(), "onmon_selftest_" + Guid.NewGuid().ToString("N") + ".onmon");
+                    try
+                    {
+                        File.WriteAllText(tmp, txt, new UTF8Encoding(false));
+                        LayoutMeta meta = dash.ReadTemplateMeta(tmp, true);
+                        if (meta == null || meta.Thumb == null || meta.Name != "TestLayout" || meta.Author != "TestUser" || meta.WidgetCount == 0)
+                            throw new Exception("ReadTemplateMeta failed");
+                        if (meta.Thumb != null) meta.Thumb.Dispose();
+
+                        List<WInst> loaded; int cw, ch, bgc, margin; float gz, gf; string themeId, bgimg, nm, au, ds; bool topBar, hideStrip;
+                        if (!dash.LoadTemplateData(tmp, out loaded, out cw, out ch, out gz, out gf, out bgc, out themeId, out bgimg, out topBar, out hideStrip, out margin, out nm, out au, out ds))
+                            throw new Exception("LoadTemplateData failed");
+                        if (cw != 1920 || ch != 1080 || themeId != Themes.All[2].Id || loaded.Count == 0)
+                            throw new Exception("Round-trip mismatch");
+
+                        // Scale simulation 1920x1080 -> 800x480 (visible widgets must remain in bounds)
+                        float kx = 800f / cw, ky = 480f / ch;
+                        foreach (WInst x in loaded)
+                        {
+                            x.X = (float)Math.Round(x.X * kx); x.Y = (float)Math.Round(x.Y * ky);
+                            x.W = (float)Math.Round(x.W * kx); x.H = (float)Math.Round(x.H * ky);
+                            if (x.Vis && (x.X + x.W > 802 || x.Y + x.H > 482))
+                                throw new Exception("Scale out of bounds: " + x.Id + " (" + x.X + "," + x.Y + "," + x.W + "," + x.H + ")");
+                        }
+                    }
+                    finally { try { File.Delete(tmp); } catch { } }
+
+                    // 4. StudioForm & GalleryForm instantiation
+                    using (var st = new StudioForm(dash))
+                    using (var gl = new GalleryForm(dash))
+                    {
+                        if (st.Controls.Count == 0 || gl.Controls.Count == 0)
+                            throw new Exception("Forms empty");
+                    }
+                }
+
+                Console.WriteLine("SELFTEST_OK");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SELFTEST_FAIL: " + ex);
+                return 1;
             }
         }
 
@@ -302,8 +426,13 @@ namespace ProSystemMonitor
                 var sw = Stopwatch.StartNew();
                 try
                 {
-                    LatestJson = _collector.CollectJson();
-                    BroadcastSse(LatestJson);
+                    Snap snap = _collector.CollectSnap();
+                    LastSnap = snap;
+                    if (!_sseClients.IsEmpty)
+                    {
+                        LatestJson = _collector.BuildJson(snap);
+                        BroadcastSse(LatestJson);
+                    }
                     PushDash();
                     tickCount++;
                     if (tickCount % 300 == 0) TrimProcessMemory();
@@ -399,6 +528,9 @@ namespace ProSystemMonitor
                     ctx.Response.Headers.Add("Cache-Control", "no-cache");
                     ctx.Response.SendChunked = true;
 
+                    if (LastSnap != null && _sseClients.IsEmpty && _collector != null)
+                        LatestJson = _collector.BuildJson(LastSnap);
+
                     var writer = new StreamWriter(ctx.Response.OutputStream, new UTF8Encoding(false));
                     writer.Write("data: " + LatestJson + "\n\n");
                     writer.Flush();
@@ -427,7 +559,8 @@ namespace ProSystemMonitor
 
                 if (path == "/api/telemetry")
                 {
-                    byte[] data = Encoding.UTF8.GetBytes(LatestJson);
+                    string json = (LastSnap != null && _collector != null) ? _collector.BuildJson(LastSnap) : LatestJson;
+                    byte[] data = Encoding.UTF8.GetBytes(json);
                     ctx.Response.StatusCode = 200;
                     ctx.Response.ContentType = "application/json; charset=utf-8";
                     ctx.Response.ContentLength64 = data.Length;
@@ -499,6 +632,28 @@ namespace ProSystemMonitor
                 });
             }
             catch (Exception ex) { Log("pano-invoke", ex); }
+        }
+
+        private static void CheckPendingImport()
+        {
+            if (_ui == null) return;
+            try
+            {
+                string pf = Path.Combine(AppData.Dir, "pending_import.txt");
+                if (!File.Exists(pf)) return;
+                string file = File.ReadAllText(pf, Encoding.UTF8).Trim();
+                try { File.Delete(pf); } catch { }
+                if (string.IsNullOrEmpty(file) || !File.Exists(file)) return;
+                _ui.BeginInvoke((MethodInvoker)delegate
+                {
+                    try
+                    {
+                        if (Dash != null && !Dash.IsDisposed) Dash.ImportAndApplyExternalTemplate(file);
+                    }
+                    catch (Exception ex) { Log("import", ex); }
+                });
+            }
+            catch { }
         }
 
         private static void SignalFirstInstance()
@@ -592,8 +747,14 @@ namespace ProSystemMonitor
             open2ndItem.Font = new Font(open2ndItem.Font, FontStyle.Bold);
             open2ndItem.Click += (s, e) => LaunchDashboardOnSecondMonitor();
 
-            var openBrowserItem = new ToolStripMenuItem("Tarayıcıda Aç (127.0.0.1:17500)");
-            openBrowserItem.Click += (s, e) => Process.Start(new ProcessStartInfo("http://127.0.0.1:" + Port) { UseShellExecute = true });
+            var studioItem = new ToolStripMenuItem("🎨 Düzen Stüdyosu…");
+            studioItem.Click += (s, e) => { if (Dash != null && !Dash.IsDisposed) _ui.BeginInvoke((MethodInvoker)delegate { Dash.OpenStudio(); }); };
+
+            var galleryItem = new ToolStripMenuItem("📁 Düzen Galerisi / Düzen Ekle…");
+            galleryItem.Click += (s, e) => { if (Dash != null && !Dash.IsDisposed) _ui.BeginInvoke((MethodInvoker)delegate { Dash.OpenGallery(); }); };
+
+            var openBrowserItem = new ToolStripMenuItem("Tarayıcıda Aç (127.0.0.1:" + Port + ")");
+            openBrowserItem.Click += (s, e) => LaunchBrowserDashboard();
 
             var dumpItem = new ToolStripMenuItem("Sensör Listesini Kaydet (sensorler.txt)");
             dumpItem.Click += (s, e) => { if (_collector != null) _collector.RequestSensorDump(); };
@@ -616,8 +777,9 @@ namespace ProSystemMonitor
             menu.Opening += (s, e) => { try { autoItem.Checked = IsAutostartEnabled(); } catch { } };
 
             menu.Items.Add(open2ndItem);
+            menu.Items.Add(studioItem);
+            menu.Items.Add(galleryItem);
             menu.Items.Add("Edge ile Aç (daha çok RAM)", null, (s, e) => LaunchEdgeDashboard());
-            menu.Items.Add("Tarayıcıda Aç", null, (s, e) => LaunchBrowserDashboard());
             menu.Items.Add(openBrowserItem);
             var sndItem = new ToolStripMenuItem("Ses Cihazı");
             sndItem.DropDownOpening += (s, e) =>
@@ -760,12 +922,16 @@ namespace ProSystemMonitor
         public static volatile double[] FanRaw = new double[8];
         private DateTime _lastStoragePoll = DateTime.MinValue;
         private DateTime _lastSlowPoll = DateTime.MinValue;
+        private DateTime _lastLhmGpuPoll = DateTime.MinValue;
+        private double _cachedLhmGpuHot = double.NaN, _cachedLhmGpuFan = double.NaN, _cachedLhmGpuVolt = double.NaN;
         private readonly Dictionary<string, double> _cachedDriveTemps = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         private bool _boardNow = true;
         private DateTime _lastBoardPoll = DateTime.MinValue;
         private List<ProcItem> _cachedTopProcs = new List<ProcItem>();
         private List<ProcItem> _cachedTopCpu = new List<ProcItem>();
         private double _selfMb, _selfCpu;
+        private double _selfPrevCpu = -1;
+        private DateTime _selfPrevAt = DateTime.MinValue;
         private readonly Dictionary<int, double> _procPrev = new Dictionary<int, double>();
         private DateTime _procPrevAt = DateTime.MinValue;
         private List<DriveTelemetry> _cachedPartitions = new List<DriveTelemetry>();
@@ -881,12 +1047,19 @@ namespace ProSystemMonitor
                     foreach (ManagementObject obj in searcher.Get())
                     {
                         uint clk = 0;
+                        uint memType = 0;
                         if (obj["ConfiguredClockSpeed"] != null) clk = Convert.ToUInt32(obj["ConfiguredClockSpeed"]);
                         if (clk == 0 && obj["Speed"] != null) clk = Convert.ToUInt32(obj["Speed"]);
-                        if (clk > 0)
+                        if (obj["SMBIOSMemoryType"] != null) memType = Convert.ToUInt32(obj["SMBIOSMemoryType"]);
+                        if (clk > 0 || memType > 0)
                         {
-                            string ddrType = clk >= 4400 ? "DDR5" : (clk >= 2133 ? "DDR4" : "DDR");
-                            _memSpeedText = string.Format("{0}-{1}", ddrType, clk);
+                            string ddrType;
+                            if (memType == 34 || memType == 35) ddrType = "DDR5";
+                            else if (memType == 26) ddrType = "DDR4";
+                            else if (memType == 24) ddrType = "DDR3";
+                            else if (memType >= 20 && memType <= 22) ddrType = "DDR2";
+                            else ddrType = clk >= 4400 ? "DDR5" : (clk >= 2133 ? "DDR4" : "DDR3");
+                            _memSpeedText = clk > 0 ? string.Format("{0}-{1}", ddrType, clk) : ddrType;
                             break;
                         }
                     }
@@ -907,12 +1080,7 @@ namespace ProSystemMonitor
                         if (busType == 7 || size < 16000000000UL) continue;
                         if (!string.IsNullOrEmpty(name)) drives.Add(name);
                     }
-                    _detectedDriveNames = drives
-                        .OrderBy(d => d.IndexOf("KINGSTON", StringComparison.OrdinalIgnoreCase) >= 0 ? 0 :
-                                      d.IndexOf("KIOXIA", StringComparison.OrdinalIgnoreCase) >= 0 ? 1 :
-                                      d.IndexOf("hynix", StringComparison.OrdinalIgnoreCase) >= 0 ? 2 : 3)
-                        .Take(4)
-                        .ToList();
+                    _detectedDriveNames = drives.Take(6).ToList();
                 }
             }
             catch { }
@@ -940,14 +1108,30 @@ namespace ProSystemMonitor
                                 }
                             }
                         }
+                        string mNorm = NormName(model);
                         string match = _detectedDriveNames.FirstOrDefault(n =>
-                            model.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            n.IndexOf(model, StringComparison.OrdinalIgnoreCase) >= 0);
+                        {
+                            string nNorm = NormName(n);
+                            return model.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                   n.IndexOf(model, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                   (mNorm.Length > 0 && nNorm.Length > 0 && (mNorm.Contains(nNorm) || nNorm.Contains(mNorm)));
+                        });
                         if (match != null) _driveLetters[match] = letters;
                     }
                 }
             }
             catch { }
+
+            // Sistem sürücüsünü (C:) barındıran diski en başa al
+            if (_detectedDriveNames.Count > 1)
+            {
+                _detectedDriveNames = _detectedDriveNames.OrderBy(d =>
+                {
+                    List<string> ltrs;
+                    if (_driveLetters.TryGetValue(d, out ltrs) && ltrs.Any(l => l.Equals("C:", StringComparison.OrdinalIgnoreCase))) return 0;
+                    return 1;
+                }).ToList();
+            }
         }
 
         private string FormatMoboName(string brand, string product)
@@ -1043,13 +1227,18 @@ namespace ProSystemMonitor
             {
                 if (PdhNative.PdhOpenQueryW(IntPtr.Zero, IntPtr.Zero, out _pdhQuery) == 0)
                 {
-                    PdhNative.PdhAddEnglishCounterW(_pdhQuery, @"\Processor(_Total)\% Processor Time", IntPtr.Zero, out _totalCpuUtilCounter);
+                    if (PdhNative.PdhAddEnglishCounterW(_pdhQuery, @"\Processor Information(_Total)\% Processor Utility", IntPtr.Zero, out _totalCpuUtilCounter) != 0)
+                    {
+                        if (PdhNative.PdhAddEnglishCounterW(_pdhQuery, @"\Processor(_Total)\% Processor Time", IntPtr.Zero, out _totalCpuUtilCounter) != 0)
+                            _totalCpuUtilCounter = IntPtr.Zero;
+                    }
                     if (PdhNative.PdhAddEnglishCounterW(_pdhQuery, @"\PhysicalDisk(_Total)\Disk Read Bytes/sec", IntPtr.Zero, out _diskReadCounter) != 0) _diskReadCounter = IntPtr.Zero;
                     if (PdhNative.PdhAddEnglishCounterW(_pdhQuery, @"\PhysicalDisk(_Total)\Disk Write Bytes/sec", IntPtr.Zero, out _diskWriteCounter) != 0) _diskWriteCounter = IntPtr.Zero;
-                    int threadsPerCore = Math.Max(1, Environment.ProcessorCount / Math.Max(1, _physicalCores));
+                    int logicalTotal = Environment.ProcessorCount;
+                    int threadsPerCore = Math.Max(1, (int)Math.Ceiling((double)logicalTotal / Math.Max(1, _physicalCores)));
                     for (int i = 0; i < _physicalCores; i++)
                     {
-                        int firstLogical = i * threadsPerCore;
+                        int firstLogical = Math.Min(logicalTotal - 1, i * threadsPerCore);
                         IntPtr handlePerf;
                         string pathPerf = string.Format("\\Processor Information(0,{0})\\% Processor Performance", firstLogical);
                         if (PdhNative.PdhAddEnglishCounterW(_pdhQuery, pathPerf, IntPtr.Zero, out handlePerf) != 0)
@@ -1058,7 +1247,7 @@ namespace ProSystemMonitor
 
                         // Çekirdeğin tüm SMT iş parçacıklarının ortalaması
                         var loads = new List<IntPtr>();
-                        for (int t = 0; t < threadsPerCore; t++)
+                        for (int t = 0; t < threadsPerCore && (firstLogical + t) < logicalTotal; t++)
                         {
                             IntPtr handleLoad;
                             string pathLoad = string.Format("\\Processor({0})\\% Processor Time", firstLogical + t);
@@ -1140,15 +1329,36 @@ namespace ProSystemMonitor
             }
             catch { }
 
-            // 2. En çok kaynak kullanan işlemler (yalnızca pano görünürken)
-            if (!Program.DashVisible) return;
+            // 2. Kendi bellek/CPU yükümüz (sıfır maliyet, ek süreç taraması yapmadan)
+            try
+            {
+                using (Process selfP = Process.GetCurrentProcess())
+                {
+                    DateTime nowS = DateTime.UtcNow;
+                    _selfMb = selfP.WorkingSet64 / (1024.0 * 1024.0);
+                    double sCpu = selfP.TotalProcessorTime.TotalSeconds;
+                    if (_selfPrevCpu >= 0 && _selfPrevAt != DateTime.MinValue)
+                    {
+                        double sdt = (nowS - _selfPrevAt).TotalSeconds;
+                        if (sdt > 0.2 && sCpu >= _selfPrevCpu)
+                            _selfCpu = (sCpu - _selfPrevCpu) / (sdt * Environment.ProcessorCount) * 100.0;
+                    }
+                    _selfPrevCpu = sCpu;
+                    _selfPrevAt = nowS;
+                }
+            }
+            catch { }
+
+            // 3. En çok kaynak kullanan işlemler (yalnızca ilgili widget veya web istemcisi aktifken)
+            DashboardForm dsh = Program.Dash;
+            bool needProcs = (Program.DashVisible && dsh != null && !dsh.IsDisposed && (dsh.WVis("apps") || dsh.WVis("procs"))) || Program.HasSseClients;
+            if (!needProcs) { _procPrev.Clear(); _procPrevAt = DateTime.MinValue; return; }
             try
             {
                 var procs = Process.GetProcesses();
                 DateTime nowT = DateTime.UtcNow;
                 double dt = _procPrevAt == DateTime.MinValue ? 0 : (nowT - _procPrevAt).TotalSeconds;
                 var cur = new Dictionary<int, double>();
-                DashboardForm dsh = Program.Dash;
                 bool wantCpu = dsh != null && !dsh.IsDisposed && dsh.WVis("apps");
                 if (!wantCpu) { _procPrev.Clear(); _procPrevAt = DateTime.MinValue; }
                 int selfId = Process.GetCurrentProcess().Id;
@@ -1183,7 +1393,18 @@ namespace ProSystemMonitor
             catch { }
         }
 
+        private double _lastGpuMemClockMhz;
+        private double _lastGpuFanPct;
+        private double _lastNetUpTotalMb, _lastNetDownTotalMb;
+        private string _lastSensorSource = "";
+        private double _lastDimTemp;
+
         public string CollectJson()
+        {
+            return BuildJson(CollectSnap());
+        }
+
+        public Snap CollectSnap()
         {
             PollSlowMetricsIfNeeded();
 
@@ -1215,13 +1436,13 @@ namespace ProSystemMonitor
             }
             int soundVol = _cachedVolume;
 
-            double cpuLoadPct = 0, diskReadMBs = double.NaN, diskWriteMBs = double.NaN;
+            double cpuLoadPct = double.NaN, diskReadMBs = double.NaN, diskWriteMBs = double.NaN;
             double maxCoreMhz = double.NaN;
             var cores = new List<CoreTelemetry>(_physicalCores);
             if (_pdhQuery != IntPtr.Zero && PdhNative.PdhCollectQueryData(_pdhQuery) == 0)
             {
                 PdhNative.PDH_FMT_COUNTERVALUE val;
-                if (PdhNative.PdhGetFormattedCounterValue(_totalCpuUtilCounter, PdhNative.PDH_FMT_DOUBLE, IntPtr.Zero, out val) == 0)
+                if (_totalCpuUtilCounter != IntPtr.Zero && PdhNative.PdhGetFormattedCounterValue(_totalCpuUtilCounter, PdhNative.PDH_FMT_DOUBLE, IntPtr.Zero, out val) == 0)
                 {
                     cpuLoadPct = Math.Min(100.0, Math.Max(0.0, val.doubleValue));
                 }
@@ -1240,7 +1461,7 @@ namespace ProSystemMonitor
                         if (val.doubleValue > 10.0)
                             mhz = Math.Round(_cpuBaseMhz * (val.doubleValue / 100.0));
                     }
-                    double cLoad = cpuLoadPct, sum = 0;
+                    double cLoad = double.IsNaN(cpuLoadPct) ? 0 : cpuLoadPct, sum = 0;
                     int n = 0;
                     foreach (IntPtr h in _coreLoadCounters[i])
                     {
@@ -1319,8 +1540,12 @@ namespace ProSystemMonitor
 
             string sensorSource = "Yerleşik: LHM + NVML | " + _fps.StatusText + (Program.IsAdministrator() ? "" : " | YÖNETİCİ DEĞİL") + (string.IsNullOrEmpty(LhmError) ? "" : " | LHM HATA: " + LhmError);
 
-            // Okunamayan sensörler NaN kalır (JSON'da null); uydurma/tahmini değer gösterilmez.
+            // Okunamayan sensörler NaN kalır; uydurma/tahmini değer gösterilmez.
             LhmReading lhm = GetLhmCached();
+
+            if ((double.IsNaN(cpuLoadPct) || cpuLoadPct == 0) && !double.IsNaN(lhm.CpuTotalLoad))
+                cpuLoadPct = Math.Min(100.0, Math.Max(0.0, lhm.CpuTotalLoad));
+            if (double.IsNaN(cpuLoadPct)) cpuLoadPct = 0;
 
             double moboTemp = lhm.MoboTemp, cpuTemp = lhm.CpuTemp, cpuDiodeTemp = lhm.CpuDiodeTemp, dimmTemp = lhm.DimmTemp;
             double cpuFanRpm = lhm.CpuFan, chaFan1Rpm = lhm.Cha1, chaFan2Rpm = lhm.Cha2, aioPumpRpm = lhm.Pump;
@@ -1341,13 +1566,31 @@ namespace ProSystemMonitor
                 if (!double.IsNaN(lhm.VramTotalMb)) gpuVramTotalMb = lhm.VramTotalMb;
             }
 
-            // CPU çekirdek saatleri: LHM (MSR, gerçek efektif saat) varsa onu kullan, yoksa PDH tahmini kalır.
-            foreach (CoreTelemetry c in cores)
+            // CPU çekirdek saatleri ve yükleri: LHM gerçek sensörü öncelikli, yoksa PDH yedeği
+            if (cores.Count == 0 && lhm.CoreClocks.Count > 0)
             {
-                double real;
-                if (lhm.CoreClocks.TryGetValue(c.Index, out real)) c.ClockMhz = Math.Round(real);
+                foreach (var kv in lhm.CoreClocks.OrderBy(k => k.Key))
+                {
+                    double cl = 0;
+                    lhm.CoreLoads.TryGetValue(kv.Key, out cl);
+                    cores.Add(new CoreTelemetry { Index = kv.Key, ClockMhz = Math.Round(kv.Value), LoadPct = cl });
+                }
             }
-            maxCoreMhz = cores.Count > 0 ? cores.Max(c => c.ClockMhz) : double.NaN;
+            else
+            {
+                foreach (CoreTelemetry c in cores)
+                {
+                    double real;
+                    if (lhm.CoreClocks.TryGetValue(c.Index, out real)) c.ClockMhz = Math.Round(real);
+                    double lhmLoad;
+                    if (c.LoadPct <= 0.05 && lhm.CoreLoads.TryGetValue(c.Index, out lhmLoad)) c.LoadPct = lhmLoad;
+                }
+            }
+            if (cores.Count > 0)
+            {
+                var activeCores = cores.Where(c => c.LoadPct >= 5.0).ToList();
+                maxCoreMhz = activeCores.Count > 0 ? activeCores.Max(c => c.ClockMhz) : cores.Max(c => c.ClockMhz);
+            }
 
             var drives = BuildDrives();
 
@@ -1402,129 +1645,138 @@ namespace ProSystemMonitor
             double netUpKbs = 0, netDownKbs = 0, netUpTotalMb = 0, netDownTotalMb = 0;
             ReadNetworkStats(out netUpKbs, out netDownKbs, out netUpTotalMb, out netDownTotalMb);
 
-            if (Program.Dash != null)
-            {
-                Program.LastSnap = new Snap
-                {
-                    Brand = _brandName, MoboModel = _moboModel, Chipset = _moboChipset, Bios = _moboBios, CpuModel = _cpuModel,
-                    GpuModel = _gpuModel, GpuBus = gpuBusType, MemSpeed = _memSpeedText, Uptime = uptimeStr, Ip = _ipAddress,
-                    Game = activeGame ?? "", Throttle = throttleText, Source = sensorSource,
-                    Sound = soundVol < 0 ? double.NaN : soundVol, Procs = processCount, Ping = _pingMs < 0 ? double.NaN : _pingMs,
-                    MemTotal = memTotalGb * 1024.0, MemUsed = memUsedGb * 1024.0, MemFree = memFreeGb * 1024.0, MemLoad = memLoadPct, MoboTemp = moboTemp,
-                    CpuLoad = cpuLoadPct, CpuTemp = cpuTemp, CpuClock = maxCoreMhz, CpuFan = cpuFanRpm, Cha1 = chaFan1Rpm, Cha2 = chaFan2Rpm, Pump = aioPumpRpm,
-                    CpuW = cpuPowerW, CpuV = cpuVolt, GpuW = gpuPowerW, GpuV = gpuVolt,
-                    GpuLoad = gpuLoadPct, GpuTemp = gpuTemp, GpuClock = gpuClockMhz, VramUsed = gpuVramUsedMb, VramTotal = gpuVramTotalMb, GpuFan = gpuFanRpm,
-                    Fps = fps, FrameMs = frameTimeMs, Low1 = fpsLow1,
-                    NetUp = netUpKbs, NetDown = netDownKbs, NetUpTot = netUpTotalMb, NetDownTot = netDownTotalMb, DiskR = diskReadMBs, DiskW = diskWriteMBs,
-                    Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray(), TopCpu = _cachedTopCpu.ToArray(), SelfMb = _selfMb, SelfCpu = _selfCpu
-                };
-            }
+            _lastGpuMemClockMhz = gpuMemClockMhz;
+            _lastGpuFanPct = gpuFanPct;
+            _lastNetUpTotalMb = netUpTotalMb;
+            _lastNetDownTotalMb = netDownTotalMb;
+            _lastSensorSource = sensorSource;
+            _lastDimTemp = dimmTemp;
 
+            return new Snap
+            {
+                Brand = _brandName, MoboModel = _moboModel, Chipset = _moboChipset, Bios = _moboBios, CpuModel = _cpuModel,
+                GpuModel = _gpuModel, GpuBus = gpuBusType, MemSpeed = _memSpeedText, Uptime = uptimeStr, Ip = _ipAddress,
+                Game = activeGame ?? "", Throttle = throttleText, Source = sensorSource,
+                Sound = soundVol < 0 ? double.NaN : soundVol, Procs = processCount, Ping = _pingMs < 0 ? double.NaN : _pingMs,
+                MemTotal = memTotalGb * 1024.0, MemUsed = memUsedGb * 1024.0, MemFree = memFreeGb * 1024.0, MemLoad = memLoadPct, MoboTemp = moboTemp,
+                CpuLoad = cpuLoadPct, CpuTemp = cpuTemp, CpuClock = maxCoreMhz, CpuFan = cpuFanRpm, Cha1 = chaFan1Rpm, Cha2 = chaFan2Rpm, Pump = aioPumpRpm,
+                CpuW = cpuPowerW, CpuV = cpuVolt, GpuW = gpuPowerW, GpuV = gpuVolt,
+                GpuLoad = gpuLoadPct, GpuTemp = gpuTemp, GpuClock = gpuClockMhz, VramUsed = gpuVramUsedMb, VramTotal = gpuVramTotalMb, GpuFan = gpuFanRpm,
+                Fps = fps, FrameMs = frameTimeMs, Low1 = fpsLow1,
+                NetUp = netUpKbs, NetDown = netDownKbs, NetUpTot = netUpTotalMb, NetDownTot = netDownTotalMb, DiskR = diskReadMBs, DiskW = diskWriteMBs,
+                Cores = cores.ToArray(), Drives = drives.ToArray(), TopProcs = _cachedTopProcs.ToArray(), TopCpu = _cachedTopCpu.ToArray(), SelfMb = _selfMb, SelfCpu = _selfCpu,
+                GpuHot = gpuHotspotTemp, CpuDiode = cpuDiodeTemp, DimmTemp = dimmTemp, SocV = socVolt, V12 = v12Volt
+            };
+        }
+
+        public string BuildJson(Snap s)
+        {
+            if (s == null) return "{}";
             StringBuilder sb = new StringBuilder(3072);
             sb.Append('{');
-            AppendJsonStr(sb, "sensorSource", sensorSource);
-            AppendJsonStr(sb, "brandName", _brandName);
-            AppendJsonStr(sb, "moboModel", _moboModel);
-            AppendJsonStr(sb, "moboChipset", _moboChipset);
-            AppendJsonStr(sb, "moboBios", _moboBios);
-            AppendJsonStr(sb, "cpuModel", _cpuModel);
-            AppendJsonStr(sb, "gpuModel", _gpuModel);
-            AppendJsonStr(sb, "gpuBusType", gpuBusType);
-            AppendJsonStr(sb, "memSpeedText", _memSpeedText);
-            AppendJsonStr(sb, "uptime", uptimeStr);
-            AppendJsonNum(sb, "soundVolume", soundVol < 0 ? double.NaN : soundVol);
-            AppendJsonNum(sb, "processCount", processCount);
-            AppendJsonNum(sb, "pingMs", _pingMs < 0 ? double.NaN : _pingMs);
+            AppendJsonStr(sb, "sensorSource", s.Source);
+            AppendJsonStr(sb, "brandName", s.Brand);
+            AppendJsonStr(sb, "moboModel", s.MoboModel);
+            AppendJsonStr(sb, "moboChipset", s.Chipset);
+            AppendJsonStr(sb, "moboBios", s.Bios);
+            AppendJsonStr(sb, "cpuModel", s.CpuModel);
+            AppendJsonStr(sb, "gpuModel", s.GpuModel);
+            AppendJsonStr(sb, "gpuBusType", s.GpuBus);
+            AppendJsonStr(sb, "memSpeedText", s.MemSpeed);
+            AppendJsonStr(sb, "uptime", s.Uptime);
+            AppendJsonNum(sb, "soundVolume", s.Sound);
+            AppendJsonNum(sb, "processCount", s.Procs);
+            AppendJsonNum(sb, "pingMs", s.Ping);
 
-            AppendJsonNum(sb, "memTotalGb", memTotalGb);
-            AppendJsonNum(sb, "memUsedGb", memUsedGb);
-            AppendJsonNum(sb, "memFreeGb", memFreeGb);
-            AppendJsonNum(sb, "memLoadPct", memLoadPct);
-            AppendJsonNum(sb, "dimmTemp", dimmTemp);
+            AppendJsonNum(sb, "memTotalGb", s.MemTotal / 1024.0);
+            AppendJsonNum(sb, "memUsedGb", s.MemUsed / 1024.0);
+            AppendJsonNum(sb, "memFreeGb", s.MemFree / 1024.0);
+            AppendJsonNum(sb, "memLoadPct", s.MemLoad);
+            AppendJsonNum(sb, "dimmTemp", s.DimmTemp);
 
-            AppendJsonNum(sb, "moboTemp", moboTemp);
-            AppendJsonNum(sb, "socVolt", socVolt);
-            AppendJsonNum(sb, "v12Volt", v12Volt);
+            AppendJsonNum(sb, "moboTemp", s.MoboTemp);
+            AppendJsonNum(sb, "socVolt", s.SocV);
+            AppendJsonNum(sb, "v12Volt", s.V12);
 
-            AppendJsonNum(sb, "cpuLoadPct", cpuLoadPct);
-            AppendJsonNum(sb, "cpuTemp", cpuTemp);
-            AppendJsonNum(sb, "cpuTempMin", _cpuTempMin < 500 ? _cpuTempMin : cpuTemp);
+            AppendJsonNum(sb, "cpuLoadPct", s.CpuLoad);
+            AppendJsonNum(sb, "cpuTemp", s.CpuTemp);
+            AppendJsonNum(sb, "cpuTempMin", _cpuTempMin < 500 ? _cpuTempMin : s.CpuTemp);
             AppendJsonNum(sb, "cpuTempMax", _cpuTempMax);
-            AppendJsonNum(sb, "cpuDiodeTemp", cpuDiodeTemp);
-            AppendJsonNum(sb, "cpuClockMhz", maxCoreMhz);
+            AppendJsonNum(sb, "cpuDiodeTemp", s.CpuDiode);
+            AppendJsonNum(sb, "cpuClockMhz", s.CpuClock);
             AppendJsonNum(sb, "cpuPeakMhz", _cpuPeakMhz);
-            AppendJsonNum(sb, "cpuFanRpm", cpuFanRpm);
-            AppendJsonNum(sb, "chaFan1Rpm", chaFan1Rpm);
-            AppendJsonNum(sb, "chaFan2Rpm", chaFan2Rpm);
-            AppendJsonNum(sb, "aioPumpRpm", aioPumpRpm);
+            AppendJsonNum(sb, "cpuFanRpm", s.CpuFan);
+            AppendJsonNum(sb, "chaFan1Rpm", s.Cha1);
+            AppendJsonNum(sb, "chaFan2Rpm", s.Cha2);
+            AppendJsonNum(sb, "aioPumpRpm", s.Pump);
 
             sb.Append("\"cores\":[");
-            for (int i = 0; i < cores.Count; i++)
+            for (int i = 0; i < s.Cores.Length; i++)
             {
                 if (i > 0) sb.Append(',');
-                sb.Append("{\"index\":").Append(cores[i].Index)
-                  .Append(",\"clockMhz\":").Append(JsonNum(cores[i].ClockMhz, "0"))
-                  .Append(",\"loadPct\":").Append(JsonNum(cores[i].LoadPct, "0.0"))
+                sb.Append("{\"index\":").Append(s.Cores[i].Index)
+                  .Append(",\"clockMhz\":").Append(JsonNum(s.Cores[i].ClockMhz, "0"))
+                  .Append(",\"loadPct\":").Append(JsonNum(s.Cores[i].LoadPct, "0.0"))
                   .Append('}');
             }
             sb.Append("],");
 
-            AppendJsonNum(sb, "gpuLoadPct", gpuLoadPct);
-            AppendJsonNum(sb, "gpuTemp", gpuTemp);
-            AppendJsonNum(sb, "gpuTempMin", _gpuTempMin < 500 ? _gpuTempMin : gpuTemp);
+            AppendJsonNum(sb, "gpuLoadPct", s.GpuLoad);
+            AppendJsonNum(sb, "gpuTemp", s.GpuTemp);
+            AppendJsonNum(sb, "gpuTempMin", _gpuTempMin < 500 ? _gpuTempMin : s.GpuTemp);
             AppendJsonNum(sb, "gpuTempMax", _gpuTempMax);
-            AppendJsonNum(sb, "gpuHotspotTemp", gpuHotspotTemp);
-            AppendJsonNum(sb, "gpuClockMhz", gpuClockMhz);
-            AppendJsonNum(sb, "gpuMemClockMhz", gpuMemClockMhz);
+            AppendJsonNum(sb, "gpuHotspotTemp", s.GpuHot);
+            AppendJsonNum(sb, "gpuClockMhz", s.GpuClock);
+            AppendJsonNum(sb, "gpuMemClockMhz", _lastGpuMemClockMhz);
             AppendJsonNum(sb, "gpuPeakMhz", _gpuPeakMhz);
-            AppendJsonNum(sb, "gpuVramUsedMb", gpuVramUsedMb);
-            AppendJsonNum(sb, "gpuVramTotalMb", gpuVramTotalMb);
-            AppendJsonNum(sb, "gpuFanRpm", gpuFanRpm);
-            AppendJsonNum(sb, "gpuFanPct", gpuFanPct);
-            AppendJsonNum(sb, "fps", fps);
-            AppendJsonNum(sb, "frameTimeMs", frameTimeMs);
-            AppendJsonStr(sb, "activeGame", activeGame ?? "");
-            AppendJsonNum(sb, "fpsLow1", fpsLow1);
-            AppendJsonStr(sb, "throttle", throttleText);
-            AppendJsonNum(sb, "diskReadMBs", diskReadMBs);
-            AppendJsonNum(sb, "diskWriteMBs", diskWriteMBs);
+            AppendJsonNum(sb, "gpuVramUsedMb", s.VramUsed);
+            AppendJsonNum(sb, "gpuVramTotalMb", s.VramTotal);
+            AppendJsonNum(sb, "gpuFanRpm", s.GpuFan);
+            AppendJsonNum(sb, "gpuFanPct", _lastGpuFanPct);
+            AppendJsonNum(sb, "fps", s.Fps);
+            AppendJsonNum(sb, "frameTimeMs", s.FrameMs);
+            AppendJsonStr(sb, "activeGame", s.Game);
+            AppendJsonNum(sb, "fpsLow1", s.Low1);
+            AppendJsonStr(sb, "throttle", s.Throttle);
+            AppendJsonNum(sb, "diskReadMBs", s.DiskR);
+            AppendJsonNum(sb, "diskWriteMBs", s.DiskW);
 
             sb.Append("\"drives\":[");
-            for (int i = 0; i < drives.Count; i++)
+            for (int i = 0; i < s.Drives.Length; i++)
             {
                 if (i > 0) sb.Append(',');
-                sb.Append("{\"name\":\"").Append(EscapeJson(drives[i].Name))
-                  .Append("\",\"tempC\":").Append(JsonNum(drives[i].TempC, "0"))
-                  .Append(",\"mount\":\"").Append(EscapeJson(drives[i].Mount ?? ""))
-                  .Append("\",\"usedPct\":").Append(JsonNum(drives[i].UsedPct, "0.0"))
-                  .Append(",\"freeGb\":").Append(JsonNum(drives[i].FreeGb, "0.0"))
-                  .Append(",\"totalGb\":").Append(JsonNum(drives[i].TotalGb, "0.0"))
+                sb.Append("{\"name\":\"").Append(EscapeJson(s.Drives[i].Name))
+                  .Append("\",\"tempC\":").Append(JsonNum(s.Drives[i].TempC, "0"))
+                  .Append(",\"mount\":\"").Append(EscapeJson(s.Drives[i].Mount ?? ""))
+                  .Append("\",\"usedPct\":").Append(JsonNum(s.Drives[i].UsedPct, "0.0"))
+                  .Append(",\"freeGb\":").Append(JsonNum(s.Drives[i].FreeGb, "0.0"))
+                  .Append(",\"totalGb\":").Append(JsonNum(s.Drives[i].TotalGb, "0.0"))
                   .Append('}');
             }
             sb.Append("],");
 
             sb.Append("\"topProcs\":[");
-            for (int i = 0; i < _cachedTopProcs.Count; i++)
+            for (int i = 0; i < s.TopProcs.Length; i++)
             {
                 if (i > 0) sb.Append(',');
-                sb.Append("{\"name\":\"").Append(EscapeJson(_cachedTopProcs[i].Name))
-                  .Append("\",\"memMb\":").Append(_cachedTopProcs[i].MemMb.ToString("0", CultureInfo.InvariantCulture))
+                sb.Append("{\"name\":\"").Append(EscapeJson(s.TopProcs[i].Name))
+                  .Append("\",\"memMb\":").Append(s.TopProcs[i].MemMb.ToString("0", CultureInfo.InvariantCulture))
                   .Append('}');
             }
             sb.Append("],");
 
-            AppendJsonNum(sb, "cpuPowerW", cpuPowerW);
+            AppendJsonNum(sb, "cpuPowerW", s.CpuW);
             AppendJsonNum(sb, "cpuPeakW", _cpuPeakW);
-            AppendJsonNum(sb, "cpuVolt", cpuVolt);
-            AppendJsonNum(sb, "gpuPowerW", gpuPowerW);
+            AppendJsonNum(sb, "cpuVolt", s.CpuV);
+            AppendJsonNum(sb, "gpuPowerW", s.GpuW);
             AppendJsonNum(sb, "gpuPeakW", _gpuPeakW);
-            AppendJsonNum(sb, "gpuVolt", gpuVolt);
+            AppendJsonNum(sb, "gpuVolt", s.GpuV);
 
-            AppendJsonStr(sb, "ipAddress", _ipAddress);
-            AppendJsonNum(sb, "netUpKbs", netUpKbs);
-            AppendJsonNum(sb, "netDownKbs", netDownKbs);
-            AppendJsonNum(sb, "netUpTotalMb", netUpTotalMb);
-            AppendJsonNum(sb, "netDownTotalMb", netDownTotalMb, isLast: true);
+            AppendJsonStr(sb, "ipAddress", s.Ip);
+            AppendJsonNum(sb, "netUpKbs", s.NetUp);
+            AppendJsonNum(sb, "netDownKbs", s.NetDown);
+            AppendJsonNum(sb, "netUpTotalMb", s.NetUpTot);
+            AppendJsonNum(sb, "netDownTotalMb", s.NetDownTot, isLast: true);
             sb.Append('}');
 
             return sb.ToString();
@@ -1535,14 +1787,16 @@ namespace ProSystemMonitor
             public double MoboTemp = double.NaN, CpuTemp = double.NaN, CpuDiodeTemp = double.NaN;
             public double DimmTemp = double.NaN;
             public double CpuFan = double.NaN, Cha1 = double.NaN, Cha2 = double.NaN, Pump = double.NaN;
-            public double CpuVolt = double.NaN, SocVolt = double.NaN, V12 = double.NaN;
-            public double CpuPower = double.NaN;
+            public double CpuVolt = double.NaN, CpuVid = double.NaN, SocVolt = double.NaN, V12 = double.NaN;
+            public double CpuPower = double.NaN, CpuTotalLoad = double.NaN;
             public double GpuTemp = double.NaN, GpuHot = double.NaN, GpuFan = double.NaN, GpuVolt = double.NaN, GpuPower = double.NaN;
             public double GpuLoad = double.NaN, GpuClock = double.NaN, GpuMemClock = double.NaN;
             public double VramUsedMb = double.NaN, VramTotalMb = double.NaN;
             public HardwareType GpuType = HardwareType.Motherboard;
             public bool GpuChosen;
             public readonly Dictionary<int, double> CoreClocks = new Dictionary<int, double>();
+            public readonly Dictionary<int, double> CoreEffClocks = new Dictionary<int, double>();
+            public readonly Dictionary<int, double> CoreLoads = new Dictionary<int, double>();
             public readonly List<KeyValuePair<string, double>> BoardTemps = new List<KeyValuePair<string, double>>();
             public readonly List<KeyValuePair<string, double>> BoardFans = new List<KeyValuePair<string, double>>();
             public readonly List<KeyValuePair<string, double>> BoardVolts = new List<KeyValuePair<string, double>>();
@@ -1706,7 +1960,7 @@ namespace ProSystemMonitor
                 bool pollStorageNow = (DateTime.UtcNow - _lastStoragePoll).TotalSeconds >= 15;
                 if (pollStorageNow) _lastStoragePoll = DateTime.UtcNow;
                 bool pollMemNow = (DateTime.UtcNow - _lastMemPoll).TotalSeconds >= 5;
-                if (pollMemNow) _lastMemPoll = DateTime.UtcNow;
+                if (pollMemNow) { _lastMemPoll = DateTime.UtcNow; _cachedDimmTemp = double.NaN; }
 
                 _boardNow = (DateTime.UtcNow - _lastBoardPoll).TotalSeconds >= 3;
                 if (_boardNow) _lastBoardPoll = DateTime.UtcNow;
@@ -1729,6 +1983,17 @@ namespace ProSystemMonitor
             if (t == HardwareType.Storage && !pollStorageNow) return;
             if (t == HardwareType.Memory && !pollMemNow) return;
 
+            if (_nvmlAvailable && t == HardwareType.GpuNvidia)
+            {
+                if ((DateTime.UtcNow - _lastLhmGpuPoll).TotalSeconds < 4.0)
+                {
+                    r.GpuChosen = true; r.GpuType = t;
+                    r.GpuHot = _cachedLhmGpuHot; r.GpuFan = _cachedLhmGpuFan; r.GpuVolt = _cachedLhmGpuVolt;
+                    return;
+                }
+                _lastLhmGpuPoll = DateTime.UtcNow;
+            }
+
             bool board = t == HardwareType.Motherboard || t == HardwareType.SuperIO || t == HardwareType.EmbeddedController || t == HardwareType.Cooler;
             if (!(board && !_boardNow)) { try { hw.Update(); } catch { return; } }
 
@@ -1737,7 +2002,13 @@ namespace ProSystemMonitor
                 case HardwareType.Cpu: ReadCpu(hw, r); break;
                 case HardwareType.GpuNvidia:
                 case HardwareType.GpuAmd:
-                case HardwareType.GpuIntel: ReadGpu(hw, r); break;
+                case HardwareType.GpuIntel:
+                    ReadGpu(hw, r);
+                    if (_nvmlAvailable && t == HardwareType.GpuNvidia)
+                    {
+                        _cachedLhmGpuHot = r.GpuHot; _cachedLhmGpuFan = r.GpuFan; _cachedLhmGpuVolt = r.GpuVolt;
+                    }
+                    break;
                 case HardwareType.Storage: ReadStorage(hw); break;
                 case HardwareType.Memory: ReadMemory(hw); break;
                 case HardwareType.Motherboard:
@@ -1776,23 +2047,41 @@ namespace ProSystemMonitor
                     case SensorType.Voltage:
                         if (v <= 0 || v >= 2.0) break;
                         if (Has(n, "SoC")) { if (double.IsNaN(r.SocVolt)) r.SocVolt = v; }
-                        else if (Has(n, "SVI2") && Has(n, "Core") || n.Equals("CPU Core", StringComparison.OrdinalIgnoreCase) || n.Equals("Vcore", StringComparison.OrdinalIgnoreCase))
+                        else if (!Has(n, "VID") && ((Has(n, "SVI2") && Has(n, "Core")) || (Has(n, "SVI3") && Has(n, "Core")) || n.Equals("CPU Core", StringComparison.OrdinalIgnoreCase) || n.Equals("Vcore", StringComparison.OrdinalIgnoreCase) || n.Equals("Core Voltage", StringComparison.OrdinalIgnoreCase)))
                             svi2Volt = v;
-                        else if (Has(n, "Core")) { if (double.IsNaN(vidMax) || v > vidMax) vidMax = v; }
+                        else if (Has(n, "VID") || Has(n, "Core")) { if (v > 0.25 && (double.IsNaN(vidMax) || v > vidMax)) vidMax = v; }
+                        break;
+                    case SensorType.Load:
+                        if (n.Equals("CPU Total", StringComparison.OrdinalIgnoreCase)) r.CpuTotalLoad = v;
+                        else
+                        {
+                            Match ml = Regex.Match(n, @"^(?:CPU )?Core #(\d+)$", RegexOptions.IgnoreCase);
+                            if (ml.Success)
+                            {
+                                int idx = int.Parse(ml.Groups[1].Value, CultureInfo.InvariantCulture);
+                                if (idx >= 1 && idx <= _physicalCores) r.CoreLoads[idx] = v;
+                            }
+                        }
                         break;
                     case SensorType.Clock:
                         {
-                            // "Core #1", "CPU Core #1" ... (Bus Speed gibi sensörleri atla)
-                            Match m = Regex.Match(n, @"^(?:CPU )?Core #(\d+)$", RegexOptions.IgnoreCase);
-                            if (m.Success && v > 100)
-                                r.CoreClocks[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)] = v;
+                            Match me = Regex.Match(n, @"^(?:CPU )?Core #(\d+)\s*\(Effective\)$", RegexOptions.IgnoreCase);
+                            if (me.Success && v > 100)
+                                r.CoreEffClocks[int.Parse(me.Groups[1].Value, CultureInfo.InvariantCulture)] = v;
+                            else
+                            {
+                                Match m = Regex.Match(n, @"^(?:CPU )?Core #(\d+)$", RegexOptions.IgnoreCase);
+                                if (m.Success && v > 100)
+                                    r.CoreClocks[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)] = v;
+                            }
                         }
                         break;
                 }
             }
             if (double.IsNaN(r.CpuTemp)) r.CpuTemp = !double.IsNaN(coreMaxTemp) ? coreMaxTemp : coreAvgTemp;
             r.CpuDiodeTemp = !double.IsNaN(ccdTemp) ? ccdTemp : coreMaxTemp;
-            r.CpuVolt = !double.IsNaN(svi2Volt) ? svi2Volt : vidMax;
+            r.CpuVolt = svi2Volt;
+            r.CpuVid = vidMax;
         }
 
         private void ReadGpu(IHardware hw, LhmReading r)
@@ -1806,6 +2095,7 @@ namespace ProSystemMonitor
             r.GpuChosen = true;
             r.GpuType = hw.HardwareType;
 
+            double d3dMax = double.NaN;
             foreach (ISensor s in hw.Sensors)
             {
                 double? vn = Val(s);
@@ -1817,6 +2107,7 @@ namespace ProSystemMonitor
                     case SensorType.Temperature:
                         if (Has(n, "Hot Spot")) r.GpuHot = v;
                         else if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) r.GpuTemp = v;
+                        else if (double.IsNaN(r.GpuHot) && Has(n, "Memory Junction")) r.GpuHot = v;
                         break;
                     case SensorType.Power:
                         if (Has(n, "Package") || n.Equals("GPU Power", StringComparison.OrdinalIgnoreCase)) r.GpuPower = v;
@@ -1826,10 +2117,11 @@ namespace ProSystemMonitor
                         if (double.IsNaN(r.GpuFan) || v > r.GpuFan) r.GpuFan = v;
                         break;
                     case SensorType.Voltage:
-                        if (v > 0 && v < 2.0 && (double.IsNaN(r.GpuVolt) || n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase))) r.GpuVolt = v;
+                        if (v > 0 && v < 2.0 && (Has(n, "Core Voltage") || n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase) || double.IsNaN(r.GpuVolt))) r.GpuVolt = v;
                         break;
                     case SensorType.Load:
                         if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) r.GpuLoad = v;
+                        else if (n.Equals("D3D 3D", StringComparison.OrdinalIgnoreCase) && (double.IsNaN(d3dMax) || v > d3dMax)) d3dMax = v;
                         break;
                     case SensorType.Clock:
                         if (n.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) r.GpuClock = v;
@@ -1841,6 +2133,7 @@ namespace ProSystemMonitor
                         break;
                 }
             }
+            if (double.IsNaN(r.GpuLoad) && !double.IsNaN(d3dMax)) r.GpuLoad = d3dMax;
         }
 
         private void ReadBoard(IHardware hw, LhmReading r)
@@ -1861,8 +2154,8 @@ namespace ProSystemMonitor
 
         private void ResolveBoardSensors(LhmReading r)
         {
-            // --- Anakart sıcaklığı: isimle öncelik, yoksa makul aralıktaki ilk CPU olmayan sensör ---
-            string[] prefer = { "Motherboard", "System", "MB", "Board", "Chipset", "PCH" };
+            // --- Anakart sıcaklığı: isimle öncelik, yoksa Temperature #1 veya makul aralıktaki ilk CPU olmayan sensör ---
+            string[] prefer = { "Motherboard", "System", "SYSTIN", "T_Sensor", "VRM", "MB", "Board", "Chipset", "PCH" };
             foreach (string pref in prefer)
             {
                 foreach (var kv in r.BoardTemps)
@@ -1875,7 +2168,14 @@ namespace ProSystemMonitor
             {
                 foreach (var kv in r.BoardTemps)
                 {
-                    if (!Has(kv.Key, "CPU") && !Has(kv.Key, "Core") && !Has(kv.Key, "Water") && kv.Value > 15 && kv.Value < 90) { r.MoboTemp = kv.Value; break; }
+                    if (kv.Key.Equals("Temperature #1", StringComparison.OrdinalIgnoreCase) && kv.Value >= 18 && kv.Value <= 85) { r.MoboTemp = kv.Value; break; }
+                }
+            }
+            if (double.IsNaN(r.MoboTemp))
+            {
+                foreach (var kv in r.BoardTemps)
+                {
+                    if (!Has(kv.Key, "CPU") && !Has(kv.Key, "Core") && !Has(kv.Key, "Water") && kv.Value >= 20 && kv.Value <= 80) { r.MoboTemp = kv.Value; break; }
                 }
             }
 
@@ -1930,32 +2230,41 @@ namespace ProSystemMonitor
                 string n = kv.Key; double v = kv.Value;
                 if ((Has(n, "+12V") || n.Equals("12V", StringComparison.OrdinalIgnoreCase)) && v > 8 && v < 16) r.V12 = v;
                 else if (double.IsNaN(r.SocVolt) && Has(n, "SoC") && v > 0 && v < 2) r.SocVolt = v;
-                else if (double.IsNaN(r.CpuVolt) && (Has(n, "Vcore") || n.Equals("CPU Core", StringComparison.OrdinalIgnoreCase)) && v > 0 && v < 2) r.CpuVolt = v;
+                else if (double.IsNaN(r.CpuVolt) && (Has(n, "Vcore") || n.Equals("CPU Core", StringComparison.OrdinalIgnoreCase)) && v > 0.5 && v < 2.0) r.CpuVolt = v;
             }
+            if (double.IsNaN(r.CpuVolt) && !double.IsNaN(r.CpuVid) && r.CpuVid > 0.55)
+                r.CpuVolt = r.CpuVid;
         }
 
         private void ReadStorage(IHardware hw)
         {
             double best = double.NaN;
+            int bestPrio = -1;
             foreach (ISensor s in hw.Sensors)
             {
                 if (s.SensorType != SensorType.Temperature) continue;
+                string n = s.Name ?? "";
+                if (Has(n, "Warning") || Has(n, "Critical") || Has(n, "Limit") || Has(n, "Resolution")) continue;
                 double? vn = Val(s);
-                if (!vn.HasValue || vn.Value <= 0) continue;
-                if (double.IsNaN(best) || (s.Name ?? "").Equals("Temperature", StringComparison.OrdinalIgnoreCase)) best = vn.Value;
+                if (!vn.HasValue || vn.Value <= 0 || vn.Value >= 100) continue;
+                int prio = n.Equals("Composite Temperature", StringComparison.OrdinalIgnoreCase) ? 2 :
+                           (n.Equals("Temperature", StringComparison.OrdinalIgnoreCase) ? 1 : 0);
+                if (prio > bestPrio) { bestPrio = prio; best = vn.Value; }
             }
             if (!double.IsNaN(best)) _cachedDriveTemps[hw.Name] = best;
         }
 
         private void ReadMemory(IHardware hw)
         {
-            // DIMM sıcaklık sensörü olan modüller (varsa) için en yüksek değer.
+            // Yalnızca gerçek DIMM sıcaklıkları: Limit/Resolution/Warning/Critical eşiklerini kesinlikle dışla.
             double best = double.NaN;
             foreach (ISensor s in hw.Sensors)
             {
                 if (s.SensorType != SensorType.Temperature) continue;
+                string n = s.Name ?? "";
+                if (Has(n, "Limit") || Has(n, "Resolution") || Has(n, "Warning") || Has(n, "Critical")) continue;
                 double? vn = Val(s);
-                if (vn.HasValue && vn.Value > 0 && (double.IsNaN(best) || vn.Value > best)) best = vn.Value;
+                if (vn.HasValue && vn.Value > 5.0 && vn.Value < 105.0 && (double.IsNaN(best) || vn.Value > best)) best = vn.Value;
             }
             if (!double.IsNaN(best) && (double.IsNaN(_cachedDimmTemp) || best > _cachedDimmTemp)) _cachedDimmTemp = best;
         }
@@ -1988,12 +2297,10 @@ namespace ProSystemMonitor
             var drives = new List<DriveTelemetry>();
             IEnumerable<string> names = _detectedDriveNames;
             if (_detectedDriveNames.Count == 0)
-                names = _cachedDriveTemps.Keys.Take(4).ToList();
+                names = _cachedDriveTemps.Keys.Take(6).ToList();
 
             foreach (string dName in names)
             {
-                if (_detectedDriveNames.Count > 3 && dName.StartsWith("ST1000", StringComparison.OrdinalIgnoreCase))
-                    continue;
                 double t;
                 if (!TryGetDriveTemp(dName, out t)) t = double.NaN;
                 drives.Add(new DriveTelemetry { Name = dName, TempC = t });
@@ -2177,8 +2484,10 @@ namespace ProSystemMonitor
                 _session = handle;
 
                 Guid g1 = DxgiGuid, g2 = D3D9Guid, g3 = DxgKrnlGuid;
-                EtwNative.EnableTraceEx2(_session, ref g1, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
-                EtwNative.EnableTraceEx2(_session, ref g2, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
+                if (EnableFiltered(g1, 42) != 0)
+                    EtwNative.EnableTraceEx2(_session, ref g1, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
+                if (EnableFiltered(g2, 1) != 0)
+                    EtwNative.EnableTraceEx2(_session, ref g2, 1, 5, ulong.MaxValue, 0, 0, IntPtr.Zero);
                 if (UseKernelFallback) EtwNative.EnableTraceEx2(_session, ref g3, 1, 4, 0x1, 0, 0, IntPtr.Zero);
 
                 _callback = OnEvent;
@@ -2326,9 +2635,9 @@ namespace ProSystemMonitor
 
         private static readonly string[] GameDirs =
         {
-            "\\steamapps\\common\\", "\\epic games\\", "\\gog galaxy\\games\\", "\\gog games\\", "\\riot games\\",
+            "\\steamapps\\common\\", "\\steamlibrary\\", "\\epic games\\", "\\program files\\epic games\\", "\\gog galaxy\\games\\", "\\gog games\\", "\\riot games\\",
             "\\ubisoft game launcher\\games\\", "\\ea games\\", "\\origin games\\", "\\xboxgames\\",
-            "\\rockstar games\\", "\\battle.net\\", "\\blizzard\\", "\\games\\"
+            "\\rockstar games\\", "\\battle.net\\", "\\blizzard\\", "\\games\\", "\\oyunlar\\", "\\game\\"
         };
         private readonly Dictionary<uint, bool> _gamePath = new Dictionary<uint, bool>();
 
@@ -2368,9 +2677,9 @@ namespace ProSystemMonitor
         }
 
         // Zaman damgalarından ortalama kare hızı: (kare-1) / geçen süre. Pencere, serinin en yeni olayında biter.
-        private static bool Rate(Series s, out double fps)
+        private static bool Rate(Series s, out double fps, out double avgMs)
         {
-            fps = 0;
+            fps = 0; avgMs = 0;
             if (s.Count < 2) return false;
             long f = Stopwatch.Frequency, newest = s.T[s.T.Count - 1];
             for (int pass = 0; pass < 2; pass++)
@@ -2384,6 +2693,7 @@ namespace ProSystemMonitor
                     long span = newest - s.T[i];
                     if (n < 2 || span <= 0) return false;
                     fps = (n - 1) * (double)f / span;
+                    avgMs = (span * 1000.0 / f) / (n - 1);
                     return true;
                 }
             }
@@ -2423,7 +2733,13 @@ namespace ProSystemMonitor
                 if (fgWnd != IntPtr.Zero && Win32Native.GetWindowRect(fgWnd, out rc))
                 {
                     Rectangle sb = Screen.FromHandle(fgWnd).Bounds;
-                    fgFullscreen = rc.Left <= sb.Left && rc.Top <= sb.Top && rc.Right >= sb.Right && rc.Bottom >= sb.Bottom;
+                    int il = Math.Max(sb.Left, rc.Left), it = Math.Max(sb.Top, rc.Top);
+                    int ir = Math.Min(sb.Right, rc.Right), ib = Math.Min(sb.Bottom, rc.Bottom);
+                    if (ir > il && ib > it && sb.Width > 0 && sb.Height > 0)
+                    {
+                        double areaRatio = ((double)(ir - il) * (ib - it)) / ((double)sb.Width * sb.Height);
+                        fgFullscreen = areaRatio >= 0.85;
+                    }
                 }
             }
             catch { }
@@ -2431,7 +2747,7 @@ namespace ProSystemMonitor
             long now = Stopwatch.GetTimestamp();
             long f = Stopwatch.Frequency;
             long stale = 2 * f + f / 2;   // ETW tamponları ~1 sn'de bir teslim edilir; bundan uzun sessizlik = kare yok
-            double bestFps = 0;
+            double bestFps = 0, bestMs = 0;
             uint bestPid = 0;
             string bestName = "";
             bool bestIsFg = false, bestKernel = false;
@@ -2448,18 +2764,18 @@ namespace ProSystemMonitor
                     if (now - st.LastSeen > 10 * f) { dead.Add(kv.Key); continue; }
 
                     // DXGI/D3D9: en hızlı swap chain (oyun içi bindirmeler/ikincil zincirler FPS'i şişirmesin diye tek zincir)
-                    Series chosen = null; double fps = 0; bool useKernel = false;
+                    Series chosen = null; double fps = 0, avgMs = 0; bool useKernel = false;
                     foreach (Series sr in st.Sw.Values)
                     {
                         if (now - sr.Newest > stale) continue;
-                        double r;
-                        if (Rate(sr, out r) && r > fps) { fps = r; chosen = sr; }
+                        double r, ms;
+                        if (Rate(sr, out r, out ms) && r > fps) { fps = r; avgMs = ms; chosen = sr; }
                     }
                     if (chosen != null && kv.Key == fgPid) fgHasDxgi = true;
                     if (chosen == null && _kernelOn && now - st.Kernel.Newest <= stale)
                     {
-                        double r;
-                        if (Rate(st.Kernel, out r)) { fps = r; chosen = st.Kernel; useKernel = true; }
+                        double r, ms;
+                        if (Rate(st.Kernel, out r, out ms)) { fps = r; avgMs = ms; chosen = st.Kernel; useKernel = true; }
                     }
                     if (chosen == null) continue;
 
@@ -2467,38 +2783,57 @@ namespace ProSystemMonitor
                     if (name.Length == 0 || Ignored.Contains(name) || kv.Key == self) continue;
 
                     bool isFg = kv.Key == fgPid;
-                    // Yalnızca oyunlar: bilinen oyun klasörlerindeki exe'ler veya ön planda tam ekran kaplayan pencere.
-                    if (!IsGamePath(kv.Key) && !(isFg && fgFullscreen)) continue;
+                    // Yalnızca oyunlar: bilinen oyun klasörlerindeki exe'ler veya ön planda >= %85 ekran kaplayan (çerçevesiz/tam ekran) 3D pencere.
+                    if (!IsGamePath(kv.Key) && !(isFg && fgFullscreen && fps > 5.0)) continue;
                     if (fps < 1 || fps > 1000) continue;
 
                     if ((isFg && !bestIsFg) || (isFg == bestIsFg && fps > bestFps))
                     {
-                        bestFps = fps; bestName = name; bestIsFg = isFg; bestPid = kv.Key; bestSeries = chosen; bestKernel = useKernel;
+                        bestFps = fps; bestMs = avgMs; bestName = name; bestIsFg = isFg; bestPid = kv.Key; bestSeries = chosen; bestKernel = useKernel;
                     }
                 }
                 foreach (uint d in dead) { _stats.Remove(d); _names.Remove(d); _gamePath.Remove(d); }
 
-                if (bestSeries != null && bestSeries.Count > 120)
+                if (bestSeries != null && bestSeries.Count > 20)
                 {
-                    // %1 low: son 30 sn'deki en yavaş %1'lik karelerden hesaplanan FPS (gerçek olay zamanlarıyla)
+                    // Gerçek %1 low: son 5 sn'de (yetersizse 10 sn) toplam sürenin en yavaş %1'lik kısmındaki karelerin ortalama FPS'i
                     var gaps = new List<double>(bestSeries.Count);
-                    long prev = 0, cut = bestSeries.Newest - 30 * f;
-                    for (int i = bestSeries.Head; i < bestSeries.T.Count; i++)
+                    double totalMs = 0;
+                    for (int pass = 0; pass < 2; pass++)
                     {
-                        long t = bestSeries.T[i];
-                        if (t < cut) continue;
-                        if (prev != 0)
+                        gaps.Clear();
+                        totalMs = 0;
+                        long prev = 0, cut = bestSeries.Newest - (pass == 0 ? 5 * f : 10 * f);
+                        for (int i = bestSeries.Head; i < bestSeries.T.Count; i++)
                         {
-                            double g = (t - prev) * 1000.0 / f;
-                            if (g > 0 && g < 2000) gaps.Add(g);
+                            long t = bestSeries.T[i];
+                            if (t < cut) continue;
+                            if (prev != 0)
+                            {
+                                double g = (t - prev) * 1000.0 / f;
+                                if (g > 0 && g < 2000) { gaps.Add(g); totalMs += g; }
+                            }
+                            prev = t;
                         }
-                        prev = t;
+                        if (gaps.Count >= 60) break;
                     }
-                    if (gaps.Count > 100)
+                    if (gaps.Count >= 20 && totalMs > 0)
                     {
                         gaps.Sort();
-                        double p99 = gaps[Math.Min(gaps.Count - 1, (int)Math.Ceiling(gaps.Count * 0.99) - 1)];
-                        if (p99 > 0) low1 = 1000.0 / p99;
+                        double targetMs = totalMs * 0.01;
+                        double worstSum = 0;
+                        int worstCount = 0;
+                        for (int i = gaps.Count - 1; i >= 0; i--)
+                        {
+                            worstSum += gaps[i];
+                            worstCount++;
+                            if (worstSum >= targetMs) break;
+                        }
+                        if (worstCount > 0 && worstSum > 0)
+                        {
+                            double avgWorst1PctMs = worstSum / worstCount;
+                            low1 = 1000.0 / avgWorst1PctMs;
+                        }
                     }
                 }
             }
@@ -2513,7 +2848,7 @@ namespace ProSystemMonitor
             else if (_kernelOn && now - _kernelUsed > 60 * f) SetKernel(false);
 
             game = bestName;
-            frameMs = bestFps > 0 ? 1000.0 / bestFps : 0;
+            frameMs = bestMs > 0 ? bestMs : (bestFps > 0 ? 1000.0 / bestFps : 0);
             return Math.Round(bestFps);
         }
 

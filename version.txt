@@ -1,4 +1,4 @@
-version=56
+version=58
 file=ProSystemMonitor.exe
-sha256=ee0b19b1c665100fa7ddf90f2892cf6319256e3190be87ece4c4b4947643dd07
-notes=Sensor tanilama.
+sha256=06ab6c117cb05e9c4466cb30580f50d16f40b13fa22d26ed75f94661e5ad996c
+notes=Sensor ve FPS dogrulugu, hafif pil okuma, Duzen Studyosu ve Gorsel Duzen Galerisi.

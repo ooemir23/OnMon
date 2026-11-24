@@ -12,7 +12,7 @@ namespace ProSystemMonitor
     /// <summary>GitHub'daki en son sürümü denetler, exe'yi indirip kendini değiştirir ve yeniden başlar.</summary>
     internal static class Updater
     {
-        public const int AppVersion = 57;
+        public const int AppVersion = 58;
         private const string RawBase = "https://raw.githubusercontent.com/ooemir23/OnMon/main/";
 
         public static volatile int LatestVersion;
@@ -52,6 +52,7 @@ namespace ProSystemMonitor
             wc.Encoding = Encoding.UTF8;
             wc.Headers[HttpRequestHeader.UserAgent] = "OnMon-Updater";
             wc.Headers[HttpRequestHeader.CacheControl] = "no-cache";
+            wc.Headers[HttpRequestHeader.Pragma] = "no-cache";
             return wc;
         }
 
@@ -63,6 +64,7 @@ namespace ProSystemMonitor
                 string txt;
                 using (WebClient wc = Client())
                     txt = wc.DownloadString(RawBase + "version.txt?t=" + DateTime.UtcNow.Ticks);
+                txt = txt.TrimStart('\uFEFF');
                 int ver = 0; string notes = "", sha = "", file = "ProSystemMonitor.exe";
                 foreach (string raw in txt.Split(new[] { '\n' }))
                 {
@@ -127,6 +129,8 @@ namespace ProSystemMonitor
                 try { File.Move(tmp, exe); }
                 catch { try { File.Move(old, exe); } catch { } throw; }
 
+                EnsureDependencies(dir, exe);
+
                 Status = "Yeniden başlatılıyor…";
                 var psi = new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3 >nul & start \"\" \"" + exe + "\"")
                 { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden };
@@ -141,6 +145,55 @@ namespace ProSystemMonitor
                 return ex.Message;
             }
             finally { Busy = false; }
+        }
+
+        private static readonly string[] RequiredDlls =
+        {
+            "LibreHardwareMonitorLib.dll", "HidSharp.dll", "BlackSharp.Core.dll",
+            "DiskInfoToolkit.dll", "RAMSPDToolkit-NDD.dll",
+            "System.Buffers.dll", "System.Memory.dll", "System.Numerics.Vectors.dll",
+            "System.Runtime.CompilerServices.Unsafe.dll", "System.Security.AccessControl.dll",
+            "System.Security.Principal.Windows.dll", "System.Threading.AccessControl.dll"
+        };
+
+        private static void EnsureDependencies(string dir, string exe)
+        {
+            foreach (string dll in RequiredDlls)
+            {
+                try
+                {
+                    string p = Path.Combine(dir, dll);
+                    if (File.Exists(p) && new FileInfo(p).Length > 1024) continue;
+                    string dtmp = p + ".tmp";
+                    using (WebClient wc = Client())
+                        wc.DownloadFile(RawBase + dll + "?t=" + DateTime.UtcNow.Ticks, dtmp);
+                    if (File.Exists(dtmp) && new FileInfo(dtmp).Length > 1024)
+                    {
+                        if (File.Exists(p)) File.Delete(p);
+                        File.Move(dtmp, p);
+                    }
+                    else { try { File.Delete(dtmp); } catch { } }
+                }
+                catch { }
+            }
+            try
+            {
+                string cfg = exe + ".config";
+                if (!File.Exists(cfg))
+                {
+                    File.WriteAllText(cfg,
+                        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+                        "<configuration>\r\n" +
+                        "  <startup><supportedRuntime version=\"v4.0\" sku=\".NETFramework,Version=v4.7.2\" /></startup>\r\n" +
+                        "  <runtime>\r\n" +
+                        "    <gcConcurrent enabled=\"false\" />\r\n" +
+                        "    <gcServer enabled=\"false\" />\r\n" +
+                        "  </runtime>\r\n" +
+                        "</configuration>\r\n",
+                        new UTF8Encoding(false));
+                }
+            }
+            catch { }
         }
 
         /// <summary>Önceki güncellemeden kalan .old dosyasını temizler.</summary>

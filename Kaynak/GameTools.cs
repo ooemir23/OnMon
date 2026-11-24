@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
@@ -234,13 +235,6 @@ namespace ProSystemMonitor
                             {
                                 int c;
                                 try { c = st.Read(buf); } catch (TimeoutException) { continue; }
-                                try
-                                {
-                                    string lp = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hid_log.txt");
-                                    if (!File.Exists(lp) || new FileInfo(lp).Length < 60000)
-                                        File.AppendAllText(lp, DateTime.Now.ToString("HH:mm:ss") + "  " + BitConverter.ToString(buf, 0, Math.Min(c, 24)) + "\r\n");
-                                }
-                                catch { }
                                 if (c >= 8 && buf[0] == 0xCC && buf[1] == 0x12)
                                 {
                                     if (buf[2] == 0x09 && (buf[5] + buf[6] + buf[7]) > 0 && buf[5] <= 100 && buf[6] <= 100 && buf[7] <= 100)
@@ -275,6 +269,88 @@ namespace ProSystemMonitor
             t.Start();
         }
 
+        private const uint CM_GETIDLIST_FILTER_PRESENT = 0x00000100;
+        private const uint CM_LOCATE_DEVNODE_NORMAL = 0x00000000;
+        private const uint DEVPROP_TYPE_BYTE = 0x00000003;
+        private const uint DEVPROP_TYPE_UINT32 = 0x00000007;
+        private const uint DEVPROP_TYPE_BOOLEAN = 0x00000011;
+        private const uint DEVPROP_TYPE_STRING = 0x00000012;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DEVPROPKEY
+        {
+            public Guid fmtid;
+            public uint pid;
+        }
+
+        [DllImport("CfgMgr32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint CM_Get_Device_ID_List_SizeW(out uint pulLen, string pszFilter, uint ulFlags);
+
+        [DllImport("CfgMgr32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint CM_Get_Device_ID_ListW(string pszFilter, char[] Buffer, uint BufferLen, uint ulFlags);
+
+        [DllImport("CfgMgr32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint CM_Locate_DevNodeW(out uint pdnDevInst, string pDeviceID, uint ulFlags);
+
+        [DllImport("CfgMgr32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint CM_Get_DevNode_PropertyW(uint dnDevInst, ref DEVPROPKEY PropertyKey, out uint PropertyType, byte[] PropertyBuffer, ref uint PropertyBufferSize, uint ulFlags);
+
+        private static DEVPROPKEY KeyBattery = new DEVPROPKEY { fmtid = new Guid("104EA319-6EE2-4701-BD47-8DDBF425BBE5"), pid = 2 };
+        private static DEVPROPKEY KeyConnected = new DEVPROPKEY { fmtid = new Guid("83DA6326-97A6-4088-9453-A1923F573B29"), pid = 15 };
+        private static DEVPROPKEY KeyFriendlyName = new DEVPROPKEY { fmtid = new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), pid = 14 };
+        private static DEVPROPKEY KeyDeviceDesc = new DEVPROPKEY { fmtid = new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), pid = 2 };
+        private static DEVPROPKEY KeyClass = new DEVPROPKEY { fmtid = new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), pid = 9 };
+
+        private static string[] EnumPresentDeviceIds()
+        {
+            uint len;
+            if (CM_Get_Device_ID_List_SizeW(out len, null, CM_GETIDLIST_FILTER_PRESENT) != 0 || len == 0)
+                return new string[0];
+            char[] buf = new char[len];
+            if (CM_Get_Device_ID_ListW(null, buf, len, CM_GETIDLIST_FILTER_PRESENT) != 0)
+                return new string[0];
+            string all = new string(buf);
+            return all.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static bool TryGetDevPropBytes(uint devInst, DEVPROPKEY key, out uint propType, out byte[] data)
+        {
+            propType = 0;
+            data = null;
+            uint sz = 0;
+            uint rc = CM_Get_DevNode_PropertyW(devInst, ref key, out propType, null, ref sz, 0);
+            if ((rc != 0 && rc != 0x1A) || sz == 0 || sz > 4096) return false;
+            byte[] buf = new byte[sz];
+            rc = CM_Get_DevNode_PropertyW(devInst, ref key, out propType, buf, ref sz, 0);
+            if (rc != 0) return false;
+            data = buf;
+            return true;
+        }
+
+        private static string GetDevPropString(uint devInst, DEVPROPKEY key)
+        {
+            uint pt; byte[] data;
+            if (!TryGetDevPropBytes(devInst, key, out pt, out data) || pt != DEVPROP_TYPE_STRING || data.Length < 2) return "";
+            return Encoding.Unicode.GetString(data).TrimEnd('\0').Trim();
+        }
+
+        private static int GetDevPropBattery(uint devInst)
+        {
+            uint pt; byte[] data;
+            if (!TryGetDevPropBytes(devInst, KeyBattery, out pt, out data) || data.Length == 0) return -1;
+            if (pt == DEVPROP_TYPE_BYTE) return data[0];
+            if (pt == DEVPROP_TYPE_UINT32 && data.Length >= 4) return (int)BitConverter.ToUInt32(data, 0);
+            return -1;
+        }
+
+        private static bool IsDevConnected(uint devInst)
+        {
+            uint pt; byte[] data;
+            if (!TryGetDevPropBytes(devInst, KeyConnected, out pt, out data)) return true;
+            if (pt == DEVPROP_TYPE_BOOLEAN && data.Length >= 1) return data[0] != 0;
+            return true;
+        }
+
         /// <summary>Kulaklık gibi cihazların Windows'ta hangi özellikleri bildirdiğini piller.txt dosyasına yazar (pil verisini bulmak için).</summary>
         public static void DumpAsync()
         {
@@ -283,16 +359,25 @@ namespace ProSystemMonitor
                 try
                 {
                     string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "piller.txt");
-                    string ps = "$ErrorActionPreference='SilentlyContinue';" +
-                        "$o = @();" +
-                        "Get-PnpDevice -PresentOnly | Where-Object { $_.FriendlyName -match 'CETRA|SpeedNova|ROG|Bluetooth|Headset|Headphone|Kulakl|Earbud|Xbox|Controller' } | ForEach-Object { " +
-                        "$o += '=== ' + $_.FriendlyName + ' | ' + $_.Class + ' | ' + $_.InstanceId; " +
-                        "Get-PnpDeviceProperty -InstanceId $_.InstanceId | ForEach-Object { $v = $_.Data; if ($v -is [array]) { $v = ($v | Select-Object -First 6) -join ',' }; $o += '   ' + $_.KeyName + ' = ' + $v } }; " +
-                        "$o | Out-File -Encoding UTF8 -FilePath '" + path.Replace("'", "''") + "'";
-                    string enc = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
-                    var psi = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + enc)
-                    { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
-                    using (Process p = Process.Start(psi)) { if (!p.WaitForExit(90000)) { try { p.Kill(); } catch { } } }
+                    var sb = new StringBuilder();
+                    string[] keys = { "cetra", "speednova", "rog", "bluetooth", "headset", "headphone", "kulakl", "earbud", "xbox", "controller" };
+                    foreach (string id in EnumPresentDeviceIds())
+                    {
+                        uint devInst;
+                        if (CM_Locate_DevNodeW(out devInst, id, CM_LOCATE_DEVNODE_NORMAL) != 0) continue;
+                        string name = GetDevPropString(devInst, KeyFriendlyName);
+                        if (name.Length == 0) name = GetDevPropString(devInst, KeyDeviceDesc);
+                        string cls = GetDevPropString(devInst, KeyClass);
+                        string low = name.ToLowerInvariant();
+                        bool match = false;
+                        foreach (string k in keys) { if (low.Contains(k)) { match = true; break; } }
+                        int bat = GetDevPropBattery(devInst);
+                        if (!match && bat < 0) continue;
+                        sb.AppendLine("=== " + name + " | " + cls + " | " + id);
+                        sb.AppendLine("   Connected = " + IsDevConnected(devInst));
+                        if (bat >= 0) sb.AppendLine("   Battery = " + bat + "%");
+                    }
+                    File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
                     Status = "piller.txt yazıldı";
                 }
                 catch (Exception ex) { Status = "Yazılamadı: " + ex.Message; }
@@ -379,25 +464,18 @@ namespace ProSystemMonitor
             if (_busy) return; _busy = true;
             try
             {
-                string ps = "$ErrorActionPreference='SilentlyContinue';" +
-                    "Get-PnpDevice -PresentOnly | ForEach-Object { $p = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2'; " +
-                    "$c = Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName '{83DA6326-97A6-4088-9453-A1923F573B29} 15'; " +
-                    "if ($p -and $p.Data -ne $null -and $p.Data -is [byte] -and -not ($c -and $c.Data -eq $false)) { $_.FriendlyName + '|' + $p.Data } }";
-                string enc = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
-                var psi = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + enc)
-                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, WindowStyle = ProcessWindowStyle.Hidden };
                 var list = new List<KeyValuePair<string, int>>();
-                using (Process p = Process.Start(psi))
+                foreach (string id in EnumPresentDeviceIds())
                 {
-                    string o = p.StandardOutput.ReadToEnd();
-                    if (!p.WaitForExit(30000)) { try { p.Kill(); } catch { } }
-                    foreach (string line in o.Split(new[] { '\n' }))
-                    {
-                        int i = line.LastIndexOf('|'); int v;
-                        if (i <= 0 || !int.TryParse(line.Substring(i + 1).Trim(), out v) || v < 0 || v > 100) continue;
-                        string name = line.Substring(0, i).Trim();
-                        if (name.Length > 0 && !list.Any(x => x.Key == name)) list.Add(new KeyValuePair<string, int>(name, v));
-                    }
+                    uint devInst;
+                    if (CM_Locate_DevNodeW(out devInst, id, CM_LOCATE_DEVNODE_NORMAL) != 0) continue;
+                    int v = GetDevPropBattery(devInst);
+                    if (v < 0 || v > 100) continue;
+                    if (!IsDevConnected(devInst)) continue;
+                    string name = GetDevPropString(devInst, KeyFriendlyName);
+                    if (name.Length == 0) name = GetDevPropString(devInst, KeyDeviceDesc);
+                    if (name.Length > 0 && !list.Any(x => x.Key == name))
+                        list.Add(new KeyValuePair<string, int>(name, v));
                 }
                 _pnp = list.ToArray(); Combine();
                 Status = list.Count > 0 ? list.Count + " cihaz" : "Pil bilgisi veren cihaz bulunamadı";

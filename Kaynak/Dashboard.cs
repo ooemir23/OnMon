@@ -23,6 +23,7 @@ namespace ProSystemMonitor
         public double MemTotal, MemUsed, MemFree, MemLoad, MoboTemp = double.NaN;
         public double CpuLoad, CpuTemp = double.NaN, CpuClock = double.NaN, CpuFan = double.NaN, Cha1 = double.NaN, Cha2 = double.NaN, Pump = double.NaN;
         public double CpuW = double.NaN, CpuV = double.NaN, GpuW = double.NaN, GpuV = double.NaN;
+        public double GpuHot = double.NaN, CpuDiode = double.NaN, DimmTemp = double.NaN, SocV = double.NaN, V12 = double.NaN;
         public double GpuLoad, GpuTemp = double.NaN, GpuClock = double.NaN, VramUsed, VramTotal, GpuFan = double.NaN;
         public double Fps, FrameMs, Low1 = double.NaN;
         public double NetUp, NetDown, NetUpTot, NetDownTot, DiskR = double.NaN, DiskW = double.NaN;
